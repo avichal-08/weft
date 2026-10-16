@@ -1,0 +1,27 @@
+# weft
+
+A cloud coding agent. Give it a GitHub repo and a task; it works in an isolated sandbox using
+agentic search, and returns a diff only if the tests pass in a clean sandbox.
+
+> Work in progress. Benchmarks, load-test results and the design write-up will lead this README
+> once they exist.
+
+## Layout
+
+```
+apps/
+  web/           Next.js dashboard
+  api, worker    (coming in M1)
+packages/
+  tsconfig/      shared TypeScript config
+  eslint-config/ shared ESLint flat config
+```
+
+## Development
+
+Requires Node 22 (`.nvmrc`) and pnpm (via corepack).
+
+```bash
+pnpm install
+pnpm typecheck && pnpm lint && pnpm test
+```
