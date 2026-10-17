@@ -3,3 +3,4 @@ dist
 coverage
 .next
 .turbo
+next-env.d.ts
