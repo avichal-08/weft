@@ -12,6 +12,9 @@ agentic search, and returns a diff only if the tests pass in a clean sandbox.
 apps/
   web/           Next.js dashboard
   api, worker    (coming in M1)
+infra/
+  compose.yml    redis
+  sandbox/       image every agent run executes in
 packages/
   tsconfig/      shared TypeScript config
   eslint-config/ shared ESLint flat config
@@ -19,9 +22,15 @@ packages/
 
 ## Development
 
-Requires Node 22 (`.nvmrc`) and pnpm (via corepack).
+Requires Node 22 (`.nvmrc`), pnpm (via corepack) and Docker Engine.
 
 ```bash
 pnpm install
-pnpm typecheck && pnpm lint && pnpm test
+cp .env.example .env        # fill in the Neon urls and an LLM key
+pnpm infra:up               # redis
+pnpm sandbox:build && pnpm sandbox:smoke
+pnpm typecheck && pnpm lint && pnpm build
 ```
+
+Postgres is hosted on [Neon](https://neon.tech). `DATABASE_URL` is the pooled connection used by
+the services; `DATABASE_URL_UNPOOLED` is the direct one, used for migrations.
