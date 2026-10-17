@@ -12,7 +12,22 @@ export type SandboxOptions = {
   labels?: Record<string, string>;
 };
 
+export type ExecOptions = {
+  cwd?: string;
+  env?: Record<string, string>;
+  maxOutputBytes?: number;
+};
+
+export type ExecResult = {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  truncated: boolean;
+  durationMs: number;
+};
+
 export type Sandbox = {
   readonly id: string;
+  exec(command: string | string[], opts?: ExecOptions): Promise<ExecResult>;
   destroy(): Promise<void>;
 };
