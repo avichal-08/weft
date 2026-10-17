@@ -1,0 +1,27 @@
+{
+  "name": "@weft/sandbox",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc",
+    "test": "vitest run --exclude '**/*.int.test.ts'",
+    "test:integration": "vitest run .int.test"
+  },
+  "dependencies": {
+    "dockerode": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/dockerode": "^4.0.2",
+    "@types/node": "^22.20.5",
+    "@weft/eslint-config": "workspace:*",
+    "@weft/tsconfig": "workspace:*",
+    "eslint": "^10.12.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.5"
+  }
+}

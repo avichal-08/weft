@@ -30,7 +30,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - run: docker build -t weft-sandbox:dev infra/sandbox
       - run: sh infra/sandbox/smoke.sh weft-sandbox:dev
+      - run: pnpm --filter @weft/sandbox test:integration
       - run: docker compose -f infra/compose.yml up -d --wait
       - run: docker compose -f infra/compose.yml exec -T redis redis-cli config get maxmemory-policy | grep -q noeviction

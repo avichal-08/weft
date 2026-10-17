@@ -16,6 +16,7 @@ infra/
   compose.yml    redis
   sandbox/       image every agent run executes in
 packages/
+  sandbox/       docker sandbox lifecycle (dockerode)
   llm/           provider-agnostic llm client (anthropic, openai, gemini, openrouter, mock)
   tsconfig/      shared TypeScript config
   eslint-config/ shared ESLint flat config
