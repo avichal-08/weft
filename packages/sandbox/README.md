@@ -8,8 +8,8 @@ import { createSandbox } from '@weft/sandbox';
 
 const sandbox = await createSandbox({ image: 'weft-sandbox:dev', limits: { cpus: 2 } });
 try {
-  const res = await sandbox.exec('npm test', { cwd: '/workspace' });
-  console.log(res.exitCode, res.stdout, res.stderr, res.truncated, res.durationMs);
+  const res = await sandbox.exec('npm test', { cwd: '/workspace', timeoutMs: 60_000 });
+  console.log(res.exitCode, res.timedOut, res.stdout, res.stderr, res.truncated, res.durationMs);
 } finally {
   await sandbox.destroy();
 }
@@ -17,13 +17,13 @@ try {
 
 ## API
 
-| Export                                            | What it does                                                                                                                 |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `createSandbox(opts, docker?)`                    | Creates and starts a container. Removes it again if `start` fails.                                                           |
-| `sandbox.exec(cmd, { cwd, env, maxOutputBytes })` | Runs a command. A string runs via `sh -c`; an array runs as-is. Returns exit code, stdout, stderr, `truncated` and duration. |
-| `sandbox.destroy()`                               | Force-removes the container. Safe to call more than once.                                                                    |
-| `containerSpec(opts)`                             | Pure function: options → Docker create request. Useful to inspect or test the policy.                                        |
-| `DEFAULT_LIMITS`, `DEFAULT_MAX_OUTPUT_BYTES`      | 1 CPU, 1 GB memory, 256 processes, 256 MB `/tmp`, 1 GB `/workspace`; 1 MB output per stream.                                 |
+| Export                                                             | What it does                                                                                                                             |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `createSandbox(opts, docker?)`                                     | Creates and starts a container. Removes it again if `start` fails.                                                                       |
+| `sandbox.exec(cmd, { cwd, env, maxOutputBytes, timeoutMs })`       | Runs a command. A string runs via `sh -c`; an array runs as-is. Returns exit code, stdout, stderr, `truncated`, `timedOut` and duration. |
+| `sandbox.destroy()`                                                | Force-removes the container. Safe to call more than once.                                                                                |
+| `containerSpec(opts)`                                              | Pure function: options → Docker create request. Useful to inspect or test the policy.                                                    |
+| `DEFAULT_LIMITS`, `DEFAULT_MAX_OUTPUT_BYTES`, `DEFAULT_TIMEOUT_MS` | 1 CPU, 1 GB memory, 256 processes, 256 MB `/tmp`, 1 GB `/workspace`; 1 MB output per stream; 120 s per command.                          |
 
 ## Isolation policy
 
@@ -43,6 +43,24 @@ Without a TTY, Docker multiplexes stdout and stderr onto one connection, as fram
 8-byte header naming the stream. `exec` demuxes them into two `CappedBuffer`s, which keep the
 first `maxOutputBytes` and count the rest, so `yes` can't exhaust the worker's memory. The exit
 code comes from `exec.inspect()` once the stream ends.
+
+## Timeouts
+
+Docker has no API to kill an exec, so timeouts work in three layers:
+
+1. **`timeout` inside the sandbox.** Every command runs as
+   `timeout --signal=TERM --kill-after=2 <secs> ...`. On expiry it signals its whole process
+   group, so child processes die too, and sends SIGKILL 2 s later if anything ignores SIGTERM.
+   Exit code 124 (or 137 after SIGKILL) past the deadline means `timedOut: true`.
+2. **A sweep after any timeout.** A process can leave the group with `setsid` and survive step 1.
+   Every `docker exec` starts its own session, while the container's own processes (tini and its
+   child) live in session 1, so after a timeout a second exec kills every process outside
+   session 1. Assumes one command runs at a time per sandbox.
+3. **A host backstop.** If the output stream is still open at deadline + 2 s + 5 s (say the command
+   froze `timeout` with `kill -STOP $PPID`), the host kills the whole container and the sandbox
+   refuses further commands.
+
+A more precise per-command process tracker (an in-sandbox daemon) is planned for M2.
 
 ## Testing
 

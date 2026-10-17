@@ -1,10 +1,20 @@
 import { finished } from 'node:stream/promises';
 import Docker from 'dockerode';
+import {
+  DEFAULT_TIMEOUT_MS,
+  isTimeoutExit,
+  KILL_AFTER_SECONDS,
+  SWEEP_SCRIPT,
+  wrapCommand,
+} from './command.ts';
 import { CappedBuffer } from './output.ts';
 import { containerSpec } from './spec.ts';
 import type { ExecOptions, ExecResult, Sandbox, SandboxOptions } from './types.ts';
 
 export const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
+export const BACKSTOP_GRACE_MS = 5_000;
+
+type State = { broken: boolean };
 
 const isNotFound = (err: unknown) =>
   typeof err === 'object' && err !== null && (err as { statusCode?: number }).statusCode === 404;
@@ -21,12 +31,19 @@ async function exitCodeOf(exec: Docker.Exec): Promise<number> {
 async function runExec(
   docker: Docker,
   container: Docker.Container,
+  state: State,
   command: string | string[],
   opts: ExecOptions = {},
+  sweepOnTimeout = true,
 ): Promise<ExecResult> {
+  if (state.broken) {
+    throw new Error('sandbox was killed after a command escaped its timeout');
+  }
+
   const started = performance.now();
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const exec = await container.exec({
-    Cmd: typeof command === 'string' ? ['sh', '-c', command] : command,
+    Cmd: wrapCommand(command, timeoutMs),
     AttachStdout: true,
     AttachStderr: true,
     ...(opts.cwd ? { WorkingDir: opts.cwd } : {}),
@@ -38,15 +55,38 @@ async function runExec(
   const stderr = new CappedBuffer(max);
   const stream = await exec.start({ hijack: true, stdin: false });
   docker.modem.demuxStream(stream, stdout, stderr);
-  await finished(stream);
 
-  return {
-    exitCode: await exitCodeOf(exec),
+  let backstop: NodeJS.Timeout | undefined;
+  const escaped = new Promise<'escaped'>((resolve) => {
+    backstop = setTimeout(
+      () => resolve('escaped'),
+      timeoutMs + KILL_AFTER_SECONDS * 1000 + BACKSTOP_GRACE_MS,
+    );
+  });
+  const outcome = await Promise.race([finished(stream).then(() => 'done' as const), escaped]);
+  clearTimeout(backstop);
+
+  const output = () => ({
     stdout: stdout.text(),
     stderr: stderr.text(),
     truncated: stdout.truncated || stderr.truncated,
     durationMs: Math.round(performance.now() - started),
-  };
+  });
+
+  if (outcome === 'escaped') {
+    state.broken = true;
+    stream.destroy();
+    await container.kill({ signal: 'SIGKILL' }).catch(() => {});
+    return { exitCode: 137, timedOut: true, ...output() };
+  }
+
+  const exitCode = await exitCodeOf(exec);
+  const result = output();
+  const timedOut = isTimeoutExit(exitCode, result.durationMs, timeoutMs);
+  if (timedOut && sweepOnTimeout) {
+    await runExec(docker, container, state, SWEEP_SCRIPT, { timeoutMs: 5000 }, false);
+  }
+  return { exitCode, timedOut, ...result };
 }
 
 export async function createSandbox(
@@ -62,9 +102,11 @@ export async function createSandbox(
     throw err;
   }
 
+  const state: State = { broken: false };
+
   return {
     id: container.id,
-    exec: (command, execOpts) => runExec(docker, container, command, execOpts),
+    exec: (command, execOpts) => runExec(docker, container, state, command, execOpts),
     async destroy() {
       try {
         await container.remove({ force: true });

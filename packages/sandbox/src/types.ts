@@ -16,6 +16,7 @@ export type ExecOptions = {
   cwd?: string;
   env?: Record<string, string>;
   maxOutputBytes?: number;
+  timeoutMs?: number;
 };
 
 export type ExecResult = {
@@ -23,6 +24,7 @@ export type ExecResult = {
   stdout: string;
   stderr: string;
   truncated: boolean;
+  timedOut: boolean;
   durationMs: number;
 };
 
