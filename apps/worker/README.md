@@ -19,11 +19,24 @@ pnpm --filter @weft/worker dev
    (`weft.run`); the checkout, `.git` included, is copied to `/workspace/repo`.
 4. **Agent.** `runAgent` with the LLM from the run's `config` (`provider`, `model`), falling back
    to `.env`, and `maxSteps` (default 30). After every step the worker saves steps and tokens
-   with `recordProgress`. If that matches zero rows, the run was cancelled or another worker
-   took it over, so the agent is aborted.
+   with `recordProgress`.
 5. **Verify.** The worker reruns `testCommand` itself instead of trusting the agent.
 6. **Diff.** `git add -A && git diff --cached`, so new files are included.
 7. **Record** with `completeRun` (fenced), then always remove the sandbox and the checkout.
+
+### Cancellation and takeover
+
+A watcher re-reads the run every 2 s (`watchIntervalMs`). As soon as it is no longer `running`
+with this worker's attempt (cancelled, or claimed by another worker), or a progress write is
+fenced off, the worker:
+
+- aborts the run's `AbortSignal`, which stops an in-flight model call and any retry wait, and
+- removes the sandbox right away, which also kills a long tool command such as `run_tests`.
+
+Nothing more is written for the run. Before this, a cancel was only noticed after the current
+step, so a cancelled run stuck on a hanging model kept its worker and sandbox for 11 minutes;
+now it stops within a couple of seconds. Polling is the simple version; a Redis pub/sub cancel
+message would make it instant.
 
 | Outcome     | When                                                                           |
 | ----------- | ------------------------------------------------------------------------------ |
@@ -66,5 +79,6 @@ pnpm --filter @weft/worker test:integration   # whole pipeline: PGlite, scripted
 
 The integration tests drive real sandboxes against a local git copy of
 `packages/agent/fixtures/add-bug`: a successful fix, failing tests, step budget, cancel before
-start, cancel mid-run, takeover by another worker, clone failure, `file://` refusal, and LLM
-failure, each checking that no sandbox is left behind.
+start, cancel mid-run, cancel during a hanging model call and during a long tool command (both
+must stop within seconds), takeover by another worker, clone failure, `file://` refusal, and
+LLM failure, each checking that no sandbox is left behind.

@@ -4,6 +4,7 @@ import { LLMError, emptyUsage } from '@weft/llm';
 import { createSandbox, type Sandbox } from '@weft/sandbox';
 import { CloneError, cloneRepo } from './clone.ts';
 import type { RunConfig, RunOutcome, WorkerDeps } from './types.ts';
+import { DEFAULT_WATCH_INTERVAL_MS, watchRun } from './watch.ts';
 
 export const REPO_ROOT = '/workspace/repo';
 const DEFAULT_MAX_STEPS = 30;
@@ -20,6 +21,22 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
   const abort = new AbortController();
   let fenced = false;
   let progress = Promise.resolve();
+  let checkout: Awaited<ReturnType<typeof cloneRepo>> | undefined;
+  let sandbox: Sandbox | undefined;
+
+  const lose = () => {
+    if (fenced) return;
+    fenced = true;
+    abort.abort();
+    void sandbox?.destroy().catch(() => {});
+  };
+  const stopWatching = watchRun(
+    db,
+    runId,
+    attempt,
+    deps.watchIntervalMs ?? DEFAULT_WATCH_INTERVAL_MS,
+    lose,
+  );
 
   const finish = async (outcome: CompleteRunInput): Promise<RunOutcome> => {
     await progress;
@@ -47,15 +64,9 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
       cacheReadTokens: usage.cacheReadTokens,
     };
     progress = progress.then(async () => {
-      if (!(await recordProgress(db, runId, attempt, snapshot))) {
-        fenced = true;
-        abort.abort();
-      }
+      if (!(await recordProgress(db, runId, attempt, snapshot))) lose();
     });
   };
-
-  let checkout: Awaited<ReturnType<typeof cloneRepo>> | undefined;
-  let sandbox: Sandbox | undefined;
 
   try {
     checkout = await cloneRepo(run.repoUrl, run.baseRef, {
@@ -66,6 +77,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
       owner: workerId,
       labels: { 'weft.run': runId },
     });
+    abort.signal.throwIfAborted();
     await sandbox.putFiles(checkout.dir, REPO_ROOT);
 
     const ctx = createToolContext({ sandbox, root: REPO_ROOT, testCommand: run.testCommand });
@@ -104,6 +116,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
   } catch (err) {
     return await finish({ status: 'error', ...describeError(err) });
   } finally {
+    stopWatching();
     await sandbox?.destroy().catch(() => {});
     await checkout?.cleanup();
   }

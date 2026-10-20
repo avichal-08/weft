@@ -13,6 +13,7 @@ export type WorkerDeps = {
   sandboxImage: string;
   createLLM: (config: RunConfig) => LLMProvider;
   allowFileRepos?: boolean;
+  watchIntervalMs?: number;
 };
 
 export type RunOutcome =

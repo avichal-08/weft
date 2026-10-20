@@ -62,6 +62,7 @@ function deps(llm: LLMProvider, extra: Partial<WorkerDeps> = {}): WorkerDeps {
     sandboxImage: image,
     createLLM: () => llm,
     allowFileRepos: true,
+    watchIntervalMs: 200,
     ...extra,
   };
 }
@@ -190,6 +191,47 @@ describe('executeRun', () => {
       failureKind: 'llm_auth',
       failureDetail: 'bad key',
     });
+    expect(await leftovers(run.id)).toBe(0);
+  });
+
+  it('interrupts a hanging model call as soon as the run is cancelled', async () => {
+    const run = await newRun();
+    const hanging: LLMProvider = {
+      provider: 'mock',
+      model: 'mock',
+      complete: (req) =>
+        new Promise((_resolve, reject) => {
+          setTimeout(() => void cancelRun(db, run.id), 500);
+          req.signal?.addEventListener('abort', () =>
+            reject(new LLMError({ kind: 'aborted', provider: 'mock', message: 'aborted' })),
+          );
+        }),
+    };
+
+    const started = performance.now();
+    expect(await executeRun(deps(hanging), run.id)).toEqual({ kind: 'fenced' });
+    expect(performance.now() - started).toBeLessThan(15_000);
+    expect((await getRun(db, run.id))?.status).toBe('cancelled');
+    expect(await leftovers(run.id)).toBe(0);
+  });
+
+  it('kills a long-running tool command when the run is cancelled', async () => {
+    const run = await newRun();
+    const inner = createMockProvider([
+      call('run_command', { command: 'sleep 300', timeout_sec: 600 }),
+    ]);
+    const llm: LLMProvider = {
+      provider: 'mock',
+      model: 'mock',
+      complete(req) {
+        if (inner.calls.length === 0) setTimeout(() => void cancelRun(db, run.id), 1500);
+        return inner.complete(req);
+      },
+    };
+
+    const started = performance.now();
+    expect(await executeRun(deps(llm), run.id)).toEqual({ kind: 'fenced' });
+    expect(performance.now() - started).toBeLessThan(20_000);
     expect(await leftovers(run.id)).toBe(0);
   });
 });
