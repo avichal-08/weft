@@ -11,7 +11,7 @@ agentic search, and returns a diff only if the tests pass in a clean sandbox.
 ```
 apps/
   api/           http api: create, list, cancel runs
-  web/           Next.js dashboard
+  web/           dashboard: start runs, watch them, read diffs
   worker/        runs jobs: clone → sandbox → agent → verify → diff
 infra/
   compose.yml    redis
@@ -39,11 +39,12 @@ pnpm sandbox:build && pnpm sandbox:smoke
 pnpm typecheck && pnpm lint && pnpm build
 ```
 
-Run it end to end (two terminals):
+Run it end to end (three terminals), then open http://localhost:3000:
 
 ```bash
 pnpm --filter @weft/api dev
 pnpm --filter @weft/worker dev
+pnpm --filter @weft/web dev
 ```
 
 ```bash
