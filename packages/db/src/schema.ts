@@ -1,4 +1,15 @@
-import { index, integer, jsonb, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  bigserial,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 export const runStatus = pgEnum('run_status', [
   'queued',
@@ -43,4 +54,23 @@ export const runs = pgTable(
   ],
 );
 
-export const schema = { runStatus, runs };
+export const runEventType = pgEnum('run_event_type', ['llm', 'tool']);
+
+export const runEvents = pgTable(
+  'run_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => runs.id, { onDelete: 'cascade' }),
+    attempt: integer('attempt').notNull(),
+    seq: integer('seq').notNull(),
+    type: runEventType('type').notNull(),
+    step: integer('step').notNull(),
+    data: jsonb('data').$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('run_events_run_attempt_seq_idx').on(t.runId, t.attempt, t.seq)],
+);
+
+export const schema = { runStatus, runs, runEventType, runEvents };

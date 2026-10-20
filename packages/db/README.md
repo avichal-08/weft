@@ -61,6 +61,18 @@ Indexed on `(status, created_at)` for "next queued runs" and on `created_at desc
 dashboard's run list. `attempt` and `worker_id` are there for crash recovery: a re-delivered
 run gets a new attempt, and updates will be fenced on it.
 
+**`run_events`**: the step-by-step trace of a run, one row per model call (`llm`) or tool call
+(`tool`), keyed by `(run_id, attempt, seq)`. `data` holds the details as JSON (tokens, latency
+and text for `llm`; name, args, error flag, duration and output for `tool`). Rows are deleted
+with their run.
+
+| Function                                                 | Effect                                                                                 |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `appendRunEvents(db, runId, attempt, events)`            | Inserts a batch; rows already stored are skipped, so a re-sent batch never duplicates. |
+| `listRunEvents(db, runId, { attempt, afterSeq, limit })` | One attempt's events in order; `afterSeq` pages forward (limit 500, max 1000).         |
+
+Events are not fenced: each row carries its `attempt`, and readers ask for the current one.
+
 ## Migrations
 
 The schema in `src/schema.ts` is the source of truth. Migrations are plain SQL files in

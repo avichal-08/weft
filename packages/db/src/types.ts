@@ -1,5 +1,5 @@
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
-import type { runs, schema } from './schema.ts';
+import type { runEvents, runs, schema } from './schema.ts';
 
 export type Schema = typeof schema;
 export type Db = PgDatabase<PgQueryResultHKT, Schema>;
@@ -33,4 +33,20 @@ export type CompleteRunInput = Partial<RunUsage> & {
   diff?: string;
   failureKind?: string;
   failureDetail?: string;
+};
+
+export type RunEvent = typeof runEvents.$inferSelect;
+export type RunEventType = RunEvent['type'];
+
+export type NewRunEvent = {
+  seq: number;
+  type: RunEventType;
+  step: number;
+  data: Record<string, unknown>;
+};
+
+export type ListRunEventsOptions = {
+  attempt: number;
+  afterSeq?: number;
+  limit?: number;
 };
