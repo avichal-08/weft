@@ -1,0 +1,26 @@
+{
+  "name": "@weft/agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@weft/llm": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@weft/eslint-config": "workspace:*",
+    "@weft/tsconfig": "workspace:*",
+    "eslint": "^10.13.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.5"
+  }
+}
