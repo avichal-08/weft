@@ -8,7 +8,7 @@ import {
   listRuns,
   recordProgress,
 } from '../src/runs.ts';
-import { reset, testDb, type TestDb } from './helpers.ts';
+import { reset, testDb, type TestDb } from '../src/testing.ts';
 
 let db: TestDb;
 const input = { repoUrl: 'https://github.com/x/y', task: 'fix it', testCommand: 'npm test' };

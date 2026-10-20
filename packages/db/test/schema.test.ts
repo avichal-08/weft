@@ -3,7 +3,7 @@ import { migrate } from 'drizzle-orm/pglite/migrator';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MIGRATIONS_DIR } from '../src/migrate.ts';
 import { runs } from '../src/schema.ts';
-import { reset, testDb, type TestDb } from './helpers.ts';
+import { reset, testDb, type TestDb } from '../src/testing.ts';
 
 let db: TestDb;
 

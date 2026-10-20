@@ -1,0 +1,24 @@
+{
+  "name": "@weft/queue",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "bullmq": "^6.3.17",
+    "ioredis": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@weft/eslint-config": "workspace:*",
+    "@weft/tsconfig": "workspace:*",
+    "eslint": "^10.13.0",
+    "typescript": "~6.0.3"
+  }
+}

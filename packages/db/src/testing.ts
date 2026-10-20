@@ -2,8 +2,8 @@ import { PGlite } from '@electric-sql/pglite';
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
-import { MIGRATIONS_DIR } from '../src/migrate.ts';
-import { schema } from '../src/schema.ts';
+import { MIGRATIONS_DIR } from './migrate.ts';
+import { schema } from './schema.ts';
 
 export async function testDb() {
   const db = drizzle(new PGlite(), { schema });

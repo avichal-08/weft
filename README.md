@@ -10,12 +10,14 @@ agentic search, and returns a diff only if the tests pass in a clean sandbox.
 
 ```
 apps/
+  api/           http api: create, list, cancel runs
   web/           Next.js dashboard
-  api, worker    (coming in M1)
+  worker         (next)
 infra/
   compose.yml    redis
   sandbox/       image every agent run executes in
 packages/
+  queue/         bullmq queue shared by api and worker
   db/            postgres schema and migrations (drizzle, neon)
   agent/         the coding agent: tools and loop
   sandbox/       docker sandbox lifecycle (dockerode)
