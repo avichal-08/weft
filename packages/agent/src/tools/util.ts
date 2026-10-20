@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { posix } from 'node:path';
 import type { ToolOutput } from '../types.ts';
 
@@ -21,4 +22,14 @@ export function headLines(text: string, limit: number, hint: string): string {
   const lines = text.replace(/\n$/, '').split('\n');
   if (lines.length <= limit) return lines.join('\n');
   return `${lines.slice(0, limit).join('\n')}\n[showing ${limit} of ${lines.length} lines; ${hint}]`;
+}
+
+export const sha256 = (data: string | Buffer) => createHash('sha256').update(data).digest('hex');
+
+export function clip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const head = Math.floor(max / 3);
+  const tail = max - head;
+  const omitted = text.length - head - tail;
+  return `${text.slice(0, head)}\n[... ${omitted} characters omitted ...]\n${text.slice(-tail)}`;
 }

@@ -1,5 +1,9 @@
 export type * from './types.ts';
 export { TOOLS } from './tools/definitions.ts';
+export { applyEdit } from './tools/edit.ts';
+export { createToolContext, DEFAULT_TEST_TIMEOUT_MS, executeTool } from './tools/execute.ts';
 export { parseToolCall } from './tools/parse.ts';
+export { glob, grep, viewFile } from './tools/read.ts';
+export { finish, runCommand, runTests } from './tools/run.ts';
 export { TOOL_NAMES, toolSpec, toolSpecs } from './tools/specs.ts';
-export { grep, glob, viewFile } from './tools/read.ts';
+export { createFile, strReplaceEdit } from './tools/write.ts';

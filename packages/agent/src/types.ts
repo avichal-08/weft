@@ -17,7 +17,20 @@ export type ToolCallParse = ParsedToolCall | InvalidToolCall;
 export type ToolContext = {
   sandbox: Sandbox;
   root: string;
+  testCommand: string;
+  testTimeoutMs: number;
+  viewed: Map<string, string>;
 };
+
+export type ToolContextOptions = {
+  sandbox: Sandbox;
+  root: string;
+  testCommand: string;
+  testTimeoutMs?: number;
+};
+
+export type EditResult =
+  { ok: true; content: string; replacements: number; line: number } | { ok: false; error: string };
 
 export type ToolOutput = {
   content: string;

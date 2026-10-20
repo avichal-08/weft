@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createSandbox, type Sandbox } from '@weft/sandbox';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createToolContext } from '../src/tools/execute.ts';
 import { grep, glob, viewFile } from '../src/tools/read.ts';
 import type { ToolContext } from '../src/types.ts';
 
@@ -40,7 +41,7 @@ beforeAll(async () => {
   sandbox = await createSandbox({ image });
   await sandbox.putFiles(fixture, root);
   await sandbox.exec('git init -q', { cwd: root });
-  ctx = { sandbox, root };
+  ctx = createToolContext({ sandbox, root, testCommand: 'true' });
 });
 
 afterAll(async () => {

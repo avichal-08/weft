@@ -53,6 +53,7 @@ const VIEW_SCRIPT = `
 [ -e "$3" ] || exit 3
 [ -d "$3" ] && exit 4
 [ -s "$3" ] && ! grep -Iq . "$3" && exit 5
+sha256sum -- "$3" >&2
 awk -v s="$1" -v e="$2" -v max="$4" '
   NR >= s && NR <= e {
     line = $0
@@ -78,7 +79,9 @@ export async function viewFile(ctx: ToolContext, args: ToolArgs['view_file']): P
   if (res.exitCode === 5) return fail(`${args.path} is a binary file.`);
   if (res.exitCode !== 0) return fail(res.stderr.trim() || `view failed (exit ${res.exitCode})`);
 
-  const total = Number(res.stderr.trim().split('\n').pop());
+  const meta = res.stderr.trim().split('\n');
+  const total = Number(meta.at(-1));
+  ctx.viewed.set(abs, meta[0]!.slice(0, 64));
   if (total === 0) return ok('(empty file)');
   if (args.offset > total) {
     return fail(`offset ${args.offset} is past the end of ${args.path} (${total} lines).`);

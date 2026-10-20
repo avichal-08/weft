@@ -38,25 +38,50 @@ for (const call of toolCalls(res.content).map(parseToolCall)) {
 Tools execute inside a sandbox from `@weft/sandbox`, relative to the repo root:
 
 ```ts
-const ctx = { sandbox, root: '/workspace/repo' };
-await grep(ctx, { pattern: 'parseConfig', mode: 'files', path: '.', ... });
-await viewFile(ctx, { path: 'src/server.ts', offset: 40, limit: 20 });
+const ctx = createToolContext({ sandbox, root: '/workspace/repo', testCommand: 'npm test' });
+
+for (const call of toolCalls(res.content).map(parseToolCall)) {
+  const out = call.ok ? await executeTool(ctx, call) : { content: call.error, isError: true };
+  // send out.content back as a tool_result, with isError
+}
 ```
 
-Each returns `{ content, isError }`: text written for the model. Implemented so far: `grep`,
-`glob`, `view_file`.
+Every tool returns `{ content, isError }`: text written for the model. Failures the model can
+fix (bad path, ambiguous edit, failing tests) come back as `isError: true`. Infrastructure
+failures (a dead sandbox) throw, since the model can't fix those.
 
-- **No shell.** Arguments go to `rg`/`awk` as separate argv entries, so a pattern like
-  `"; rm -rf /"` is just text to search for.
+- **No shell for model input.** Patterns and paths go to `rg`, `awk` and `sh -c` scripts as
+  separate argv entries, so `"; rm -rf /"` is just text.
 - **Paths stay in the repo.** `../../etc/passwd` and absolute paths outside the root are refused.
 - **Truncation says how to narrow.** Long results end with
-  `[showing 100 of 2340 lines; narrow with path, glob or a more specific pattern]`, and
-  `view_file` ends a partial read with `use offset=N to read more`. These hints steer the
-  model toward cheaper searches.
-- **`grep`/`glob`** use ripgrep: `.gitignore` is respected, output is sorted by path (by mtime
-  for `glob`) so results are reproducible, and minified lines are cut at 300 columns.
-- **`view_file`** numbers lines like `cat -n`, cuts lines over 2000 characters, and refuses
-  directories, binary files and offsets past the end with a message the model can act on.
+  `[showing 100 of 2340 lines; narrow with path, glob or a more specific pattern]`; partial
+  `view_file` reads end with `use offset=N to read more`.
+- **`grep`/`glob`** use ripgrep: `.gitignore` respected, output sorted (by path, or by mtime for
+  `glob`) so results are reproducible, minified lines cut at 300 columns.
+- **`view_file`** numbers lines, cuts lines over 2000 characters, and refuses directories,
+  binary files and offsets past the end.
+
+### The stale-edit guard
+
+`view_file` records a SHA-256 of the file it showed. `str_replace_edit` refuses a file the model
+hasn't viewed, or one whose hash changed since (a test run or formatter rewrote it), so the model
+never edits from an outdated picture. A successful edit updates the stored hash, so consecutive
+edits don't need a re-read. `create_file` records the hash of what it wrote.
+
+### Editing details
+
+- `old_str` must occur exactly once unless `replace_all`; the error says how many times it was
+  found, or reminds the model that whitespace must match.
+- Replacement is positional, not `String.replace`, which would expand `$&` and `$1` in the new
+  text.
+- Files are rewritten in place (`cat > file`), so permissions such as the executable bit survive.
+- The result shows the edited lines with numbers, so the model can check its own change.
+
+### Commands and tests
+
+`run_command` and `run_tests` report the exit code, stdout and stderr, note timeouts, and clip
+long output to 30k characters keeping the first third and the last two thirds: test failures
+are usually summarised at the end.
 
 ## API
 
