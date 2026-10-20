@@ -17,7 +17,9 @@
     "infra:up": "docker compose -f infra/compose.yml up -d --wait",
     "infra:down": "docker compose -f infra/compose.yml down",
     "sandbox:build": "docker build -t weft-sandbox:dev infra/sandbox",
-    "sandbox:smoke": "sh infra/sandbox/smoke.sh"
+    "sandbox:smoke": "sh infra/sandbox/smoke.sh",
+    "db:generate": "pnpm --filter @weft/db db:generate",
+    "db:migrate": "pnpm --filter @weft/db db:migrate"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

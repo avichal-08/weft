@@ -16,6 +16,7 @@ infra/
   compose.yml    redis
   sandbox/       image every agent run executes in
 packages/
+  db/            postgres schema and migrations (drizzle, neon)
   agent/         the coding agent: tools and loop
   sandbox/       docker sandbox lifecycle (dockerode)
   llm/           provider-agnostic llm client (anthropic, openai, gemini, openrouter, mock)
@@ -31,6 +32,7 @@ Requires Node 22 (`.nvmrc`), pnpm (via corepack) and Docker Engine.
 pnpm install
 cp .env.example .env        # fill in the Neon urls and an LLM key
 pnpm infra:up               # redis
+pnpm db:migrate             # create tables on neon
 pnpm sandbox:build && pnpm sandbox:smoke
 pnpm typecheck && pnpm lint && pnpm build
 ```

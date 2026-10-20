@@ -4,3 +4,4 @@ coverage
 .next
 .turbo
 next-env.d.ts
+packages/db/migrations
