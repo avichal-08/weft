@@ -1,8 +1,9 @@
 import { createToolContext, runAgent, type AgentEvent } from '@weft/agent';
 import { claimRun, completeRun, getRun, recordProgress, type CompleteRunInput } from '@weft/db';
-import { LLMError, emptyUsage } from '@weft/llm';
+import { emptyUsage, LLMError, withRetry } from '@weft/llm';
 import { createSandbox, type Sandbox } from '@weft/sandbox';
 import { CloneError, cloneRepo } from './clone.ts';
+import { describeEvent, describeRetry, shortId } from './log.ts';
 import type { RunConfig, RunOutcome, WorkerDeps } from './types.ts';
 import { DEFAULT_WATCH_INTERVAL_MS, watchRun } from './watch.ts';
 
@@ -17,6 +18,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
   if (attempt === undefined) return { kind: 'skipped' };
 
   const config = run.config as RunConfig;
+  const log = (line: string) => deps.log?.(`run ${shortId(runId)} ${line}`);
   const usage = { steps: 0, ...emptyUsage() };
   const abort = new AbortController();
   let fenced = false;
@@ -52,6 +54,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
   };
 
   const onEvent = (event: AgentEvent) => {
+    log(describeEvent(event));
     if (event.type !== 'llm') return;
     usage.steps = event.step;
     usage.inputTokens += event.usage.inputTokens;
@@ -82,7 +85,10 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
 
     const ctx = createToolContext({ sandbox, root: REPO_ROOT, testCommand: run.testCommand });
     const result = await runAgent({
-      llm: deps.createLLM(config),
+      llm: withRetry(deps.createLLM(config), {
+        ...deps.retry,
+        onRetry: ({ attempt, delayMs, error }) => log(describeRetry(attempt, delayMs, error)),
+      }),
       ctx,
       task: run.task,
       maxSteps: config.maxSteps ?? DEFAULT_MAX_STEPS,

@@ -77,7 +77,11 @@ async function leftovers(runId: string) {
 describe('executeRun', () => {
   it('fixes the bug, verifies it and records the diff', async () => {
     const run = await newRun();
-    const outcome = await executeRun(deps(createMockProvider(fixScript)), run.id);
+    const lines: string[] = [];
+    const outcome = await executeRun(
+      deps(createMockProvider(fixScript), { log: (l) => lines.push(l) }),
+      run.id,
+    );
 
     expect(outcome).toEqual({ kind: 'completed', status: 'succeeded', recorded: true });
     const done = await getRun(db, run.id);
@@ -91,6 +95,40 @@ describe('executeRun', () => {
     expect(done?.diff).toContain('-  return a - b;\n+  return a + b;');
     expect(done?.finishedAt).toBeInstanceOf(Date);
     expect(await leftovers(run.id)).toBe(0);
+
+    const prefix = `run ${run.id.slice(0, 8)} `;
+    expect(lines.every((l) => l.startsWith(prefix))).toBe(true);
+    expect(lines.map((l) => l.slice(prefix.length).replace(/\d+(\.\d+)?m?s/g, 'T'))).toEqual([
+      '#1 llm T in=0 out=0',
+      '   ✓ view_file T',
+      '#2 llm T in=0 out=0',
+      '   ✓ str_replace_edit T',
+      '#3 llm T in=0 out=0',
+      '   ✓ run_tests T',
+      '#4 llm T in=0 out=0',
+      '   ✓ finish T',
+    ]);
+  });
+
+  it('logs model retries and still finishes the run', async () => {
+    const run = await newRun();
+    const lines: string[] = [];
+    const flaky = createMockProvider((_req, turn) =>
+      turn === 0
+        ? new LLMError({
+            kind: 'rate_limit',
+            provider: 'mock',
+            message: 'slow down',
+            status: 429,
+            retryAfterMs: 20,
+          })
+        : fixScript[turn - 1]!,
+    );
+
+    const outcome = await executeRun(deps(flaky, { log: (l) => lines.push(l) }), run.id);
+
+    expect(outcome).toMatchObject({ kind: 'completed', status: 'succeeded' });
+    expect(lines).toContain(`run ${run.id.slice(0, 8)} llm retry 1 in 0.0s: rate_limit (429)`);
   });
 
   it('fails when the agent finishes but the tests still fail', async () => {

@@ -24,6 +24,26 @@ pnpm --filter @weft/worker dev
 6. **Diff.** `git add -A && git diff --cached`, so new files are included.
 7. **Record** with `completeRun` (fenced), then always remove the sandbox and the checkout.
 
+### Logs
+
+Every line is tagged with the run's short id, so a slow or failed run can be read straight from
+the worker log:
+
+```
+run 1b1e4ee1 started (1b1e4ee1-65f1-40ad-a705-edbec9d7639d)
+run 1b1e4ee1 #1 llm 2.8s in=1326 out=10
+run 1b1e4ee1    ✗ run_tests 857ms
+run 1b1e4ee1 llm retry 1 in 45.0s: rate_limit (429)
+run 1b1e4ee1 #2 llm 1.4s in=738 out=21
+run 1b1e4ee1    ✓ view_file 164ms
+run 1b1e4ee1 succeeded in 14.9s
+```
+
+The retry policy (`withRetry`) is applied inside `executeRun` rather than by the caller, so each
+retry is logged against its run. A result that was refused because the run was cancelled or
+taken over is logged as such, never as `error`. Logging goes through `deps.log`, which tests
+capture and a structured logger can replace later.
+
 ### Cancellation and takeover
 
 A watcher re-reads the run every 2 s (`watchIntervalMs`). As soon as it is no longer `running`

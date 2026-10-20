@@ -1,10 +1,11 @@
 import { createDb } from '@weft/db';
-import { createProvider, loadLLMConfig, withRetry } from '@weft/llm';
+import { createProvider, loadLLMConfig } from '@weft/llm';
 import { createRedis, RUNS_QUEUE, type RunJobData } from '@weft/queue';
 import { reapSandboxes } from '@weft/sandbox';
 import { Worker } from 'bullmq';
 import { loadEnv } from './env.ts';
 import { executeRun } from './execute.ts';
+import { describeOutcome, shortId } from './log.ts';
 import type { RunConfig } from './types.ts';
 
 const env = loadEnv();
@@ -12,14 +13,12 @@ const { db, pool } = createDb(env.DATABASE_URL);
 const connection = createRedis(env.REDIS_URL);
 
 const createLLM = (config: RunConfig) =>
-  withRetry(
-    createProvider(
-      loadLLMConfig({
-        ...process.env,
-        ...(config.provider ? { LLM_PROVIDER: config.provider } : {}),
-        ...(config.model ? { LLM_MODEL: config.model } : {}),
-      }),
-    ),
+  createProvider(
+    loadLLMConfig({
+      ...process.env,
+      ...(config.provider ? { LLM_PROVIDER: config.provider } : {}),
+      ...(config.model ? { LLM_MODEL: config.model } : {}),
+    }),
   );
 
 async function janitor() {
@@ -38,8 +37,9 @@ const janitorTimer = setInterval(() => void janitor(), env.JANITOR_INTERVAL_MS);
 const worker = new Worker<RunJobData>(
   RUNS_QUEUE,
   async (job) => {
+    const id = shortId(job.data.runId);
     const started = performance.now();
-    console.log(`run ${job.data.runId}: started`);
+    console.log(`run ${id} started (${job.data.runId})`);
     const outcome = await executeRun(
       {
         db,
@@ -47,12 +47,12 @@ const worker = new Worker<RunJobData>(
         sandboxImage: env.SANDBOX_IMAGE,
         createLLM,
         allowFileRepos: env.ALLOW_FILE_REPOS,
+        log: (line) => console.log(line),
       },
       job.data.runId,
     );
     const secs = ((performance.now() - started) / 1000).toFixed(1);
-    const detail = outcome.kind === 'completed' ? outcome.status : outcome.kind;
-    console.log(`run ${job.data.runId}: ${detail} in ${secs}s`);
+    console.log(`run ${id} ${describeOutcome(outcome)} in ${secs}s`);
     return outcome;
   },
   { connection, concurrency: env.WORKER_CONCURRENCY },

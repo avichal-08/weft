@@ -1,5 +1,5 @@
 import type { Db } from '@weft/db';
-import type { LLMProvider } from '@weft/llm';
+import type { LLMProvider, RetryOptions } from '@weft/llm';
 
 export type RunConfig = {
   provider?: string;
@@ -14,6 +14,8 @@ export type WorkerDeps = {
   createLLM: (config: RunConfig) => LLMProvider;
   allowFileRepos?: boolean;
   watchIntervalMs?: number;
+  retry?: RetryOptions;
+  log?: (line: string) => void;
 };
 
 export type RunOutcome =
