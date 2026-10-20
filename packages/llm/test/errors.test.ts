@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { kindFromStatus, LLMError, retryAfterMs } from '../src/errors.ts';
+import { kindFromStatus, LLMError, retryAfterMs, retryDelayFromBody } from '../src/errors.ts';
 
 describe('kindFromStatus', () => {
   it.each([
@@ -43,5 +43,43 @@ describe('retryAfterMs', () => {
   it('ignores garbage and missing headers', () => {
     expect(retryAfterMs(new Headers({ 'retry-after': 'soon' }))).toBeUndefined();
     expect(retryAfterMs(undefined)).toBeUndefined();
+  });
+});
+
+const geminiBody = [
+  {
+    error: {
+      code: 429,
+      message: 'You exceeded your current quota ... Please retry in 54.67524425s.',
+      status: 'RESOURCE_EXHAUSTED',
+      details: [
+        { '@type': 'type.googleapis.com/google.rpc.Help', links: [] },
+        { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [] },
+        { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '54s' },
+      ],
+    },
+  },
+];
+
+describe('retryDelayFromBody', () => {
+  it('reads RetryInfo from a real gemini 429 body', () => {
+    expect(retryDelayFromBody(geminiBody)).toBe(54_000);
+  });
+
+  it('handles fractional durations and object bodies', () => {
+    const body = {
+      error: { details: [{ '@type': 'x/google.rpc.RetryInfo', retryDelay: '1.5s' }] },
+    };
+    expect(retryDelayFromBody(body)).toBe(1500);
+  });
+
+  it('falls back to the message', () => {
+    expect(retryDelayFromBody(undefined, 'Please retry in 54.67524425s.')).toBe(54_676);
+    expect(retryDelayFromBody({}, 'retry in 300ms')).toBe(300);
+  });
+
+  it('returns undefined when there is no hint', () => {
+    expect(retryDelayFromBody({ error: { details: [] } }, 'slow down')).toBeUndefined();
+    expect(retryDelayFromBody('not json')).toBeUndefined();
   });
 });

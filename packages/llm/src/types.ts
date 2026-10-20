@@ -79,6 +79,7 @@ export type RetryOptions = {
   maxAttempts?: number;
   baseDelayMs?: number;
   maxDelayMs?: number;
+  maxRetryAfterMs?: number;
   onRetry?: (info: { attempt: number; delayMs: number; error: LLMError }) => void;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   random?: () => number;

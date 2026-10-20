@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { kindFromStatus, LLMError, retryAfterMs } from '../errors.ts';
+import { kindFromStatus, LLMError, retryAfterMs, retryDelayFromBody } from '../errors.ts';
 import type {
   CompletionRequest,
   CompletionResponse,
@@ -124,7 +124,9 @@ export function toLLMError(provider: string, err: unknown): LLMError {
       ...base,
       kind: kindFromStatus(err.status),
       status: err.status,
-      retryAfterMs: retryAfterMs(err.headers as Headers | undefined),
+      retryAfterMs:
+        retryAfterMs(err.headers as Headers | undefined) ??
+        retryDelayFromBody(err.error, err.message),
       message: err.message,
     });
   }

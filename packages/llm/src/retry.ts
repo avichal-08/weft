@@ -20,7 +20,7 @@ export function backoffDelay(
   error: LLMError,
   opts: Required<Pick<RetryOptions, 'baseDelayMs' | 'maxDelayMs' | 'random'>>,
 ): number {
-  if (error.retryAfterMs !== undefined) return Math.min(error.retryAfterMs, opts.maxDelayMs);
+  if (error.retryAfterMs !== undefined) return error.retryAfterMs;
   const ceiling = Math.min(opts.maxDelayMs, opts.baseDelayMs * 2 ** (attempt - 1));
   return Math.floor(opts.random() * ceiling);
 }
@@ -32,6 +32,7 @@ export function withRetry(inner: LLMProvider, options: RetryOptions = {}): LLMPr
     maxDelayMs: options.maxDelayMs ?? 30_000,
     random: options.random ?? Math.random,
   };
+  const maxRetryAfterMs = options.maxRetryAfterMs ?? 120_000;
   const sleep = options.sleep ?? abortableSleep;
 
   return {
@@ -43,6 +44,7 @@ export function withRetry(inner: LLMProvider, options: RetryOptions = {}): LLMPr
           return await inner.complete(req);
         } catch (err) {
           if (!(err instanceof LLMError) || !err.retryable || attempt >= maxAttempts) throw err;
+          if (err.retryAfterMs !== undefined && err.retryAfterMs > maxRetryAfterMs) throw err;
           const delayMs = backoffDelay(attempt, err, delays);
           options.onRetry?.({ attempt, delayMs, error: err });
           await sleep(delayMs, req.signal);

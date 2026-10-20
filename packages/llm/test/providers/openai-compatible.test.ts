@@ -157,6 +157,24 @@ describe('createOpenAICompatibleProvider', () => {
     });
   });
 
+  it('takes the retry delay from the error body when there is no header', async () => {
+    const body = {
+      details: [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '54s' }],
+    };
+    const provider = createOpenAICompatibleProvider({
+      provider: 'gemini',
+      model: 'm',
+      apiKey: 'k',
+      client: fakeClient(() =>
+        Promise.reject(OpenAI.APIError.generate(429, { error: body }, 'quota', new Headers())),
+      ),
+    });
+    await expect(provider.complete({ system: 's', messages: [] })).rejects.toMatchObject({
+      kind: 'rate_limit',
+      retryAfterMs: 54_000,
+    });
+  });
+
   it('maps sdk errors to LLMError with retry-after', async () => {
     const provider = createOpenAICompatibleProvider({
       provider: 'openrouter',

@@ -9,7 +9,7 @@ const fail = (kind: LLMErrorKind, retryAfterMs?: number) =>
 
 const req = { system: 's', messages: [] };
 
-function setup(outcomes: (LLMError | 'ok')[], maxAttempts = 4) {
+function setup(outcomes: (LLMError | 'ok')[], maxAttempts = 4, maxRetryAfterMs?: number) {
   const inner = createMockProvider((_, turn) => {
     const o = outcomes[turn];
     return o === 'ok' || o === undefined ? { content: [{ type: 'text', text: 'done' }] } : o;
@@ -17,6 +17,7 @@ function setup(outcomes: (LLMError | 'ok')[], maxAttempts = 4) {
   const slept: number[] = [];
   const provider = withRetry(inner, {
     maxAttempts,
+    ...(maxRetryAfterMs ? { maxRetryAfterMs } : {}),
     sleep: (ms) => {
       slept.push(ms);
       return Promise.resolve();
@@ -52,6 +53,19 @@ describe('withRetry', () => {
     expect(slept).toEqual([7000]);
   });
 
+  it('waits as long as the server asks, beyond the backoff cap', async () => {
+    const { provider, slept } = setup([fail('rate_limit', 54_000), 'ok']);
+    await provider.complete(req);
+    expect(slept).toEqual([54_000]);
+  });
+
+  it('gives up at once when the server asks for longer than maxRetryAfterMs', async () => {
+    const { inner, provider, slept } = setup([fail('rate_limit', 6 * 3600_000), 'ok'], 4, 120_000);
+    await expect(provider.complete(req)).rejects.toMatchObject({ kind: 'rate_limit' });
+    expect(inner.calls).toHaveLength(1);
+    expect(slept).toEqual([]);
+  });
+
   it('rethrows non-llm errors untouched', async () => {
     const inner = createMockProvider(() => new TypeError('bug'));
     await expect(withRetry(inner).complete(req)).rejects.toBeInstanceOf(TypeError);
@@ -66,7 +80,7 @@ describe('backoffDelay', () => {
     expect(delays).toEqual([999, 1998, 3996, 7992, 7992]);
   });
 
-  it('caps retry-after at maxDelayMs', () => {
-    expect(backoffDelay(1, fail('rate_limit', 60_000), opts)).toBe(8000);
+  it('uses a server retry-after as given', () => {
+    expect(backoffDelay(1, fail('rate_limit', 60_000), opts)).toBe(60_000);
   });
 });

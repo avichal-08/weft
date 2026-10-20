@@ -65,3 +65,32 @@ export function retryAfterMs(headers: HeaderBag, now = Date.now()): number | und
   const at = Date.parse(ra);
   return Number.isNaN(at) ? undefined : Math.max(0, at - now);
 }
+
+const DURATION = /^(\d+(?:\.\d+)?)s$/;
+const RETRY_IN = /retry in (\d+(?:\.\d+)?)\s*(ms|s)\b/i;
+
+function findRetryInfo(node: unknown, depth: number): number | undefined {
+  if (depth > 6 || typeof node !== 'object' || node === null) return undefined;
+  const children = Array.isArray(node) ? (node as unknown[]) : Object.values(node);
+  const rec = node as Record<string, unknown>;
+  const type = rec['@type'];
+  const delay = rec.retryDelay;
+  if (typeof type === 'string' && type.endsWith('RetryInfo') && typeof delay === 'string') {
+    const m = DURATION.exec(delay);
+    if (m) return Math.ceil(Number(m[1]) * 1000);
+  }
+  for (const child of children) {
+    const found = findRetryInfo(child, depth + 1);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+export function retryDelayFromBody(body: unknown, message = ''): number | undefined {
+  const structured = findRetryInfo(body, 0);
+  if (structured !== undefined) return structured;
+  const m = RETRY_IN.exec(message);
+  if (!m) return undefined;
+  const n = Number(m[1]);
+  return Math.ceil(m[2]!.toLowerCase() === 'ms' ? n : n * 1000);
+}

@@ -37,6 +37,7 @@ console.log(textOf(res.content), res.usage, res.stopReason);
 | `createAnthropicProvider`, `createOpenAICompatibleProvider`, `createMockProvider` | Build a provider directly.                                                                  |
 | `withRetry(provider, opts)`                                                       | Retries transient failures; see below.                                                      |
 | `LLMError`                                                                        | Every provider error is mapped to this, with `kind`, `status`, `retryable`, `retryAfterMs`. |
+| `retryAfterMs(headers)`, `retryDelayFromBody(body, message)`                      | How `retryAfterMs` is found: headers first, then the error body.                            |
 | `textOf`, `toolCalls`, `emptyUsage`                                               | Small helpers over content blocks.                                                          |
 | Types (`Message`, `ContentBlock`, `ToolSpec`, …)                                  | All public types live in `src/types.ts`.                                                    |
 
@@ -54,8 +55,12 @@ console.log(textOf(res.content), res.usage, res.stopReason);
 - **Usage is normalised.** `inputTokens` excludes cache reads, which are reported separately,
   so cost can be computed the same way for every provider.
 - **One retry policy.** SDK retries are off. `withRetry` retries rate limits, overloads, 5xx,
-  timeouts and network errors with full-jitter exponential backoff, honours `retry-after`, and
-  fails fast on auth and bad-request errors.
+  timeouts and network errors with full-jitter exponential backoff, and fails fast on auth and
+  bad-request errors. When the server says how long to wait, that wins over backoff: the
+  `retry-after` / `retry-after-ms` headers, or, for Gemini, which sends neither, the
+  `RetryInfo.retryDelay` in the error body (falling back to "retry in 54s" in the message). A
+  server delay is honoured exactly up to `maxRetryAfterMs` (default 2 min); a longer one, such as
+  an exhausted daily quota, fails at once rather than parking a worker for hours.
 
 ## Testing
 
