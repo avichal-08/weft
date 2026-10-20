@@ -1,12 +1,11 @@
-import { PGlite } from '@electric-sql/pglite';
 import { eq, sql } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MIGRATIONS_DIR } from '../src/migrate.ts';
-import { runs, schema } from '../src/schema.ts';
+import { runs } from '../src/schema.ts';
+import { reset, testDb, type TestDb } from './helpers.ts';
 
-let db: ReturnType<typeof drizzle<typeof schema>>;
+let db: TestDb;
 
 const pgError = (promise: Promise<unknown>) =>
   promise.then(
@@ -15,12 +14,11 @@ const pgError = (promise: Promise<unknown>) =>
   );
 
 beforeAll(async () => {
-  db = drizzle(new PGlite(), { schema });
-  await migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+  db = await testDb();
 });
 
 beforeEach(async () => {
-  await db.execute(sql`truncate table runs`);
+  await reset(db);
 });
 
 const newRun = {
