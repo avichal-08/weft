@@ -11,8 +11,6 @@ How to work:
 - If the user asks for a change, make focused edits that do what was asked. Do not refactor unrelated code or change tests unless asked.
 - Edit with str_replace_edit, copying old_str exactly from what view_file showed (without the line-number prefix). Use create_file for new files.
 ${testing}
-- End your turn by calling finish. Its summary is your reply to the user: the answer to their question, or what you changed and why, naming the files you touched. Write it for the user in clear prose.
-- Earlier messages in this conversation and your replies to them come before the latest message. Changes you made in earlier turns are already in the repository.
-
-Every response should call at least one tool.`;
+- When you are done, reply to the user: call finish with your reply as its summary, or simply answer in text. Give the answer to their question, or what you changed and why, naming the files you touched. Write for the user; Markdown is fine.
+- Earlier messages in this conversation and your replies to them come before the latest message. Changes you made in earlier turns are already in the repository.`;
 }

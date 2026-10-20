@@ -8,8 +8,8 @@ import type { AgentEvent, AgentOptions, AgentResult, AgentStatus } from './types
 export const DEFAULT_MAX_STEPS = 30;
 const EVENT_OUTPUT_CHARS = 2000;
 const NUDGE =
-  'You replied without calling a tool. Continue working on the task using the tools, ' +
-  'or call finish if it is done.';
+  'Your last response was empty. Continue working on the request using the tools, ' +
+  'or reply to the user.';
 
 export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
   const execute = opts.execute ?? executeTool;
@@ -70,7 +70,9 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
     if (calls.length === 0) {
       if (res.stopReason === 'refusal') return done('refusal');
       if (res.stopReason === 'max_tokens') return done('max_tokens');
-      if (nudges >= (opts.maxNudges ?? 1)) return done('no_tool_call', textOf(res.content));
+      const reply = textOf(res.content).trim();
+      if (reply) return done('finished', reply);
+      if (nudges >= (opts.maxNudges ?? 1)) return done('no_tool_call');
       nudges++;
       messages.push({ role: 'user', content: [{ type: 'text', text: NUDGE }] });
       continue;

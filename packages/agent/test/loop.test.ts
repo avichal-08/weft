@@ -73,22 +73,25 @@ describe('runAgent', () => {
     expect(res).toMatchObject({ status: 'max_steps', steps: 3 });
   });
 
-  it('nudges once when the model stops calling tools', async () => {
-    const llm = createMockProvider([
-      turn(text('I think it works')),
-      turn(tool('finish', { summary: 's' })),
-    ]);
+  it('treats a plain-text answer as the reply', async () => {
+    const llm = createMockProvider([turn(text('It adds two numbers.'))]);
+    const res = await runAgent({ llm, ctx, task: 'what does add do?', execute: echo });
+    expect(res).toMatchObject({ status: 'finished', summary: 'It adds two numbers.', steps: 1 });
+  });
+
+  it('nudges once when the model returns nothing', async () => {
+    const llm = createMockProvider([turn(text('  ')), turn(tool('finish', { summary: 's' }))]);
     const res = await runAgent({ llm, ctx, task: 't', execute: echo });
 
     expect(res.status).toBe('finished');
     const nudge = llm.calls[1]!.messages.at(-1)!.content[0];
-    expect(nudge?.type === 'text' && nudge.text).toMatch(/without calling a tool/);
+    expect(nudge?.type === 'text' && nudge.text).toMatch(/last response was empty/);
   });
 
   it('gives up after the nudge is ignored', async () => {
-    const llm = createMockProvider([turn(text('done?')), turn(text('done.'))]);
+    const llm = createMockProvider([turn(text('')), turn(text(''))]);
     const res = await runAgent({ llm, ctx, task: 't', execute: echo });
-    expect(res).toMatchObject({ status: 'no_tool_call', summary: 'done.', steps: 2 });
+    expect(res).toMatchObject({ status: 'no_tool_call', steps: 2 });
   });
 
   it.each([
@@ -151,7 +154,9 @@ describe('systemPrompt', () => {
   });
 
   it('frames finish as the reply to the user', () => {
-    expect(systemPrompt(null)).toMatch(/summary is your reply to the user/);
+    expect(systemPrompt(null)).toMatch(
+      /call finish with your reply as its summary, or simply answer in text/,
+    );
   });
 });
 

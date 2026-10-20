@@ -60,14 +60,14 @@ the repo clearly has tests.
 Each step sends the conversation to the model, runs every tool call it made, and sends all the
 results back in one message (the APIs require every call to be answered, failed ones included).
 
-| Status         | When                                                                   |
-| -------------- | ---------------------------------------------------------------------- |
-| `finished`     | The model called `finish`; `summary` holds its description.            |
-| `max_steps`    | The step budget (default 30) ran out.                                  |
-| `no_tool_call` | The model replied without a tool, was reminded once, and did it again. |
-| `max_tokens`   | A response hit the output token limit without a tool call.             |
-| `refusal`      | The model declined.                                                    |
-| `aborted`      | The `signal` fired; checked between steps and passed to the LLM call.  |
+| Status         | When                                                                          |
+| -------------- | ----------------------------------------------------------------------------- |
+| `finished`     | The model called `finish`, or answered in plain text; `summary` is the reply. |
+| `max_steps`    | The step budget (default 30) ran out.                                         |
+| `no_tool_call` | The model returned nothing, was reminded once, and did it again.              |
+| `max_tokens`   | A response hit the output token limit without a tool call.                    |
+| `refusal`      | The model declined.                                                           |
+| `aborted`      | The `signal` fired; checked between steps and passed to the LLM call.         |
 
 Errors the model can't fix (auth, exhausted retries, a dead sandbox) are thrown rather than
 fed back. `onEvent` receives one `llm` event per step (tokens, latency, stop reason, text) and one
