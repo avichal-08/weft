@@ -1,3 +1,4 @@
+import type { Sandbox } from '@weft/sandbox';
 import type { z } from 'zod';
 import type { TOOLS } from './tools/definitions.ts';
 
@@ -12,3 +13,13 @@ export type ParsedToolCall = {
 export type InvalidToolCall = { ok: false; id: string; name: string; error: string };
 
 export type ToolCallParse = ParsedToolCall | InvalidToolCall;
+
+export type ToolContext = {
+  sandbox: Sandbox;
+  root: string;
+};
+
+export type ToolOutput = {
+  content: string;
+  isError: boolean;
+};

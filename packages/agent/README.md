@@ -33,6 +33,31 @@ for (const call of toolCalls(res.content).map(parseToolCall)) {
 | `run_tests`        | Run the repo's configured test command                                      |
 | `finish`           | End the run with a summary of the change                                    |
 
+## Running tools
+
+Tools execute inside a sandbox from `@weft/sandbox`, relative to the repo root:
+
+```ts
+const ctx = { sandbox, root: '/workspace/repo' };
+await grep(ctx, { pattern: 'parseConfig', mode: 'files', path: '.', ... });
+await viewFile(ctx, { path: 'src/server.ts', offset: 40, limit: 20 });
+```
+
+Each returns `{ content, isError }`: text written for the model. Implemented so far: `grep`,
+`glob`, `view_file`.
+
+- **No shell.** Arguments go to `rg`/`awk` as separate argv entries, so a pattern like
+  `"; rm -rf /"` is just text to search for.
+- **Paths stay in the repo.** `../../etc/passwd` and absolute paths outside the root are refused.
+- **Truncation says how to narrow.** Long results end with
+  `[showing 100 of 2340 lines; narrow with path, glob or a more specific pattern]`, and
+  `view_file` ends a partial read with `use offset=N to read more`. These hints steer the
+  model toward cheaper searches.
+- **`grep`/`glob`** use ripgrep: `.gitignore` is respected, output is sorted by path (by mtime
+  for `glob`) so results are reproducible, and minified lines are cut at 300 columns.
+- **`view_file`** numbers lines like `cat -n`, cuts lines over 2000 characters, and refuses
+  directories, binary files and offsets past the end with a message the model can act on.
+
 ## API
 
 | Export                                        | What it does                                                                           |
@@ -58,5 +83,6 @@ for (const call of toolCalls(res.content).map(parseToolCall)) {
 ## Testing
 
 ```bash
-pnpm --filter @weft/agent test
+pnpm --filter @weft/agent test               # unit tests
+pnpm --filter @weft/agent test:integration   # tools against a fixture repo in a real sandbox
 ```
