@@ -20,20 +20,23 @@ The sidebar lists every chat, most recently active first, with a dot for the lat
 
 ## The conversation
 
-Each turn shows your message, then the agent's work, then its reply:
+The chat screen follows Claude Code on the web: the conversation is the focus, the agent's
+mechanics stay out of the way until you want them.
 
-- **While it works**, the activity timeline is open and grows live: each model step with its
-  latency and tokens, each tool call with a one-line summary, collapsed output, failed calls
-  opened, and edits shown as small diffs.
-- **Once done**, the activity folds into "worked · 7 steps · 2m 4s · 21.5k tokens" (click to
-  expand, or follow "details" to the run page) and the reply appears below it. A turn that didn't
-  complete says why (`tests_failed`, `apply_failed`, rate limit, …); if the chat has a test
-  command, a passing run shows "✓ tests pass".
-- **The composer** sends with Enter (Shift+Enter for a new line). While a turn is running it is
-  disabled and shows **Stop**, which cancels the turn. The API refuses a second message while one
-  is in progress, and the form says so.
-- **Changes** is the latest cumulative diff: everything the agent has changed in this chat, beside
-  the conversation on wide screens and under it on narrow ones.
+- **Your messages** are bubbles on the right. **The agent's replies** are rendered Markdown (code
+  blocks, lists, tables, inline code) with raw HTML ignored, so a reply can't inject markup.
+- **The agent's work** is one line per turn: a spinner with the current step ("Working… Read
+  src/lru.js") while it runs, then "Worked for 31s" once done. Expand it for compact steps:
+  _Searched for `get(`_, _Read `src/lru.js`_, _Edited `src/lru.js` +4 −1_, _Tests passed_, any
+  text the model wrote between steps, and, per step, its output or the edit as a small diff.
+  Failed steps are marked ✗.
+- **Stats** (steps, tokens) and a link to the run's detail page appear only on hover under each
+  reply. A turn that didn't finish says why in one sentence, with the details folded.
+- **The header** shows the chat's title, repo, branch and model, a "Working" indicator, and a
+  **Changes** button with the number of files changed. It opens a side panel listing each file
+  with its +/− counts and its diff; the panel shows the latest cumulative diff of the whole chat.
+- **The composer** stays at the bottom: Enter sends, Shift+Enter adds a line, the model in use is
+  shown beside the button, and while a turn runs it turns into **Stop**, which cancels the turn.
 
 Pages refresh every 2 s while a turn is active and stop when it finishes; pushing updates as they
 happen (WebSockets or SSE) is planned.

@@ -7,10 +7,12 @@ function lineClass(line: string) {
   return 'text-zinc-700 dark:text-zinc-300';
 }
 
-export function DiffView({ diff }: { diff: string }) {
+export function DiffView({ diff, bare = false }: { diff: string; bare?: boolean }) {
   if (!diff.trim()) return <p className="text-sm text-zinc-500">No changes.</p>;
   return (
-    <pre className="overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50 py-3 text-[13px] leading-6 dark:border-zinc-800 dark:bg-zinc-950">
+    <pre
+      className={`overflow-x-auto py-2 text-[12.5px] leading-6 ${bare ? '' : 'rounded-lg border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950'}`}
+    >
       {diff
         .replace(/\n$/, '')
         .split('\n')
