@@ -27,7 +27,7 @@ export function containerSpec(opts: SandboxOptions): ContainerCreateOptions {
       ...(opts.owner ? { [OWNER_LABEL]: opts.owner } : {}),
     },
     HostConfig: {
-      NetworkMode: 'none',
+      NetworkMode: opts.network === 'bridge' ? 'bridge' : 'none',
       ReadonlyRootfs: true,
       CapDrop: ['ALL'],
       SecurityOpt: ['no-new-privileges'],

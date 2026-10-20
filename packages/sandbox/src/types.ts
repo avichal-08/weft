@@ -13,6 +13,7 @@ export type SandboxOptions = {
   limits?: Partial<SandboxLimits>;
   labels?: Record<string, string>;
   owner?: string;
+  network?: 'none' | 'bridge';
 };
 
 export type ExecOptions = {
@@ -46,6 +47,8 @@ export type Sandbox = {
   exec(command: string | string[], opts?: ExecOptions): Promise<ExecResult>;
   putFiles(localDir: string, dest?: string, opts?: PutFilesOptions): Promise<void>;
   readFile(path: string, opts?: ReadFileOptions): Promise<string>;
+  disconnectNetwork(): Promise<void>;
+  killStrays(): Promise<void>;
   destroy(): Promise<void>;
 };
 

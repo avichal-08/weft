@@ -29,6 +29,8 @@ try {
 | `sandbox.exec(cmd, { cwd, env, stdin, maxOutputBytes, timeoutMs })` | Runs a command. A string runs via `sh -c`; an array runs as-is. `stdin` takes a string, Buffer or stream. Returns exit code, stdout, stderr, `truncated`, `timedOut` and duration. |
 | `sandbox.putFiles(localDir, dest?, { ignore, timeoutMs })`          | Copies a local directory into the sandbox (default `/workspace`). Files end up owned by uid 1000, modes kept.                                                                      |
 | `sandbox.readFile(path, { maxBytes })`                              | Returns a file's contents as text. Throws if it's missing or over `maxBytes` (default 1 MB).                                                                                       |
+| `sandbox.killStrays()`                                              | Kills every process outside session 1 (anything left running in the background).                                                                                                   |
+| `sandbox.disconnectNetwork()`                                       | Cuts a `network: 'bridge'` sandbox off the network for good. Safe to call twice.                                                                                                   |
 | `sandbox.destroy()`                                                 | Force-removes the container. Safe to call more than once; concurrent calls all wait for the same removal.                                                                          |
 | `reapSandboxes({ isOwnerAlive, minAgeMs, maxAgeMs, labels })`       | Removes leftover sandboxes; returns what it removed and why. See [Cleanup](#cleanup).                                                                                              |
 | `listSandboxes(docker, labels?)`                                    | Every `weft.sandbox` container with its state, age and owner.                                                                                                                      |
@@ -39,13 +41,35 @@ try {
 
 | Setting                             | Why                                                                                                                                                                      |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `NetworkMode: none`                 | No exfiltration, no downloading payloads.                                                                                                                                |
+| `NetworkMode: none`                 | No exfiltration, no downloading payloads. `network: 'bridge'` is only for the setup phase; see [Setup network](#setup-network).                                          |
 | `ReadonlyRootfs` + tmpfs mounts     | Only `/tmp` and `/workspace` are writable, both size-capped. Both are mounted `exec`, since Docker adds `noexec` by default and that breaks `node_modules/.bin` scripts. |
 | `CapDrop: ALL`, `no-new-privileges` | No root-level powers, no privilege gain through setuid binaries.                                                                                                         |
 | `User: 1000:1000`                   | Never runs as root.                                                                                                                                                      |
 | `MemorySwap = Memory`               | Swap off, so a memory hog is killed instead of thrashing.                                                                                                                |
 | `PidsLimit`                         | Fork bombs hit the limit instead of taking down the host.                                                                                                                |
 | `weft.sandbox` label                | Lets a janitor find and reap sandboxes left behind by a crashed worker.                                                                                                  |
+
+## Setup network
+
+Installing dependencies needs the registry, the agent must not have the internet. So a sandbox
+created with `network: 'bridge'` runs the install online, then:
+
+1. `killStrays()` kills anything the install left running in the background (a postinstall
+   that spawned a daemon would otherwise keep a socket open), then
+2. `disconnectNetwork()` detaches the container from Docker's bridge. Only `lo` is left in
+   `/sys/class/net`, so no command started later can reach anything.
+
+The rest of the hardening (read-only rootfs, no capabilities, uid 1000) applies during the
+install too, so install scripts run as untrusted code like everything else.
+
+## The image
+
+`infra/sandbox/Dockerfile`: Node 22, git, ripgrep, tini, and pnpm and yarn preinstalled with
+corepack under `/opt/corepack`. The root filesystem is read-only, but corepack writes to its home
+whenever a repo pins a different version (`"packageManager": "pnpm@10.33.0"`). So
+`COREPACK_HOME` points at `/tmp/corepack`, and the entrypoint (`weft-init.sh`) seeds it with
+symlinks to the preinstalled versions: those still work offline, and a pinned version can be
+downloaded during setup. `pnpm sandbox:smoke` checks all of this.
 
 ## How `exec` works
 

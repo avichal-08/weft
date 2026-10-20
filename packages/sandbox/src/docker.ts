@@ -16,7 +16,7 @@ import type { ExecOptions, ExecResult, Sandbox, SandboxOptions } from './types.t
 export const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
 export const BACKSTOP_GRACE_MS = 5_000;
 
-type State = { broken: boolean };
+type State = { broken: boolean; offline: boolean };
 
 const isNotFound = (err: unknown) =>
   typeof err === 'object' && err !== null && (err as { statusCode?: number }).statusCode === 404;
@@ -114,7 +114,7 @@ export async function createSandbox(
     throw err;
   }
 
-  const state: State = { broken: false };
+  const state: State = { broken: false, offline: false };
   let removal: Promise<void> | undefined;
 
   const exec: Sandbox['exec'] = (command, execOpts) =>
@@ -125,6 +125,18 @@ export async function createSandbox(
     exec,
     putFiles: (localDir, dest, putOpts) => putFiles(exec, localDir, dest, putOpts),
     readFile: (path, readOpts) => readFile(exec, path, readOpts),
+    async disconnectNetwork() {
+      if (opts.network !== 'bridge' || state.offline) return;
+      try {
+        await docker.getNetwork('bridge').disconnect({ Container: container.id, Force: true });
+      } catch (err) {
+        if (!/is not connected/.test((err as Error).message)) throw err;
+      }
+      state.offline = true;
+    },
+    async killStrays() {
+      await exec(SWEEP_SCRIPT, { timeoutMs: 10_000 });
+    },
     destroy() {
       removal ??= container.remove({ force: true }).then(
         () => undefined,
