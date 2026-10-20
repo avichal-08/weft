@@ -4,7 +4,7 @@ import { RunsList } from '@/components/runs-list';
 
 export default function Home() {
   return (
-    <div className="grid gap-10">
+    <div className="grid grid-cols-1 gap-10">
       <section>
         <h1 className="mb-1 text-xl font-semibold">New run</h1>
         <p className="mb-4 text-sm text-zinc-500">

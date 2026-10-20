@@ -15,7 +15,7 @@ export function NewRunForm() {
   return (
     <form
       action={action}
-      className="grid gap-4 rounded-xl border border-zinc-200 p-5 dark:border-zinc-800"
+      className="grid grid-cols-1 gap-4 rounded-xl border border-zinc-200 p-5 dark:border-zinc-800"
     >
       <div>
         <label className={label} htmlFor="repoUrl">
@@ -43,7 +43,7 @@ export function NewRunForm() {
           required
         />
       </div>
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <div className="sm:col-span-2">
           <label className={label} htmlFor="testCommand">
             Test command

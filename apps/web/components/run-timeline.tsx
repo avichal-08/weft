@@ -120,9 +120,9 @@ export function RunTimeline({ events, active }: { events: RunEvent[]; active: bo
   for (const e of events) steps.set(e.step, [...(steps.get(e.step) ?? []), e]);
 
   return (
-    <ol className="grid gap-5">
+    <ol className="grid grid-cols-1 gap-5">
       {[...steps.entries()].map(([step, group]) => (
-        <li key={step} className="grid gap-2">
+        <li key={step} className="grid grid-cols-1 gap-2">
           {group.map((e) =>
             e.type === 'llm' ? (
               <ModelCall key={e.seq} step={step} data={e.data} />

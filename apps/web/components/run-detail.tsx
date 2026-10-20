@@ -28,7 +28,7 @@ export async function RunDetail({ params }: { params: Promise<{ id: string }> })
   const active = ACTIVE.includes(run.status);
 
   return (
-    <div className="grid gap-8">
+    <div className="grid grid-cols-1 gap-8">
       <AutoRefresh active={active} />
 
       <div className="flex flex-wrap items-start justify-between gap-4">
