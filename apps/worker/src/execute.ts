@@ -13,6 +13,7 @@ import { emptyUsage, LLMError, withRetry } from '@weft/llm';
 import { createSandbox, type Sandbox } from '@weft/sandbox';
 import { CloneError, cloneRepo } from './clone.ts';
 import { buildHistory, latestDiff } from './history.ts';
+import { detectSetup, runSetup, SetupError } from './setup.ts';
 import { describeEvent, describeRetry, shortId } from './log.ts';
 import { toRunEvent } from './trace.ts';
 import type { RunConfig, RunOutcome, WorkerDeps } from './types.ts';
@@ -113,10 +114,14 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     checkout = await cloneRepo(run.repoUrl, run.baseRef, {
       allowFileRepos: deps.allowFileRepos ?? false,
     });
+    const plan = await detectSetup(checkout.dir);
     sandbox = await createSandbox({
       image: deps.sandboxImage,
       owner: workerId,
       labels: { 'weft.run': runId },
+      ...(plan
+        ? { network: 'bridge' as const, limits: { memoryMb: 2048, workspaceMb: 2048, tmpMb: 512 } }
+        : {}),
     });
     abort.signal.throwIfAborted();
     await sandbox.putFiles(checkout.dir, REPO_ROOT);
@@ -130,6 +135,12 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
       if (applied.exitCode !== 0) {
         throw new ApplyError(applied.stderr.trim() || 'git apply failed');
       }
+    }
+
+    if (plan) {
+      log(`setup: ${plan.command}`);
+      const ms = await runSetup(sandbox, REPO_ROOT, plan);
+      log(`setup: done in ${(ms / 1000).toFixed(1)}s, network disconnected`);
     }
 
     const ctx = createToolContext({ sandbox, root: REPO_ROOT, testCommand: run.testCommand });
@@ -151,9 +162,12 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     const verify = run.testCommand
       ? await sandbox.exec(run.testCommand, { cwd: REPO_ROOT, timeoutMs: ctx.testTimeoutMs })
       : null;
-    const diff = await sandbox.exec('git add -A && git diff --cached --binary --no-color', {
-      cwd: REPO_ROOT,
-    });
+    const diff = await sandbox.exec(
+      "git add -A -- . ':!node_modules' && git diff --cached --binary --no-color -- . ':!node_modules'",
+      {
+        cwd: REPO_ROOT,
+      },
+    );
     const passed = verify ? verify.exitCode === 0 : true;
 
     if (result.status === 'finished' && passed) {
@@ -183,6 +197,7 @@ const tail = (text: string, max = 4000) => (text.length > max ? text.slice(-max)
 
 function describeError(err: unknown): { failureKind: string; failureDetail: string } {
   if (err instanceof CloneError) return { failureKind: 'clone_failed', failureDetail: err.message };
+  if (err instanceof SetupError) return { failureKind: 'setup_failed', failureDetail: err.message };
   if (err instanceof ApplyError) {
     return {
       failureKind: 'apply_failed',

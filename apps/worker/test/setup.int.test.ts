@@ -1,0 +1,107 @@
+import { execFileSync } from 'node:child_process';
+import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRun, getRun, listRunEvents } from '@weft/db';
+import { reset, testDb, type TestDb } from '@weft/db/testing';
+import { createMockProvider, type ContentBlock } from '@weft/llm';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { executeRun } from '../src/execute.ts';
+
+const fixture = fileURLToPath(new URL('./fixtures/with-deps', import.meta.url));
+const image = process.env.SANDBOX_IMAGE ?? 'weft-sandbox:dev';
+const dirs: string[] = [];
+let db: TestDb;
+
+async function origin(edit?: (dir: string) => Promise<void>) {
+  const dir = await mkdtemp(join(tmpdir(), 'weft-setup-origin-'));
+  dirs.push(dir);
+  await cp(fixture, dir, { recursive: true });
+  await edit?.(dir);
+  const git = (...args: string[]) =>
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: dir });
+  git('init', '-q', '-b', 'main');
+  git('add', '-A');
+  git('commit', '-qm', 'init');
+  return pathToFileURL(dir).href;
+}
+
+const call = (name: string, input: unknown): { content: ContentBlock[] } => ({
+  content: [{ type: 'tool_call', id: name, name, input }],
+});
+
+function run(repoUrl: string, script: { content: ContentBlock[] }[], lines: string[] = []) {
+  return createRun(db, { repoUrl, task: 'check', testCommand: 'node --test' }).then(async (r) => {
+    await executeRun(
+      {
+        db,
+        workerId: 'setup-test',
+        sandboxImage: image,
+        createLLM: () => createMockProvider(script),
+        allowFileRepos: true,
+        watchIntervalMs: 200,
+        log: (l) => lines.push(l),
+      },
+      r.id,
+    );
+    return r.id;
+  });
+}
+
+beforeAll(async () => {
+  db = await testDb();
+});
+
+beforeEach(async () => {
+  await reset(db);
+});
+
+afterAll(async () => {
+  await Promise.all(dirs.map((d) => rm(d, { recursive: true, force: true })));
+});
+
+describe('setup phase', () => {
+  it('installs dependencies so the tests can import them', async () => {
+    const lines: string[] = [];
+    const id = await run(
+      await origin(),
+      [call('run_tests', {}), call('finish', { summary: 'tests pass' })],
+      lines,
+    );
+
+    expect(await getRun(db, id)).toMatchObject({ status: 'succeeded', diff: '' });
+    const [, tests] = await listRunEvents(db, id, { attempt: 1 });
+    expect(tests?.data.output).toMatch(/^Tests passed/);
+    expect(
+      lines.some((l) => l.endsWith('setup: npm ci --no-audit --no-fund --loglevel=error')),
+    ).toBe(true);
+    expect(lines.some((l) => /setup: done in [\d.]+s, network disconnected/.test(l))).toBe(true);
+  }, 180_000);
+
+  it('runs the agent offline even though setup had network', async () => {
+    const reach = `node -e "fetch('https://registry.npmjs.org/').then(() => console.log('online'), () => console.log('offline'))"`;
+    const id = await run(await origin(), [
+      call('run_command', { command: reach, timeout_sec: 20 }),
+      call('finish', { summary: 'checked' }),
+    ]);
+    const [, probe] = await listRunEvents(db, id, { attempt: 1 });
+    expect(probe?.data.output).toContain('offline');
+    expect(probe?.data.output).not.toContain('online');
+  }, 180_000);
+
+  it('fails the turn clearly when the install fails', async () => {
+    const repoUrl = await origin(async (dir) => {
+      await rm(join(dir, 'package-lock.json'));
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({ name: 'broken', dependencies: { ms: '999.0.0' } }),
+      );
+    });
+    const id = await run(repoUrl, [call('finish', { summary: 'never reached' })]);
+
+    const done = await getRun(db, id);
+    expect(done).toMatchObject({ status: 'error', failureKind: 'setup_failed' });
+    expect(done?.failureDetail).toMatch(/npm install .* failed[\s\S]*ms/);
+  }, 180_000);
+});

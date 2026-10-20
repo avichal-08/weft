@@ -16,21 +16,39 @@ pnpm --filter @weft/worker dev
    development, since on a worker it means "read any path on this machine". Git's `ext::`
    transport and friends are refused.
 3. **Sandbox.** A fresh container labelled with the worker id (`weft.owner`) and run id
-   (`weft.run`); the checkout, `.git` included, is copied to `/workspace/repo`.
+   (`weft.run`); the checkout, `.git` included, is copied to `/workspace/repo`. A repo with
+   dependencies gets network for the setup phase and larger limits (2 GB memory and workspace).
 4. **Continue the conversation** (session turns after the first). The latest earlier turn that
    recorded a diff is applied with `git apply`. Diffs are cumulative from the base branch, so
    that one patch restores everything the agent changed so far. If it no longer applies (someone
    pushed to the branch meanwhile), the turn fails as `apply_failed` instead of quietly working
    on different code.
-5. **Agent.** `runAgent` with the LLM from the run's `config` (`provider`, `model`), falling back
+5. **Setup**, when `package.json` lists dependencies. The lockfile picks the command:
+
+   | Found                                 | Runs                             |
+   | ------------------------------------- | -------------------------------- |
+   | `pnpm-lock.yaml`                      | `pnpm install --frozen-lockfile` |
+   | `yarn.lock` (with `.yarnrc.yml`)      | `yarn install --immutable`       |
+   | `yarn.lock`                           | `yarn install --frozen-lockfile` |
+   | `package-lock.json`, `npm-shrinkwrap` | `npm ci`                         |
+   | none                                  | `npm install`                    |
+
+   It runs inside the sandbox, never on the host, since install scripts are untrusted code. Then
+   stray background processes are killed and the network is disconnected, so the agent works
+   offline. A failed or timed-out install (5 min) ends the turn as `setup_failed` with the tail
+   of the output. On `vercel/ms` the pnpm install takes about 80 s; caching `node_modules` by
+   lockfile hash is the next step.
+
+6. **Agent.** `runAgent` with the LLM from the run's `config` (`provider`, `model`), falling back
    to `.env`, and `maxSteps` (default 30). For later turns it also gets `history`: each earlier
    message with the agent's reply, or a note like "(this turn ended without a reply: cancelled)".
    After every step the worker saves steps and tokens with `recordProgress`.
-6. **Verify**, when the run has a `testCommand`: the worker reruns it itself instead of trusting
+7. **Verify**, when the run has a `testCommand`: the worker reruns it itself instead of trusting
    the agent. Without one (questions, repos without tests) there is nothing to rerun.
-7. **Diff.** `git add -A && git diff --cached --binary`, so new files and binary changes are
-   included and the patch can be applied by the next turn.
-8. **Record** with `completeRun` (fenced), then always remove the sandbox and the checkout.
+8. **Diff.** `git add -A && git diff --cached --binary`, so new files and binary changes are
+   included and the patch can be applied by the next turn. `node_modules` is always left out,
+   even when the repo doesn't ignore it.
+9. **Record** with `completeRun` (fenced), then always remove the sandbox and the checkout.
 
 ### Trace
 
@@ -75,11 +93,11 @@ step, so a cancelled run stuck on a hanging model kept its worker and sandbox fo
 now it stops within a couple of seconds. Polling is the simple version; a Redis pub/sub cancel
 message would make it instant.
 
-| Outcome     | When                                                                              |
-| ----------- | --------------------------------------------------------------------------------- |
-| `succeeded` | The agent replied with `finish`, and the tests pass if there is a test command.   |
-| `failed`    | `tests_failed`, or the agent stopped early (`max_steps`, `no_tool_call`, ...).    |
-| `error`     | `clone_failed`, `apply_failed`, `llm_<kind>` (e.g. `llm_rate_limit`), `internal`. |
+| Outcome     | When                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------- |
+| `succeeded` | The agent replied with `finish`, and the tests pass if there is a test command.                   |
+| `failed`    | `tests_failed`, or the agent stopped early (`max_steps`, `no_tool_call`, ...).                    |
+| `error`     | `clone_failed`, `apply_failed`, `setup_failed`, `llm_<kind>` (e.g. `llm_rate_limit`), `internal`. |
 
 Failed runs keep the diff and the tail of the test output in `failure_detail`.
 
@@ -101,9 +119,10 @@ the worker stops taking jobs, lets active runs finish, then closes Redis and Pos
 
 ## Known limits (M2)
 
-- **No dependency install.** The sandbox has no network and running `npm install` on the host
-  would execute untrusted install scripts there, so only repos whose tests need no packages
-  work for now. M2 adds a separate setup phase with network, before the agent runs offline.
+- **No install cache.** Every turn installs dependencies from scratch, which dominates the run
+  time on real repos.
+- **Install scripts have network.** They run sandboxed, but online; egress is not yet limited
+  to the package registries.
 - **Verification runs in the agent's sandbox.** M2 moves it to a fresh sandbox with the test
   files restored, so the agent can't game it.
 
@@ -116,6 +135,6 @@ pnpm --filter @weft/worker test:integration   # whole pipeline: PGlite, scripted
 
 The integration tests drive real sandboxes against a local git copy of
 `packages/agent/fixtures/add-bug`: a successful fix, failing tests, step budget, cancel before
-start, cancel mid-run, cancel during a hanging model call and during a long tool command (both
+start, dependency install with an offline agent afterwards, a failing install, cancel mid-run, cancel during a hanging model call and during a long tool command (both
 must stop within seconds), takeover by another worker, clone failure, `file://` refusal, and
 LLM failure, each checking that no sandbox is left behind.

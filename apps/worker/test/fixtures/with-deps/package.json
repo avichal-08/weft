@@ -1,0 +1,11 @@
+{
+  "name": "with-deps",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ms": "2.1.3"
+  }
+}
