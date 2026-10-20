@@ -37,6 +37,10 @@ const janitorTimer = setInterval(() => void janitor(), env.JANITOR_INTERVAL_MS);
 const worker = new Worker<RunJobData>(
   RUNS_QUEUE,
   async (job) => {
+    if (typeof job.data?.runId !== 'string') {
+      console.error(`job ${job.id}: skipped, no run id in its data`);
+      return { kind: 'skipped' };
+    }
     const id = shortId(job.data.runId);
     const started = performance.now();
     console.log(`run ${id} started (${job.data.runId})`);
