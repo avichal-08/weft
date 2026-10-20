@@ -10,6 +10,7 @@ import {
   type NewRunEvent,
 } from '@weft/db';
 import { emptyUsage, LLMError, withRetry } from '@weft/llm';
+import type { LiveMessage, LivePhase } from '@weft/queue';
 import { createSandbox, type Sandbox } from '@weft/sandbox';
 import { CloneError, cloneRepo } from './clone.ts';
 import { buildHistory, latestDiff } from './history.ts';
@@ -56,6 +57,15 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     lose,
   );
 
+  const live = (message: LiveMessage) => {
+    if (!deps.live || fenced) return;
+    deps.live(runId, message).catch((err: unknown) => {
+      log(`live publish failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
+  };
+  const phase = (name: LivePhase, detail?: string) =>
+    live({ kind: 'phase', attempt, phase: name, ...(detail ? { detail } : {}) });
+
   let pending: NewRunEvent[] = [];
   let seq = 0;
   const flushEvents = () => {
@@ -82,12 +92,15 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
       cacheReadTokens: usage.cacheReadTokens,
       ...outcome,
     });
+    live({ kind: 'end', attempt });
     return { kind: 'completed', status: outcome.status, recorded };
   };
 
   const onEvent = (event: AgentEvent) => {
     log(describeEvent(event));
-    pending.push(toRunEvent(event, seq++));
+    const row = toRunEvent(event, seq++);
+    pending.push(row);
+    live({ kind: 'event', attempt, event: { ...row, createdAt: new Date().toISOString() } });
     if (event.type !== 'llm') return;
     flushEvents();
     usage.steps = event.step;
@@ -111,10 +124,12 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
         ? ((await getSession(db, run.sessionId))?.turns ?? []).filter((t) => t.turn! < run.turn!)
         : [];
 
+    phase('clone');
     checkout = await cloneRepo(run.repoUrl, run.baseRef, {
       allowFileRepos: deps.allowFileRepos ?? false,
     });
     const plan = await detectSetup(checkout.dir);
+    phase('sandbox');
     sandbox = await createSandbox({
       image: deps.sandboxImage,
       owner: workerId,
@@ -128,6 +143,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
 
     const base = latestDiff(previous);
     if (base) {
+      phase('restore');
       const applied = await sandbox.exec(['git', 'apply', '--whitespace=nowarn', '-'], {
         cwd: REPO_ROOT,
         stdin: base,
@@ -139,10 +155,12 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
 
     if (plan) {
       log(`setup: ${plan.command}`);
+      phase('setup', plan.command);
       const ms = await runSetup(sandbox, REPO_ROOT, plan);
       log(`setup: done in ${(ms / 1000).toFixed(1)}s, network disconnected`);
     }
 
+    phase('agent');
     const ctx = createToolContext({ sandbox, root: REPO_ROOT, testCommand: run.testCommand });
     const result = await runAgent({
       llm: withRetry(deps.createLLM(config), {
@@ -159,6 +177,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     if (result.status === 'aborted')
       return await finish({ status: 'error', failureKind: 'aborted' });
 
+    if (run.testCommand) phase('verify');
     const verify = run.testCommand
       ? await sandbox.exec(run.testCommand, { cwd: REPO_ROOT, timeoutMs: ctx.testTimeoutMs })
       : null;

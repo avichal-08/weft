@@ -1,6 +1,6 @@
 import { createDb } from '@weft/db';
 import { createProvider, loadLLMConfig } from '@weft/llm';
-import { createRedis, RUNS_QUEUE, type RunJobData } from '@weft/queue';
+import { createRedis, publishLive, RUNS_QUEUE, type RunJobData } from '@weft/queue';
 import { reapSandboxes } from '@weft/sandbox';
 import { Worker } from 'bullmq';
 import { loadEnv } from './env.ts';
@@ -11,6 +11,7 @@ import type { RunConfig } from './types.ts';
 const env = loadEnv();
 const { db, pool } = createDb(env.DATABASE_URL);
 const connection = createRedis(env.REDIS_URL);
+const publisher = createRedis(env.REDIS_URL);
 
 const createLLM = (config: RunConfig) =>
   createProvider(
@@ -52,6 +53,7 @@ const worker = new Worker<RunJobData>(
         createLLM,
         allowFileRepos: env.ALLOW_FILE_REPOS,
         log: (line) => console.log(line),
+        live: (runId, message) => publishLive(publisher, runId, message),
       },
       job.data.runId,
     );
@@ -75,6 +77,7 @@ async function shutdown(signal: string) {
   clearInterval(janitorTimer);
   await worker.close();
   await connection.quit();
+  await publisher.quit();
   await pool.end();
   process.exit(0);
 }

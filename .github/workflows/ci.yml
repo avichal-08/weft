@@ -43,3 +43,4 @@ jobs:
       - run: pnpm --filter @weft/worker test:integration
       - run: docker compose -f infra/compose.yml up -d --wait
       - run: docker compose -f infra/compose.yml exec -T redis redis-cli config get maxmemory-policy | grep -q noeviction
+      - run: pnpm --filter @weft/queue test:integration

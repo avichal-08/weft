@@ -59,6 +59,13 @@ agent never waits on the database; whatever is left is written when the run ends
 arguments (a `create_file` with a whole file) are cut to 2000 characters; tool output is already
 capped by the agent. A failed trace write is logged and never fails the run.
 
+### Live progress
+
+With `deps.live` set (`main.ts` wires it to `publishLive`), the worker also streams each phase
+and every agent event to Redis the moment it happens, then `end` once the result is recorded.
+Publishing is fire-and-forget: a slow or failed Redis write is logged and never holds up the
+agent or fails the run. A worker that lost its run publishes nothing more. See `@weft/queue`.
+
 ### Logs
 
 Every line is tagged with the run's short id, so a slow or failed run can be read straight from

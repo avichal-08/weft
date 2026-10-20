@@ -1,5 +1,6 @@
 import type { Db } from '@weft/db';
 import type { LLMProvider, RetryOptions } from '@weft/llm';
+import type { LiveMessage } from '@weft/queue';
 
 export type RunConfig = {
   provider?: string;
@@ -16,6 +17,7 @@ export type WorkerDeps = {
   watchIntervalMs?: number;
   retry?: RetryOptions;
   log?: (line: string) => void;
+  live?: (runId: string, message: LiveMessage) => Promise<void>;
 };
 
 export type RunOutcome =

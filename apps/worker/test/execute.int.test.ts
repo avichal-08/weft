@@ -21,6 +21,7 @@ import {
   type LLMProvider,
   type MockScript,
 } from '@weft/llm';
+import type { LiveMessage } from '@weft/queue';
 import { listSandboxes } from '@weft/sandbox';
 import Docker from 'dockerode';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -87,8 +88,15 @@ describe('executeRun', () => {
   it('fixes the bug, verifies it and records the diff', async () => {
     const run = await newRun();
     const lines: string[] = [];
+    const published: LiveMessage[] = [];
     const outcome = await executeRun(
-      deps(createMockProvider(fixScript), { log: (l) => lines.push(l) }),
+      deps(createMockProvider(fixScript), {
+        log: (l) => lines.push(l),
+        live: (id, m) => {
+          if (id === run.id) published.push(m);
+          return Promise.resolve();
+        },
+      }),
       run.id,
     );
 
@@ -135,6 +143,20 @@ describe('executeRun', () => {
       args: { path: 'src/math.js', old_str: 'a - b', new_str: 'a + b' },
     });
     expect(events[5]?.data.output).toMatch(/^Tests passed/);
+
+    expect(published.map((m) => (m.kind === 'phase' ? m.phase : m.kind))).toEqual([
+      'clone',
+      'sandbox',
+      'agent',
+      ...Array<string>(8).fill('event'),
+      'verify',
+      'end',
+    ]);
+    expect(published.every((m) => m.attempt === 1)).toBe(true);
+    const streamed = published.flatMap((m) => (m.kind === 'event' ? [m.event] : []));
+    expect(streamed.map(({ seq, type, step, data }) => ({ seq, type, step, data }))).toEqual(
+      events.map(({ seq, type, step, data }) => ({ seq, type, step, data })),
+    );
   });
 
   it('logs model retries and still finishes the run', async () => {

@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRun, getRun, listRunEvents } from '@weft/db';
 import { reset, testDb, type TestDb } from '@weft/db/testing';
 import { createMockProvider, type ContentBlock } from '@weft/llm';
+import type { LiveMessage } from '@weft/queue';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { executeRun } from '../src/execute.ts';
 
@@ -31,7 +32,12 @@ const call = (name: string, input: unknown): { content: ContentBlock[] } => ({
   content: [{ type: 'tool_call', id: name, name, input }],
 });
 
-function run(repoUrl: string, script: { content: ContentBlock[] }[], lines: string[] = []) {
+function run(
+  repoUrl: string,
+  script: { content: ContentBlock[] }[],
+  lines: string[] = [],
+  published: LiveMessage[] = [],
+) {
   return createRun(db, { repoUrl, task: 'check', testCommand: 'node --test' }).then(async (r) => {
     await executeRun(
       {
@@ -42,6 +48,10 @@ function run(repoUrl: string, script: { content: ContentBlock[] }[], lines: stri
         allowFileRepos: true,
         watchIntervalMs: 200,
         log: (l) => lines.push(l),
+        live: (_id, m) => {
+          published.push(m);
+          return Promise.resolve();
+        },
       },
       r.id,
     );
@@ -64,10 +74,12 @@ afterAll(async () => {
 describe('setup phase', () => {
   it('installs dependencies so the tests can import them', async () => {
     const lines: string[] = [];
+    const published: LiveMessage[] = [];
     const id = await run(
       await origin(),
       [call('run_tests', {}), call('finish', { summary: 'tests pass' })],
       lines,
+      published,
     );
 
     expect(await getRun(db, id)).toMatchObject({ status: 'succeeded', diff: '' });
@@ -77,6 +89,16 @@ describe('setup phase', () => {
       lines.some((l) => l.endsWith('setup: npm ci --no-audit --no-fund --loglevel=error')),
     ).toBe(true);
     expect(lines.some((l) => /setup: done in [\d.]+s, network disconnected/.test(l))).toBe(true);
+    expect(published.filter((m) => m.kind === 'phase').map((m) => m.phase)).toEqual([
+      'clone',
+      'sandbox',
+      'setup',
+      'agent',
+      'verify',
+    ]);
+    expect(published.find((m) => m.kind === 'phase' && m.phase === 'setup')).toMatchObject({
+      detail: 'npm ci --no-audit --no-fund --loglevel=error',
+    });
   }, 180_000);
 
   it('runs the agent offline even though setup had network', async () => {
