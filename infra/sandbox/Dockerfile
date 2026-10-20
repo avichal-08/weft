@@ -10,19 +10,22 @@ RUN git config --system safe.directory '*' \
   && git config --system init.defaultBranch main \
   && corepack enable
 
-ENV COREPACK_HOME=/opt/corepack \
-  COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
   CI=1 \
   NO_COLOR=1
 
-RUN corepack install --global pnpm@latest yarn@stable \
+RUN export COREPACK_HOME=/opt/corepack \
+  && corepack install --global pnpm@latest yarn@stable \
   && pnpm --version >/dev/null \
   && yarn --version >/dev/null \
   && chmod -R a+rX /opt/corepack
+
+COPY --chmod=755 weft-init.sh /usr/local/bin/weft-init
+ENV COREPACK_HOME=/tmp/corepack
 
 RUN mkdir /workspace && chown node:node /workspace
 WORKDIR /workspace
 USER node
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/weft-init"]
 CMD ["sleep", "infinity"]

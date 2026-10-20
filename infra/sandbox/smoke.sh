@@ -12,6 +12,7 @@ docker run --rm --network none --read-only --tmpfs /tmp --tmpfs /workspace:uid=1
     rg --version | head -1
     v=$(pnpm --version) && echo "pnpm $v"
     v=$(yarn --version) && echo "yarn $v"
+    test -L "$COREPACK_HOME/v1/pnpm/$(ls /opt/corepack/v1/pnpm)"
     cd /workspace && git init -q && echo ok > f && git add f && git commit -qm init
     echo "sandbox smoke ok"
   '
