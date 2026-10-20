@@ -1,10 +1,11 @@
 import { notFound } from 'next/navigation';
 import { cancelRunAction } from '@/app/actions';
-import { getRun } from '@/lib/api';
+import { getRun, getRunEvents } from '@/lib/api';
 import { duration, repoName, time, tokens } from '@/lib/format';
 import { ACTIVE } from '@/lib/types';
 import { AutoRefresh } from './auto-refresh';
 import { DiffView } from './diff-view';
+import { RunTimeline } from './run-timeline';
 import { StatusBadge } from './status-badge';
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -18,7 +19,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 export async function RunDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const res = await getRun(id);
+  const [res, trace] = await Promise.all([getRun(id), getRunEvents(id)]);
   if (!res.ok) {
     if (res.status === 404 || res.status === 400) notFound();
     return <p className="text-sm text-red-600">Could not load the run ({res.status}).</p>;
@@ -57,6 +58,11 @@ export async function RunDetail({ params }: { params: Promise<{ id: string }> })
         <Stat label="Output tokens" value={tokens(run.outputTokens)} />
         <Stat label="Duration" value={duration(run.startedAt, run.finishedAt)} />
       </div>
+
+      <section>
+        <h2 className="mb-3 text-sm font-semibold">Activity</h2>
+        <RunTimeline events={trace.ok ? trace.data.events : []} active={active} />
+      </section>
 
       {run.summary && (
         <section>

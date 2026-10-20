@@ -16,6 +16,15 @@ pnpm --filter @weft/web dev     # http://localhost:3000 (needs the api on :3001)
 
 Both refresh every 2 s while a run is `queued` or `running`, and stop once it finishes.
 
+## Activity timeline
+
+The run page renders the run's trace (`GET /runs/:id/events`) step by step: each model call
+with its latency, tokens and any narration, followed by the tool calls it made. Each tool gets a
+one-line summary (the grep pattern, the file and line range, the command) instead of raw
+JSON; its output sits in a collapsed `<details>`, and failed calls open by default.
+`str_replace_edit` shows its old and new text as a small diff. The run and its trace are
+fetched in parallel, and the 2 s refresh makes the timeline grow while the run is active.
+
 ## How it talks to the API
 
 The browser never calls the API. Server Components fetch runs and Server Actions create and
@@ -36,5 +45,5 @@ CORS to configure and the API doesn't need to be reachable from the browser.
   included, is sent before the run lookup finishes. A known trade-off of streaming.
 - Validation errors from the API (`POST /runs` → 400) are shown on the form, which keeps what
   you typed (`useActionState`).
-- Live per-step traces (each tool call as it happens) come once runs record their trace (M2) and
-  stream over WebSockets (M4).
+- The timeline updates by polling every 2 s; pushing steps as they happen (WebSockets or SSE)
+  comes with the chat UI.

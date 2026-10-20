@@ -29,3 +29,23 @@ export type FormState = {
 };
 
 export const ACTIVE: readonly RunStatus[] = ['queued', 'running'];
+
+export type LlmEventData = {
+  stopReason?: string;
+  usage?: { inputTokens: number; outputTokens: number; cacheReadTokens: number };
+  latencyMs?: number;
+  text?: string;
+};
+
+export type ToolEventData = {
+  id?: string;
+  name: string;
+  args?: Record<string, unknown>;
+  isError: boolean;
+  durationMs: number;
+  output: string;
+};
+
+export type RunEvent =
+  | { seq: number; step: number; type: 'llm'; data: LlmEventData; createdAt: string }
+  | { seq: number; step: number; type: 'tool'; data: ToolEventData; createdAt: string };

@@ -1,5 +1,5 @@
 import 'server-only';
-import type { Run } from './types';
+import type { Run, RunEvent } from './types';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 
@@ -25,5 +25,7 @@ export const listRuns = () => call<{ runs: Run[] }>('/runs?limit=50');
 export const getRun = (id: string) => call<{ run: Run }>(`/runs/${id}`);
 export const createRun = (body: unknown) =>
   call<{ run: Run }>('/runs', { method: 'POST', body: JSON.stringify(body) });
+export const getRunEvents = (id: string) =>
+  call<{ attempt: number; status: string; events: RunEvent[] }>(`/runs/${id}/events?limit=1000`);
 export const cancelRun = (id: string) =>
   call<{ run: Run }>(`/runs/${id}/cancel`, { method: 'POST' });
