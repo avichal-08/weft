@@ -30,8 +30,8 @@ for (const call of toolCalls(res.content).map(parseToolCall)) {
 | `str_replace_edit` | Replace one exact, unique snippet; fails if the file changed since viewed   |
 | `create_file`      | Write a new file; refuses to overwrite                                      |
 | `run_command`      | Run a shell command (no network)                                            |
-| `run_tests`        | Run the repo's configured test command                                      |
-| `finish`           | End the run with a summary of the change                                    |
+| `run_tests`        | Run the repo's configured test command (only offered when there is one)     |
+| `finish`           | End the turn; `summary` is the reply to the user                            |
 
 ## The loop
 
@@ -40,11 +40,22 @@ const ctx = createToolContext({ sandbox, root: '/workspace/repo', testCommand: '
 const res = await runAgent({
   llm,
   ctx,
-  task: 'Make the failing tests pass.',
+  task: 'Now make the toggle remember the choice',
+  history, // earlier turns: the user's messages and the agent's replies
   onEvent: console.log,
 });
-// res.status, res.summary, res.steps, res.usage, res.events, res.messages
+// res.summary is the reply to the user; also res.status, steps, usage, events, messages
 ```
+
+The agent is a chat agent, not only a test fixer: a message can be a question, a change, a
+review or a follow-up. The system prompt (`src/prompt.ts`) has it read the relevant code first,
+answer questions without editing, make focused edits for change requests, and end every turn
+with `finish`, whose `summary` is the reply shown to the user. `history` goes before the new
+message, so follow-ups have context.
+
+**Tests are optional.** With a `testCommand`, the agent checks changes with `run_tests`. Without
+one, `run_tests` is not offered at all, and the prompt tells the agent to use `run_command` if
+the repo clearly has tests.
 
 Each step sends the conversation to the model, runs every tool call it made, and sends all the
 results back in one message (the APIs require every call to be answered, failed ones included).

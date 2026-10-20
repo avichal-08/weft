@@ -2,7 +2,9 @@ import { createMockProvider, LLMError, type ContentBlock, type MockTurn } from '
 import type { Sandbox } from '@weft/sandbox';
 import { describe, expect, it } from 'vitest';
 import { runAgent } from '../src/loop.ts';
+import { systemPrompt } from '../src/prompt.ts';
 import { createToolContext } from '../src/tools/execute.ts';
+import { runTests } from '../src/tools/run.ts';
 import type { ToolExecutor } from '../src/types.ts';
 
 const ctx = createToolContext({ sandbox: {} as Sandbox, root: '/w', testCommand: 'npm test' });
@@ -114,6 +116,51 @@ describe('runAgent', () => {
     );
     await expect(runAgent({ llm, ctx, task: 't', execute: echo })).rejects.toMatchObject({
       kind: 'auth',
+    });
+  });
+
+  it('puts earlier turns before the new message', async () => {
+    const llm = createMockProvider([turn(tool('finish', { summary: 's' }))]);
+    const history = [
+      { role: 'user' as const, content: [text('What does add do?')] },
+      { role: 'assistant' as const, content: [text('It adds two numbers.')] },
+    ];
+    await runAgent({ llm, ctx, task: 'Make it handle strings', history, execute: echo });
+
+    expect(llm.calls[0]!.messages).toEqual([
+      ...history,
+      { role: 'user', content: [text('Make it handle strings')] },
+    ]);
+  });
+
+  it('only offers run_tests when a test command is configured', async () => {
+    const without = createToolContext({ sandbox: {} as Sandbox, root: '/w' });
+    const llm = createMockProvider([turn(tool('finish', { summary: 's' }))]);
+    await runAgent({ llm, ctx: without, task: 't', execute: echo });
+    const names = llm.calls[0]!.tools!.map((t) => t.name);
+    expect(names).not.toContain('run_tests');
+    expect(names).toContain('run_command');
+    expect(llm.calls[0]!.system).toContain('No test command is configured');
+  });
+});
+
+describe('systemPrompt', () => {
+  it('names the test command when there is one', () => {
+    expect(systemPrompt('npm test')).toContain('The test command is: npm test');
+    expect(systemPrompt(null)).not.toContain('The test command is');
+  });
+
+  it('frames finish as the reply to the user', () => {
+    expect(systemPrompt(null)).toMatch(/summary is your reply to the user/);
+  });
+});
+
+describe('runTests without a test command', () => {
+  it('tells the model to use run_command instead', async () => {
+    const out = await runTests(createToolContext({ sandbox: {} as Sandbox, root: '/w' }));
+    expect(out).toEqual({
+      isError: true,
+      content: 'No test command is configured for this repository. Use run_command instead.',
     });
   });
 });

@@ -25,6 +25,9 @@ export async function runCommand(
 }
 
 export async function runTests(ctx: ToolContext): Promise<ToolOutput> {
+  if (!ctx.testCommand) {
+    return fail('No test command is configured for this repository. Use run_command instead.');
+  }
   const res = await ctx.sandbox.exec(ctx.testCommand, {
     cwd: ctx.root,
     timeoutMs: ctx.testTimeoutMs,

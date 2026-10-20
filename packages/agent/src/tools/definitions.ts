@@ -97,10 +97,10 @@ export const TOOLS = {
 
   finish: {
     description:
-      'Call this once the task is complete and the tests pass. Summarise what you changed ' +
-      'and why. Calling it ends the run.',
+      'End your turn with a reply to the user. Put the answer to their question, or what you ' +
+      'changed and why (naming the files), in summary. Calling it ends the turn.',
     schema: z.object({
-      summary: z.string().min(1).describe('Short summary of the change.'),
+      summary: z.string().min(1).describe('Your reply to the user.'),
     }),
   },
 } as const;

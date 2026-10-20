@@ -9,7 +9,7 @@ export function createToolContext(opts: ToolContextOptions): ToolContext {
   return {
     sandbox: opts.sandbox,
     root: opts.root,
-    testCommand: opts.testCommand,
+    testCommand: opts.testCommand ?? null,
     testTimeoutMs: opts.testTimeoutMs ?? DEFAULT_TEST_TIMEOUT_MS,
     viewed: new Map(),
   };

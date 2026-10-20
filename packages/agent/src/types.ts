@@ -18,7 +18,7 @@ export type ToolCallParse = ParsedToolCall | InvalidToolCall;
 export type ToolContext = {
   sandbox: Sandbox;
   root: string;
-  testCommand: string;
+  testCommand: string | null;
   testTimeoutMs: number;
   viewed: Map<string, string>;
 };
@@ -26,7 +26,7 @@ export type ToolContext = {
 export type ToolContextOptions = {
   sandbox: Sandbox;
   root: string;
-  testCommand: string;
+  testCommand?: string | null;
   testTimeoutMs?: number;
 };
 
@@ -67,6 +67,7 @@ export type AgentOptions = {
   llm: LLMProvider;
   ctx: ToolContext;
   task: string;
+  history?: Message[];
   system?: string;
   maxSteps?: number;
   maxNudges?: number;

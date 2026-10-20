@@ -2,7 +2,7 @@ import { emptyUsage, textOf, toolCalls, type Message, type ToolResultBlock } fro
 import { systemPrompt } from './prompt.ts';
 import { executeTool } from './tools/execute.ts';
 import { parseToolCall } from './tools/parse.ts';
-import { toolSpecs } from './tools/specs.ts';
+import { TOOL_NAMES, toolSpecs } from './tools/specs.ts';
 import type { AgentEvent, AgentOptions, AgentResult, AgentStatus } from './types.ts';
 
 export const DEFAULT_MAX_STEPS = 30;
@@ -15,9 +15,14 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
   const execute = opts.execute ?? executeTool;
   const maxSteps = opts.maxSteps ?? DEFAULT_MAX_STEPS;
   const system = opts.system ?? systemPrompt(opts.ctx.testCommand);
-  const tools = toolSpecs();
+  const tools = toolSpecs(
+    opts.ctx.testCommand ? TOOL_NAMES : TOOL_NAMES.filter((name) => name !== 'run_tests'),
+  );
 
-  const messages: Message[] = [{ role: 'user', content: [{ type: 'text', text: opts.task }] }];
+  const messages: Message[] = [
+    ...(opts.history ?? []),
+    { role: 'user', content: [{ type: 'text', text: opts.task }] },
+  ];
   const events: AgentEvent[] = [];
   const usage = emptyUsage();
   let nudges = 0;
