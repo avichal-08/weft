@@ -18,21 +18,29 @@ curl -X POST localhost:3001/runs -H 'content-type: application/json' -d '{
 
 ## Routes
 
-| Route                   | Response                                                                                                                                        |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /runs`            | `201 { run }` with `Location`; `400` invalid body; `503` queue unavailable                                                                      |
-| `GET /runs`             | `{ runs }`, newest first. `?status=queued` and `?limit=1..200`                                                                                  |
-| `GET /runs/:id`         | `{ run }`; `404` unknown; `400` not a uuid                                                                                                      |
-| `GET /runs/:id/events`  | `{ attempt, status, events }`: the run's step trace, current attempt by default; `?afterSeq=` returns only newer events; `?attempt=`, `?limit=` |
-| `POST /runs/:id/cancel` | `{ run }` now `cancelled`; `409` if it had already finished                                                                                     |
-| `GET /healthz`          | `200` while the process is up                                                                                                                   |
-| `GET /readyz`           | `{ db, redis }`; `503` if either check fails                                                                                                    |
+| Route                         | Response                                                                                                                                                          |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /runs`                  | `201 { run }` with `Location`; `400` invalid body; `503` queue unavailable                                                                                        |
+| `GET /runs`                   | `{ runs }`, newest first. `?status=queued` and `?limit=1..200`                                                                                                    |
+| `GET /runs/:id`               | `{ run }`; `404` unknown; `400` not a uuid                                                                                                                        |
+| `GET /runs/:id/events`        | `{ attempt, status, events }`: the run's step trace, current attempt by default; `?afterSeq=` returns only newer events; `?attempt=`, `?limit=`                   |
+| `POST /runs/:id/cancel`       | `{ run }` now `cancelled`; `409` if it had already finished                                                                                                       |
+| `POST /sessions`              | `201 { session, run }`: a chat about a repo, with its first message as turn 1 (enqueued). Body: `repoUrl`, `message`, optional `baseRef`, `testCommand`, `config` |
+| `POST /sessions/:id/messages` | `201 { run }`: the next turn; `409 busy` while the previous one is still queued or running; `404` unknown session                                                 |
+| `GET /sessions`               | `{ sessions }`: most recently active first, each with `turns` and `lastStatus`; `?limit=`                                                                         |
+| `GET /sessions/:id`           | `{ session }` with its `turns` in order                                                                                                                           |
+| `GET /healthz`                | `200` while the process is up                                                                                                                                     |
+| `GET /readyz`                 | `{ db, redis }`; `503` if either check fails                                                                                                                      |
 
 Errors are JSON: `{ error: 'invalid_request', issues: [{ path, message }] }`,
 `{ error: 'invalid_json' }`, `{ error: 'not_found' }`, `{ error: 'internal' }`.
 
 `POST /runs` body: `repoUrl` (https or file URL), `task`, `testCommand`, optional `baseRef`,
 optional `config` (`provider`, `model`, `maxSteps` 1–100). Unknown fields are rejected.
+
+A turn is a run, so a turn's trace and cancellation use `GET /runs/:id/events` and
+`POST /runs/:id/cancel`. The `409 busy` comes from the database's one-active-turn index, so it
+holds even for messages sent at the same moment.
 
 ## Design notes
 

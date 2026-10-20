@@ -2,10 +2,8 @@ import { z } from 'zod';
 
 const RUN_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'error', 'cancelled'] as const;
 
-export const createRunBody = z.strictObject({
+const repoFields = {
   repoUrl: z.url({ protocol: /^(https|file)$/ }),
-  task: z.string().trim().min(1).max(10_000),
-  testCommand: z.string().trim().min(1).max(1000),
   baseRef: z.string().trim().min(1).max(200).optional(),
   config: z
     .strictObject({
@@ -14,6 +12,26 @@ export const createRunBody = z.strictObject({
       maxSteps: z.number().int().min(1).max(100).optional(),
     })
     .default({}),
+};
+
+const message = z.string().trim().min(1).max(20_000);
+
+export const createRunBody = z.strictObject({
+  ...repoFields,
+  task: z.string().trim().min(1).max(10_000),
+  testCommand: z.string().trim().min(1).max(1000),
+});
+
+export const createSessionBody = z.strictObject({
+  ...repoFields,
+  message,
+  testCommand: z.string().trim().min(1).max(1000).optional(),
+});
+
+export const sendMessageBody = z.strictObject({ message });
+
+export const listSessionsQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional(),
 });
 
 export const listRunsQuery = z.object({

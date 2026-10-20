@@ -1,12 +1,25 @@
-import { cancelRun, createRun, getRun, listRunEvents, listRuns } from '@weft/db';
+import {
+  addTurn,
+  cancelRun,
+  createRun,
+  createSession,
+  getRun,
+  getSession,
+  listRunEvents,
+  listRuns,
+  listSessions,
+} from '@weft/db';
 import express, { type ErrorRequestHandler, type Express } from 'express';
 import { ZodError } from 'zod';
 import {
   createRunBody,
+  createSessionBody,
   definedOnly,
   listEventsQuery,
   listRunsQuery,
+  listSessionsQuery,
   runIdParam,
+  sendMessageBody,
 } from './schemas.ts';
 import type { AppDeps } from './types.ts';
 
@@ -98,6 +111,62 @@ export function createApp(deps: AppDeps): Express {
       return;
     }
     res.json({ run: await getRun(deps.db, id) });
+  });
+
+  const enqueueOr503 = async (runId: string): Promise<boolean> => {
+    try {
+      await deps.enqueue(runId);
+      return true;
+    } catch (err) {
+      console.error(`enqueue failed for run ${runId}`, err);
+      return false;
+    }
+  };
+
+  app.post('/sessions', async (req, res) => {
+    const body = createSessionBody.parse(req.body);
+    const { session, run } = await createSession(deps.db, definedOnly(body));
+    if (!(await enqueueOr503(run.id))) {
+      res.status(503).json({ error: 'queue_unavailable', session, run });
+      return;
+    }
+    res.status(201).location(`/sessions/${session.id}`).json({ session, run });
+  });
+
+  app.get('/sessions', async (req, res) => {
+    const { limit } = listSessionsQuery.parse(req.query);
+    res.json({ sessions: await listSessions(deps.db, limit) });
+  });
+
+  app.get('/sessions/:id', async (req, res) => {
+    const { id } = runIdParam.parse(req.params);
+    const session = await getSession(deps.db, id);
+    if (!session) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    res.json({ session });
+  });
+
+  app.post('/sessions/:id/messages', async (req, res) => {
+    const { id } = runIdParam.parse(req.params);
+    const { message } = sendMessageBody.parse(req.body);
+    const result = await addTurn(deps.db, id, message);
+    if (!result.ok) {
+      res
+        .status(result.reason === 'busy' ? 409 : 404)
+        .json(
+          result.reason === 'busy'
+            ? { error: 'busy', message: 'the agent is still working on the previous message' }
+            : { error: 'not_found' },
+        );
+      return;
+    }
+    if (!(await enqueueOr503(result.run.id))) {
+      res.status(503).json({ error: 'queue_unavailable', run: result.run });
+      return;
+    }
+    res.status(201).json({ run: result.run });
   });
 
   app.use((_req, res) => {

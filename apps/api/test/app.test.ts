@@ -1,6 +1,6 @@
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
-import { appendRunEvents, claimRun, getRun } from '@weft/db';
+import { appendRunEvents, claimRun, completeRun, getRun } from '@weft/db';
 import { reset, testDb, type TestDb } from '@weft/db/testing';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.ts';
@@ -39,8 +39,18 @@ beforeEach(async () => {
 });
 
 type ApiRun = { id: string; status: string; [key: string]: unknown };
+type ApiSession = {
+  id: string;
+  title: string;
+  turns?: ApiRun[] | number;
+  lastStatus?: string | null;
+  [key: string]: unknown;
+};
+
 type Body = {
   run?: ApiRun;
+  session?: ApiSession;
+  sessions?: ApiSession[];
   runs?: ApiRun[];
   error?: string;
   issues?: { path: string; message: string }[];
@@ -168,6 +178,75 @@ describe('GET /runs/:id/events', () => {
     expect((await api('/runs/00000000-0000-4000-8000-000000000000/events')).status).toBe(404);
     const run = runOf((await post('/runs', valid)).body);
     expect((await api(`/runs/${run.id}/events?limit=0`)).status).toBe(400);
+  });
+});
+
+describe('sessions', () => {
+  const start = { repoUrl: valid.repoUrl, message: 'Why do the tests fail?', baseRef: 'bug/x' };
+
+  async function finish(runId: string) {
+    const attempt = (await claimRun(db, runId, 'w'))!;
+    await completeRun(db, runId, attempt, { status: 'succeeded', summary: 'answered' });
+  }
+
+  it('starts a session with its first turn and enqueues it', async () => {
+    const res = await post('/sessions', start);
+    expect(res.status).toBe(201);
+    expect(res.body.session).toMatchObject({
+      title: start.message,
+      baseRef: 'bug/x',
+      testCommand: null,
+    });
+    expect(res.body.run).toMatchObject({ turn: 1, task: start.message, status: 'queued' });
+    expect(res.headers.get('location')).toBe(`/sessions/${res.body.session!.id}`);
+    expect(queued).toEqual([res.body.run!.id]);
+  });
+
+  it('holds a conversation: busy while working, next turn after', async () => {
+    const { session, run } = (await post('/sessions', start)).body;
+
+    const early = await post(`/sessions/${session!.id}/messages`, { message: 'and?' });
+    expect(early).toMatchObject({ status: 409, body: { error: 'busy' } });
+
+    await finish(run!.id);
+    const next = await post(`/sessions/${session!.id}/messages`, { message: 'Now fix it' });
+    expect(next).toMatchObject({ status: 201, body: { run: { turn: 2, task: 'Now fix it' } } });
+    expect(queued).toEqual([run!.id, next.body.run!.id]);
+
+    const full = await api(`/sessions/${session!.id}`);
+    expect((full.body.session!.turns as ApiRun[]).map((t) => [t.turn, t.status])).toEqual([
+      [1, 'succeeded'],
+      [2, 'queued'],
+    ]);
+  });
+
+  it('lists sessions, most recent first', async () => {
+    const a = (await post('/sessions', { ...start, message: 'first chat' })).body;
+    await post('/sessions', { ...start, message: 'second chat' });
+    await finish(a.run!.id);
+    await post(`/sessions/${a.session!.id}/messages`, { message: 'back to the first' });
+
+    const list = (await api('/sessions')).body.sessions!;
+    expect(list.map((s) => [s.title, s.turns, s.lastStatus])).toEqual([
+      ['first chat', 2, 'queued'],
+      ['second chat', 1, 'queued'],
+    ]);
+  });
+
+  it('validates input and reports unknown sessions', async () => {
+    expect((await post('/sessions', { ...start, message: '  ' })).status).toBe(400);
+    expect((await post('/sessions', { repoUrl: valid.repoUrl })).status).toBe(400);
+    const unknown = '00000000-0000-4000-8000-000000000000';
+    expect((await api(`/sessions/${unknown}`)).status).toBe(404);
+    expect((await post(`/sessions/${unknown}/messages`, { message: 'hi' })).status).toBe(404);
+    expect((await post(`/sessions/${unknown}/messages`, {})).status).toBe(400);
+  });
+
+  it('answers 503 but keeps the session when the queue is down', async () => {
+    queueDown = true;
+    const res = await post('/sessions', start);
+    expect(res.status).toBe(503);
+    expect((await getRun(db, res.body.run!.id))?.status).toBe('queued');
   });
 });
 
