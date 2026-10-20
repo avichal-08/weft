@@ -24,6 +24,7 @@ curl -X POST localhost:3001/runs -H 'content-type: application/json' -d '{
 | `GET /runs`                   | `{ runs }`, newest first. `?status=queued` and `?limit=1..200`                                                                                                    |
 | `GET /runs/:id`               | `{ run }`; `404` unknown; `400` not a uuid                                                                                                                        |
 | `GET /runs/:id/events`        | `{ attempt, status, events }`: the run's step trace, current attempt by default; `?afterSeq=` returns only newer events; `?attempt=`, `?limit=`                   |
+| `GET /runs/:id/stream`        | Server-sent events: the run's progress live, then `end`. See [Live stream](#live-stream)                                                                          |
 | `POST /runs/:id/cancel`       | `{ run }` now `cancelled`; `409` if it had already finished                                                                                                       |
 | `POST /sessions`              | `201 { session, run }`: a chat about a repo, with its first message as turn 1 (enqueued). Body: `repoUrl`, `message`, optional `baseRef`, `testCommand`, `config` |
 | `POST /sessions/:id/messages` | `201 { run }`: the next turn; `409 busy` while the previous one is still queued or running; `404` unknown session                                                 |
@@ -42,10 +43,47 @@ A turn is a run, so a turn's trace and cancellation use `GET /runs/:id/events` a
 `POST /runs/:id/cancel`. The `409 busy` comes from the database's one-active-turn index, so it
 holds even for messages sent at the same moment.
 
+## Live stream
+
+`GET /runs/:id/stream` is a `text/event-stream` that a browser reads with `EventSource`:
+
+```
+event: phase
+data: {"phase":"setup","detail":"pnpm install --frozen-lockfile"}
+
+event: event
+id: 1.0
+data: {"seq":0,"type":"llm","step":1,"data":{...},"createdAt":"..."}
+
+event: end
+data: {"status":"succeeded"}
+```
+
+| Event     | Meaning                                                                                           |
+| --------- | ------------------------------------------------------------------------------------------------- |
+| `phase`   | The run moved on: `clone`, `sandbox`, `restore`, `setup`, `agent`, `verify`.                      |
+| `event`   | One model call or tool call, as in `GET /runs/:id/events`; `id` is `<attempt>.<seq>`.             |
+| `attempt` | Another worker took the run over: drop the events you have, the new attempt follows.              |
+| `end`     | The run is over and its result is in Postgres. Close the `EventSource` (it reconnects otherwise). |
+
+- **Resumable.** Pass `?attempt=&after=` (the last `seq` you have, e.g. from a server render)
+  to get only newer events. A reconnecting `EventSource` sends `Last-Event-ID`, which wins.
+- **Redis first, Postgres as the truth.** A running run is replayed from its Redis stream from
+  the start (so a page opened mid-run sees every phase) and then followed with a blocking read;
+  events are deduplicated by `seq`. A finished run is replayed from `run_events`.
+- **A heartbeat every 5 s** (`liveBlockMs`) when nothing happens: a `: ping` comment keeps
+  proxies from closing the connection, the run is re-read, events missing from Redis are
+  backfilled from Postgres, and a run that ended without an `end` message (cancelled, or a
+  crashed worker) ends the stream.
+- **One Redis connection per viewer**, because `XREAD BLOCK` holds its connection while it
+  waits. It is closed as soon as the client goes away. Fine at this scale; a single reader
+  fanning out to all viewers of a run is the next step if it isn't.
+
 ## Design notes
 
-- **Dependencies are injected.** `createApp({ db, enqueue, ready })` builds nothing itself;
-  `server.ts` wires Neon and Redis, tests wire PGlite and a fake queue.
+- **Dependencies are injected.** `createApp({ db, enqueue, ready, live })` builds nothing
+  itself; `server.ts` wires Neon and Redis, tests wire PGlite, a fake queue and an in-memory
+  live stream (`test/fake-live.ts`).
 - **Idempotent enqueue.** Jobs use the run id as BullMQ `jobId`, so enqueueing a run twice
   creates one job.
 - **Cancel leaves the queued job alone.** A worker that picks it up gets nothing from `claimRun`
@@ -71,4 +109,5 @@ pnpm --filter @weft/api test
 ```
 
 Requests go to the real Express app on a random port, with `@weft/db/testing` (PGlite) as the
-database and an in-memory fake queue.
+database and an in-memory fake queue. `test/stream.test.ts` reads the SSE endpoint like a
+browser would: replay, resume, live delivery, takeover, cancel, Postgres fallback and cleanup.

@@ -47,6 +47,11 @@ export const listEventsQuery = z.object({
   limit: z.coerce.number().int().min(1).max(1000).optional(),
 });
 
+export const streamQuery = z.object({
+  attempt: z.coerce.number().int().min(0).optional(),
+  after: z.coerce.number().int().min(-1).optional(),
+});
+
 export const definedOnly = <T extends Record<string, unknown>>(obj: T) =>
   Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as {
     [K in keyof T]: Exclude<T[K], undefined>;

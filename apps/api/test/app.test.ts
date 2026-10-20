@@ -4,6 +4,7 @@ import { appendRunEvents, claimRun, completeRun, getRun } from '@weft/db';
 import { reset, testDb, type TestDb } from '@weft/db/testing';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.ts';
+import { fakeLive } from './fake-live.ts';
 
 let db: TestDb;
 let server: Server;
@@ -22,6 +23,7 @@ beforeAll(async () => {
       return Promise.resolve();
     },
     ready: () => Promise.resolve(checks),
+    live: () => fakeLive().reader(),
   });
   server = app.listen(0);
   base = `http://localhost:${(server.address() as AddressInfo).port}`;

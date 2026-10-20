@@ -20,7 +20,9 @@ import {
   listSessionsQuery,
   runIdParam,
   sendMessageBody,
+  streamQuery,
 } from './schemas.ts';
+import { parseCursor, streamRun } from './stream.ts';
 import type { AppDeps } from './types.ts';
 
 const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next) => {
@@ -97,6 +99,50 @@ export function createApp(deps: AppDeps): Express {
     const attempt = query.attempt ?? run.attempt;
     const events = await listRunEvents(deps.db, id, { ...query, attempt });
     res.json({ attempt, status: run.status, events });
+  });
+
+  app.get('/runs/:id/stream', async (req, res) => {
+    const { id } = runIdParam.parse(req.params);
+    const query = definedOnly(streamQuery.parse(req.query));
+    if (!(await getRun(deps.db, id))) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    res.writeHead(200, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-cache, no-transform',
+      connection: 'keep-alive',
+      'x-accel-buffering': 'no',
+    });
+    res.write('retry: 2000\n\n');
+
+    const abort = new AbortController();
+    const reader = deps.live();
+    res.on('close', () => {
+      abort.abort();
+      reader.close();
+    });
+    try {
+      await streamRun({
+        db: deps.db,
+        reader,
+        runId: id,
+        cursor: parseCursor(req.get('last-event-id'), query),
+        send: (event, data, eventId) => {
+          res.write(
+            `event: ${event}\n${eventId ? `id: ${eventId}\n` : ''}data: ${JSON.stringify(data)}\n\n`,
+          );
+        },
+        ping: () => res.write(': ping\n\n'),
+        signal: abort.signal,
+        ...(deps.liveBlockMs ? { blockMs: deps.liveBlockMs } : {}),
+      });
+    } catch (err) {
+      if (!abort.signal.aborted) console.error(`stream for run ${id} failed`, err);
+    } finally {
+      reader.close();
+      res.end();
+    }
   });
 
   app.post('/runs/:id/cancel', async (req, res) => {

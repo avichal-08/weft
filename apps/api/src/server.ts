@@ -1,5 +1,5 @@
 import { createDb } from '@weft/db';
-import { createRedis, createRunsQueue, enqueueRun } from '@weft/queue';
+import { createRedis, createRunsQueue, enqueueRun, readLive } from '@weft/queue';
 import { createApp } from './app.ts';
 import { loadEnv } from './env.ts';
 
@@ -17,6 +17,13 @@ const ok = (p: Promise<unknown>) =>
 const app = createApp({
   db,
   enqueue: (runId) => enqueueRun(queue, runId),
+  live: () => {
+    const conn = redis.duplicate();
+    return {
+      read: (runId, after, blockMs) => readLive(conn, runId, after, blockMs),
+      close: () => conn.disconnect(),
+    };
+  },
   ready: async () => ({
     db: await ok(pool.query('select 1')),
     redis: await ok(redis.ping()),
