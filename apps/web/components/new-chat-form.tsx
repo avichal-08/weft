@@ -1,104 +1,126 @@
 'use client';
 
-import { useActionState } from 'react';
+import { ArrowUp, FolderGit2, GitBranch, Settings2 } from 'lucide-react';
+import { useActionState, useRef, useState } from 'react';
 import { createSessionAction } from '@/app/actions';
 import type { FormState } from '@/lib/types';
+import { grow } from './composer';
 
-const input =
-  'w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900';
-const label = 'mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400';
+const SUGGESTIONS = [
+  'Explain how this codebase is structured',
+  'Find and fix the failing test',
+  'Review the code for bugs and edge cases',
+  'Add tests for the least tested module',
+];
+
+const field =
+  'w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none transition placeholder:text-faint focus:border-accent/50 focus:ring-4 focus:ring-accent-soft';
 
 export function NewChatForm() {
   const [state, action, pending] = useActionState<FormState, FormData>(createSessionAction, {});
+  const [options, setOptions] = useState(false);
+  const message = useRef<HTMLTextAreaElement>(null);
   const f = state.fields ?? {};
 
   return (
     <form action={action} className="grid grid-cols-1 gap-4">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="sm:col-span-2">
-          <label className={label} htmlFor="repoUrl">
-            Repository
-          </label>
-          <input
-            className={input}
-            id="repoUrl"
-            name="repoUrl"
-            placeholder="https://github.com/you/repo"
-            defaultValue={f.repoUrl}
-            required
-          />
-        </div>
-        <div>
-          <label className={label} htmlFor="baseRef">
-            Branch (optional)
-          </label>
-          <input
-            className={input}
-            id="baseRef"
-            name="baseRef"
-            placeholder="main"
-            defaultValue={f.baseRef}
-          />
-        </div>
-      </div>
-      <details className="text-sm">
-        <summary className="cursor-pointer text-xs text-zinc-500">Options</summary>
-        <div className="mt-3 grid gap-4 sm:grid-cols-3">
-          <div>
-            <label className={label} htmlFor="testCommand">
-              Test command
-            </label>
+      <div className="rounded-2xl border border-line-strong bg-surface shadow-card transition focus-within:border-accent/50 focus-within:ring-4 focus-within:ring-accent-soft">
+        <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2.5">
+          <label className="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-surface-2 px-2.5 py-1.5">
+            <FolderGit2 className="size-4 shrink-0 text-muted" />
             <input
-              className={input}
-              id="testCommand"
-              name="testCommand"
-              placeholder="npm test"
-              defaultValue={f.testCommand}
+              name="repoUrl"
+              placeholder="https://github.com/you/repo"
+              defaultValue={f.repoUrl}
+              required
+              className="min-w-0 flex-1 bg-transparent font-mono text-[13px] outline-none placeholder:text-faint"
             />
-          </div>
-          <div>
-            <label className={label} htmlFor="provider">
-              Provider
-            </label>
-            <select className={input} id="provider" name="provider" defaultValue={f.provider ?? ''}>
-              <option value="">worker default</option>
-              <option value="gemini">gemini</option>
-              <option value="anthropic">anthropic</option>
-              <option value="openai">openai</option>
-              <option value="openrouter">openrouter</option>
-            </select>
-          </div>
-          <div>
-            <label className={label} htmlFor="model">
-              Model
-            </label>
+          </label>
+          <label className="flex w-40 items-center gap-2 rounded-lg bg-surface-2 px-2.5 py-1.5">
+            <GitBranch className="size-4 shrink-0 text-muted" />
             <input
-              className={input}
-              id="model"
-              name="model"
-              placeholder="gemini-2.5-flash"
-              defaultValue={f.model}
+              name="baseRef"
+              placeholder="main"
+              defaultValue={f.baseRef}
+              className="min-w-0 flex-1 bg-transparent font-mono text-[13px] outline-none placeholder:text-faint"
             />
-          </div>
+          </label>
         </div>
-      </details>
-      <div className="rounded-xl border border-zinc-300 bg-white focus-within:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900">
         <textarea
-          className="block min-h-28 w-full resize-y rounded-xl bg-transparent px-4 py-3 text-sm outline-none"
+          ref={message}
           name="message"
+          rows={3}
           placeholder="Ask about the code, or describe a change…"
           defaultValue={f.message}
           required
+          onInput={(e) => grow(e.currentTarget)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              e.currentTarget.form?.requestSubmit();
+            }
+          }}
+          className="block max-h-60 w-full resize-none bg-transparent px-4 pt-3.5 text-[15px] leading-6 outline-none placeholder:text-faint"
         />
-        <div className="flex items-center justify-between px-3 pb-3">
-          <p className="text-xs text-red-600 dark:text-red-400">{state.error}</p>
+        <div className="flex items-center justify-between gap-3 px-3 pt-1 pb-3">
           <button
-            className="rounded-md bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-            disabled={pending}
+            type="button"
+            onClick={() => setOptions((o) => !o)}
+            className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition ${options ? 'bg-surface-2 text-fg' : 'text-muted hover:bg-surface-2 hover:text-fg'}`}
           >
-            {pending ? 'Starting…' : 'Start chat'}
+            <Settings2 className="size-3.5" /> Options
           </button>
+          <div className="flex items-center gap-3">
+            {state.error && <span className="text-xs text-bad">{state.error}</span>}
+            <button
+              disabled={pending}
+              className="grid size-8 place-items-center rounded-full bg-accent text-white transition hover:bg-accent-hover disabled:opacity-40"
+              aria-label="Start chat"
+            >
+              <ArrowUp className="size-4" strokeWidth={2.5} />
+            </button>
+          </div>
         </div>
+        <div
+          className={`${options ? 'grid' : 'hidden'} gap-3 border-t border-line px-3 py-3 sm:grid-cols-3`}
+        >
+          <input
+            name="testCommand"
+            placeholder="Test command, e.g. npm test"
+            defaultValue={f.testCommand}
+            className={field}
+          />
+          <select name="provider" defaultValue={f.provider ?? ''} className={field}>
+            <option value="">Default provider</option>
+            <option value="gemini">Gemini</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="openai">OpenAI</option>
+            <option value="openrouter">OpenRouter</option>
+          </select>
+          <input
+            name="model"
+            placeholder="Model, e.g. gemini-2.5-flash"
+            defaultValue={f.model}
+            className={field}
+          />
+        </div>
+      </div>
+      <div className="flex flex-wrap justify-center gap-2">
+        {SUGGESTIONS.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => {
+              if (!message.current) return;
+              message.current.value = s;
+              message.current.focus();
+              grow(message.current);
+            }}
+            className="rounded-full border border-line px-3 py-1.5 text-[13px] text-muted transition hover:border-line-strong hover:bg-surface hover:text-fg"
+          >
+            {s}
+          </button>
+        ))}
       </div>
     </form>
   );

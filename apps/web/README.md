@@ -41,6 +41,25 @@ mechanics stay out of the way until you want them.
 Pages refresh every 2 s while a turn is active and stop when it finishes; pushing updates as they
 happen (WebSockets or SSE) is planned.
 
+## Design system
+
+Colours are tokens in `app/globals.css` (`--bg`, `--surface`, `--surface-2/3`, `--line`,
+`--fg`, `--muted`, `--faint`, `--accent`, `--ok`, `--bad`, `--warn`), redefined for dark mode and
+exposed to Tailwind as `bg-surface`, `text-muted`, `border-line`, `text-accent`, and so on. Every
+component uses the tokens, so light and dark stay consistent and the palette changes in one place.
+The accent is a warm orange, used sparingly: the brand mark, the send button, focus rings and the
+"working" indicator.
+
+- **Markdown** is rendered with `react-markdown` + `remark-gfm` and custom components for every
+  element (lists, tables, quotes, inline code), with raw HTML skipped.
+- **Code blocks** are highlighted on the server with Shiki (`github-light` / `github-dark-default`
+  via CSS variables, so one render serves both themes), with a language label and a copy button.
+  No highlighter ships to the browser.
+- **Diffs** carry old and new line numbers and the hunk's context line, like GitHub.
+- **Icons** are `lucide-react`; the logo is an inline SVG woven mark (`components/logo.tsx`).
+- **Chats open at the latest message** and follow new steps while the agent works, but only if you
+  are already near the bottom, so reading an earlier turn is never interrupted.
+
 ## How it talks to the API
 
 The browser never calls the API. Server Components read sessions, turns and traces; Server

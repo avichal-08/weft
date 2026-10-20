@@ -1,56 +1,84 @@
+import {
+  ChevronRight,
+  FilePlus2,
+  FileText,
+  FlaskConical,
+  FolderSearch,
+  Pencil,
+  Search,
+  Terminal,
+  type LucideIcon,
+} from 'lucide-react';
 import { describeStep } from '@/lib/steps';
+import { elapsed } from '@/lib/format';
 import type { RunEvent, ToolEventData } from '@/lib/types';
 import { Prose } from './prose';
 
-function EditDiff({ args }: { args: Record<string, unknown> }) {
-  const lines = (prefix: string, value: unknown) =>
+const ICONS: Record<string, LucideIcon> = {
+  grep: Search,
+  glob: FolderSearch,
+  view_file: FileText,
+  str_replace_edit: Pencil,
+  create_file: FilePlus2,
+  run_command: Terminal,
+  run_tests: FlaskConical,
+};
+
+function EditPreview({ args }: { args: Record<string, unknown> }) {
+  const rows = (sign: string, value: unknown, cls: string) =>
     String(value ?? '')
       .split('\n')
-      .map((l) => `${prefix}${l}`);
+      .map((l, i) => (
+        <div key={`${sign}${i}`} className={`px-3 whitespace-pre ${cls}`}>
+          <span className="mr-2 select-none opacity-60">{sign}</span>
+          {l}
+        </div>
+      ));
   return (
-    <pre className="overflow-x-auto rounded-md bg-zinc-50 py-2 text-xs leading-5 dark:bg-zinc-900">
-      {lines('- ', args.old_str).map((l, i) => (
-        <div key={`o${i}`} className="px-3 font-mono whitespace-pre text-red-700 dark:text-red-300">
-          {l}
-        </div>
-      ))}
-      {lines('+ ', args.new_str).map((l, i) => (
-        <div
-          key={`n${i}`}
-          className="px-3 font-mono whitespace-pre text-emerald-700 dark:text-emerald-300"
-        >
-          {l}
-        </div>
-      ))}
-    </pre>
+    <div className="overflow-x-auto rounded-lg border border-line bg-code py-2 font-mono text-[12px] leading-5">
+      {rows('−', args.old_str, 'bg-bad-soft')}
+      {rows('+', args.new_str, 'bg-ok-soft')}
+    </div>
   );
 }
 
 function Step({ data }: { data: ToolEventData }) {
   const { verb, target, extra } = describeStep(data);
+  const Icon = ICONS[data.name] ?? Terminal;
   return (
-    <details className="group">
-      <summary className="flex cursor-pointer list-none items-baseline gap-2 py-0.5 text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
-        <span className={`w-3 shrink-0 text-xs ${data.isError ? 'text-red-500' : 'text-zinc-400'}`}>
-          {data.isError ? '✗' : '•'}
-        </span>
-        <span className="min-w-0 truncate">
-          {verb}
-          {target && (
-            <code className="ml-1.5 rounded bg-zinc-100 px-1 py-0.5 font-mono text-[12px] dark:bg-zinc-800">
-              {target}
-            </code>
+    <details className="group/step">
+      <summary className="flex cursor-pointer list-none items-center gap-2.5 rounded-md px-2 py-1 text-[13px] text-muted transition hover:bg-surface-2 hover:text-fg">
+        <Icon className={`size-3.5 shrink-0 ${data.isError ? 'text-bad' : 'text-faint'}`} />
+        <span className="min-w-0 flex-1 truncate">
+          <span className={data.isError ? 'text-bad' : ''}>{verb}</span>
+          {target && <span className="ml-1.5 font-mono text-[12px] text-fg/80">{target}</span>}
+          {extra && (
+            <span className="ml-1 font-mono text-[11.5px]">
+              {extra.split(' ').map((part, i) =>
+                part.startsWith('+') ? (
+                  <span key={i} className="ml-1 text-ok">
+                    {part}
+                  </span>
+                ) : part.startsWith('−') ? (
+                  <span key={i} className="ml-1 text-bad">
+                    {part}
+                  </span>
+                ) : (
+                  <span key={i}> {part}</span>
+                ),
+              )}
+            </span>
           )}
-          {extra && <span className="text-zinc-400">{extra}</span>}
         </span>
+        <ChevronRight className="size-3.5 shrink-0 text-faint opacity-0 transition group-hover/step:opacity-100 group-open/step:rotate-90 group-open/step:opacity-100" />
       </summary>
-      <div className="mt-1.5 mb-2 ml-5 grid grid-cols-1 gap-2">
+      <div className="mt-1.5 mb-2 ml-6 grid grid-cols-1 gap-2">
         {data.name === 'str_replace_edit' && data.args && !data.isError && (
-          <EditDiff args={data.args} />
+          <EditPreview args={data.args} />
         )}
         {data.output && (
           <pre
-            className={`max-h-64 overflow-auto rounded-md p-2.5 font-mono text-xs whitespace-pre-wrap ${data.isError ? 'bg-red-500/10 text-red-800 dark:text-red-200' : 'bg-zinc-50 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400'}`}
+            className={`max-h-72 overflow-auto rounded-lg border p-3 font-mono text-[12px] leading-5 whitespace-pre-wrap ${data.isError ? 'border-bad/20 bg-bad-soft text-bad' : 'border-line bg-code text-muted'}`}
           >
             {data.output}
           </pre>
@@ -60,67 +88,63 @@ function Step({ data }: { data: ToolEventData }) {
   );
 }
 
-function seconds(from: string | null, to: string | null) {
-  if (!from) return '';
-  const s = Math.max(0, Math.round(((to ? Date.parse(to) : Date.now()) - Date.parse(from)) / 1000));
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
-}
-
 export function WorkLog({
   events,
   active,
   startedAt,
   finishedAt,
   reply,
-  stats,
 }: {
   events: RunEvent[];
   active: boolean;
   startedAt: string | null;
   finishedAt: string | null;
   reply: string | null;
-  stats: string;
 }) {
   const items = events.filter(
     (e) =>
       (e.type === 'tool' && e.data.name !== 'finish') ||
       (e.type === 'llm' && e.data.text?.trim() && e.data.text.trim() !== reply?.trim()),
   );
-  const last = items.at(-1);
-  const current =
-    active && last?.type === 'tool'
-      ? `${describeStep(last.data).verb} ${describeStep(last.data).target ?? ''}`
-      : '';
+  const tools = items.filter((e) => e.type === 'tool').length;
+  const lastTool = [...items].reverse().find((e) => e.type === 'tool');
+  const now = lastTool?.type === 'tool' ? describeStep(lastTool.data) : null;
 
   if (!active && items.length === 0) return null;
 
   return (
     <details open={active} className="group/log">
-      <summary
-        title={stats}
-        className="flex cursor-pointer list-none items-center gap-2 text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-      >
+      <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded-full border border-line bg-surface px-3 py-1 text-[13px] text-muted shadow-card transition hover:border-line-strong hover:text-fg">
         {active ? (
-          <span className="size-3 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-zinc-700 dark:border-t-zinc-300" />
+          <span className="size-2 animate-pulse rounded-full bg-accent" />
         ) : (
-          <span className="text-xs transition group-open/log:rotate-90">▸</span>
+          <ChevronRight className="size-3.5 transition group-open/log:rotate-90" />
         )}
-        <span>
-          {active
-            ? events.length === 0
-              ? 'Starting…'
-              : 'Working…'
-            : `Worked for ${seconds(startedAt, finishedAt)}`}
-        </span>
-        {active && current && <span className="min-w-0 truncate text-zinc-400">{current}</span>}
+        {active ? (
+          <span className="shimmer-text font-medium">
+            {events.length === 0
+              ? 'Setting up the sandbox'
+              : now
+                ? `${now.verb} ${now.target ?? ''}`
+                : 'Thinking'}
+          </span>
+        ) : (
+          <span>
+            Worked for {elapsed(startedAt, finishedAt)}
+            <span className="text-faint">
+              {' '}
+              · {tools} step{tools === 1 ? '' : 's'}
+            </span>
+          </span>
+        )}
       </summary>
-      <div className="mt-3 ml-1.5 grid grid-cols-1 gap-1 border-l border-zinc-200 pl-4 dark:border-zinc-800">
+      <div className="mt-3 ml-3 grid grid-cols-1 gap-0.5 border-l border-line pl-3">
         {items.map((e) =>
           e.type === 'tool' ? (
             <Step key={e.seq} data={e.data} />
           ) : (
-            <div key={e.seq} className="py-1">
-              <Prose muted>{e.data.text!.trim()}</Prose>
+            <div key={e.seq} className="px-2 py-1.5">
+              <Prose size="sm">{e.data.text!.trim()}</Prose>
             </div>
           ),
         )}

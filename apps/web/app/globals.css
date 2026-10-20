@@ -1,27 +1,138 @@
 @import 'tailwindcss';
-@plugin '@tailwindcss/typography';
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --bg: #fbfbfa;
+  --surface: #ffffff;
+  --surface-2: #f3f3f1;
+  --surface-3: #ebebe8;
+  --line: rgb(24 24 27 / 0.08);
+  --line-strong: rgb(24 24 27 / 0.15);
+  --fg: #1b1b1f;
+  --muted: #6b6b73;
+  --faint: #a3a3aa;
+  --accent: #df6a34;
+  --accent-hover: #c95c2a;
+  --accent-soft: rgb(223 106 52 / 0.1);
+  --ok: #16a34a;
+  --ok-soft: rgb(22 163 74 / 0.1);
+  --bad: #dc2626;
+  --bad-soft: rgb(220 38 38 / 0.09);
+  --warn: #b45309;
+  --warn-soft: rgb(217 119 6 / 0.1);
+  --info: #2563eb;
+  --code-bg: #f6f6f4;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -12px rgb(0 0 0 / 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg: #0b0b0c;
+    --surface: #131315;
+    --surface-2: #1a1a1d;
+    --surface-3: #232327;
+    --line: rgb(255 255 255 / 0.06);
+    --line-strong: rgb(255 255 255 / 0.11);
+    --fg: #ececee;
+    --muted: #9c9ca5;
+    --faint: #5f5f68;
+    --accent: #f0814a;
+    --accent-hover: #f5966a;
+    --accent-soft: rgb(240 129 74 / 0.13);
+    --ok: #4ade80;
+    --ok-soft: rgb(74 222 128 / 0.1);
+    --bad: #f87171;
+    --bad-soft: rgb(248 113 113 / 0.1);
+    --warn: #fbbf24;
+    --warn-soft: rgb(251 191 36 / 0.09);
+    --info: #60a5fa;
+    --code-bg: #0f0f11;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -16px rgb(0 0 0 / 0.7);
   }
 }
 
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-info: var(--info);
+  --color-code: var(--code-bg);
+  --shadow-card: var(--shadow);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--fg);
   font-family: var(--font-sans), system-ui, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+.shiki,
+.shiki span {
+  color: var(--shiki-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-dark);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    var(--surface-3) 50%,
+    var(--surface-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+.shimmer-text {
+  background: linear-gradient(90deg, var(--muted) 30%, var(--fg) 50%, var(--muted) 70%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 2.2s linear infinite;
 }

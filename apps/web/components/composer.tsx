@@ -1,8 +1,15 @@
 'use client';
 
+import { ArrowUp, Square } from 'lucide-react';
 import { useActionState, useEffect, useRef } from 'react';
 import { cancelRunAction, sendMessageAction } from '@/app/actions';
 import type { FormState } from '@/lib/types';
+
+export function grow(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+}
 
 export function Composer({
   sessionId,
@@ -18,31 +25,32 @@ export function Composer({
     {},
   );
   const form = useRef<HTMLFormElement>(null);
-
-  useEffect(() => {
-    if (state.sent) form.current?.reset();
-  }, [state.sent]);
-
+  const input = useRef<HTMLTextAreaElement>(null);
   const busy = activeRunId !== null;
 
+  useEffect(() => {
+    if (state.sent) {
+      form.current?.reset();
+      grow(input.current);
+    }
+  }, [state.sent]);
+
   return (
-    <div className="sticky bottom-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)] pt-6 pb-5">
+    <div className="sticky bottom-0 bg-gradient-to-t from-bg from-60% to-transparent pt-8 pb-5">
       <form
         ref={form}
         action={action}
-        className="rounded-xl border border-zinc-300 bg-white focus-within:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+        className="rounded-2xl border border-line-strong bg-surface shadow-card transition focus-within:border-accent/50 focus-within:ring-4 focus-within:ring-accent-soft"
       >
         <textarea
-          className="block max-h-60 min-h-12 w-full resize-none rounded-xl bg-transparent px-4 py-3 text-[15px] outline-none disabled:opacity-60"
+          ref={input}
+          className="block max-h-60 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-6 outline-none placeholder:text-faint disabled:opacity-60"
           name="message"
-          rows={2}
-          placeholder={
-            busy
-              ? 'weft is working…'
-              : 'Reply to weft…  (Enter to send, Shift+Enter for a new line)'
-          }
+          rows={1}
+          placeholder={busy ? 'weft is working…' : 'Reply to weft…'}
           defaultValue={state.error ? state.fields?.message : undefined}
           disabled={busy || pending}
+          onInput={(e) => grow(e.currentTarget)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
@@ -50,31 +58,40 @@ export function Composer({
             }
           }}
         />
-        <div className="flex items-center justify-between gap-3 px-3 pb-3">
-          <p className="min-w-0 truncate text-xs">
+        <div className="flex items-center justify-between gap-3 px-3 pb-2.5">
+          <span className="min-w-0 truncate text-xs">
             {state.error ? (
-              <span className="text-red-600 dark:text-red-400">{state.error}</span>
+              <span className="text-bad">{state.error}</span>
             ) : (
-              <span className="text-zinc-400">{model ?? 'default model'}</span>
+              <span className="rounded-md bg-surface-2 px-2 py-1 font-mono text-[11px] text-muted">
+                {model ?? 'default model'}
+              </span>
             )}
-          </p>
+          </span>
           {busy ? (
             <button
               formAction={cancelRunAction.bind(null, activeRunId)}
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+              className="grid size-8 place-items-center rounded-full bg-fg text-bg transition hover:opacity-80"
+              aria-label="Stop"
+              title="Stop"
             >
-              Stop
+              <Square className="size-3 fill-current" />
             </button>
           ) : (
             <button
-              className="rounded-md bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+              className="grid size-8 place-items-center rounded-full bg-accent text-white transition hover:bg-accent-hover disabled:opacity-40"
               disabled={pending}
+              aria-label="Send"
+              title="Send (Enter)"
             >
-              {pending ? 'Sending…' : 'Send'}
+              <ArrowUp className="size-4" strokeWidth={2.5} />
             </button>
           )}
         </div>
       </form>
+      <p className="mt-2 text-center text-[11px] text-faint">
+        weft works in an isolated sandbox. Enter to send · Shift+Enter for a new line
+      </p>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { CircleAlert, CircleCheck, CircleSlash } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getRunEvents, getSession } from '@/lib/api';
@@ -8,25 +9,37 @@ import { AutoRefresh } from './auto-refresh';
 import { Changes } from './changes';
 import { ChatShell } from './chat-shell';
 import { Composer } from './composer';
+import { CopyButton } from './copy-button';
+import { LogoMark } from './logo';
 import { Prose } from './prose';
 import { WorkLog } from './work-log';
 
 function Outcome({ run }: { run: Run }) {
-  if (run.status === 'cancelled') return <p className="text-sm text-zinc-500 italic">Stopped.</p>;
+  if (run.status === 'cancelled') {
+    return (
+      <p className="flex items-center gap-2 text-sm text-muted">
+        <CircleSlash className="size-4" /> Stopped
+      </p>
+    );
+  }
   if (run.status === 'succeeded') return null;
   const why =
     run.failureKind === 'tests_failed'
-      ? 'The tests still fail after this change.'
+      ? 'The tests still fail after this change'
       : run.failureKind?.startsWith('llm_')
-        ? 'The model provider returned an error, so this turn stopped.'
+        ? 'The model provider returned an error'
         : run.failureKind === 'apply_failed'
-          ? "The earlier changes don't apply to the branch any more."
-          : "This turn didn't finish.";
+          ? "Earlier changes don't apply to the branch any more"
+          : "This turn didn't finish";
   return (
-    <details className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
-      <summary className="cursor-pointer">{why}</summary>
+    <details className="group rounded-xl border border-warn/25 bg-warn-soft text-sm">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3.5 py-2.5 text-warn">
+        <CircleAlert className="size-4 shrink-0" />
+        <span className="flex-1">{why}</span>
+        <span className="text-xs opacity-70 group-open:hidden">Details</span>
+      </summary>
       {run.failureDetail && (
-        <pre className="mt-2 max-h-56 overflow-auto font-mono text-xs whitespace-pre-wrap opacity-80">
+        <pre className="max-h-56 overflow-auto border-t border-warn/20 px-3.5 py-2.5 font-mono text-xs whitespace-pre-wrap text-muted">
           {run.failureDetail}
         </pre>
       )}
@@ -36,36 +49,44 @@ function Outcome({ run }: { run: Run }) {
 
 function Turn({ run, events }: { run: Run; events: RunEvent[] }) {
   const active = ACTIVE.includes(run.status);
-  const stats = `${run.steps} steps · ${tokens(run.inputTokens)} in · ${tokens(run.outputTokens)} out`;
 
   return (
-    <li className="grid grid-cols-1 gap-5">
-      <div className="ml-auto max-w-[80%] rounded-2xl bg-zinc-100 px-4 py-2.5 text-[15px] leading-7 whitespace-pre-wrap dark:bg-zinc-800/80">
+    <li className="grid grid-cols-1 gap-6">
+      <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md border border-line bg-surface-2 px-4 py-2.5 text-[15px] leading-7 whitespace-pre-wrap">
         {run.task}
       </div>
-      <div className="group/turn grid grid-cols-1 gap-3">
-        <WorkLog
-          events={events}
-          active={active}
-          startedAt={run.startedAt}
-          finishedAt={run.finishedAt}
-          reply={run.summary}
-          stats={stats}
-        />
-        {!active && run.summary && <Prose>{run.summary}</Prose>}
-        {!active && <Outcome run={run} />}
-        {!active && (
-          <div className="flex gap-3 text-xs text-zinc-400 opacity-0 transition group-hover/turn:opacity-100">
-            {run.testCommand && run.status === 'succeeded' && <span>✓ tests pass</span>}
-            <span>{stats}</span>
-            <Link
-              href={`/runs/${run.id}`}
-              className="hover:text-zinc-600 hover:underline dark:hover:text-zinc-200"
-            >
-              details
-            </Link>
-          </div>
-        )}
+      <div className="group/turn flex gap-3.5">
+        <LogoMark className="mt-0.5 size-6 shrink-0" />
+        <div className="grid min-w-0 flex-1 grid-cols-1 gap-3">
+          <WorkLog
+            events={events}
+            active={active}
+            startedAt={run.startedAt}
+            finishedAt={run.finishedAt}
+            reply={run.summary}
+          />
+          {!active && run.summary && <Prose>{run.summary}</Prose>}
+          {!active && <Outcome run={run} />}
+          {!active && (
+            <div className="-ml-1.5 flex items-center gap-1 text-xs text-faint opacity-0 transition group-hover/turn:opacity-100">
+              {run.summary && <CopyButton text={run.summary} />}
+              {run.testCommand && run.status === 'succeeded' && (
+                <span className="flex items-center gap-1 px-1.5 text-ok">
+                  <CircleCheck className="size-3.5" /> tests pass
+                </span>
+              )}
+              <span className="px-1.5">
+                {run.steps} steps · {tokens(run.inputTokens + run.outputTokens)} tokens
+              </span>
+              <Link
+                href={`/runs/${run.id}`}
+                className="rounded-md px-1.5 py-1 hover:bg-surface-3 hover:text-fg"
+              >
+                Inspect
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
     </li>
   );
@@ -83,33 +104,32 @@ export async function ChatView({ params }: { params: Promise<{ id: string }> }) 
   const res = await getSession(id);
   if (!res.ok) {
     if (res.status === 404 || res.status === 400) notFound();
-    return <p className="p-8 text-sm text-red-600">Could not load this chat ({res.status}).</p>;
+    return <p className="p-8 text-sm text-bad">Could not load this chat ({res.status}).</p>;
   }
   const session = res.data.session;
   const traces = await Promise.all(session.turns.map((t) => getRunEvents(t.id)));
   const last = session.turns.at(-1);
   const activeRunId = last && ACTIVE.includes(last.status) ? last.id : null;
   const diff = latestDiff(session.turns);
-
-  const subtitle = [
-    repoName(session.repoUrl),
-    session.baseRef ? `branch ${session.baseRef}` : null,
-    session.config.model ?? null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const files = diff ? parseDiff(diff) : [];
 
   return (
     <ChatShell
       title={session.title}
-      subtitle={subtitle}
+      repo={repoName(session.repoUrl)}
+      branch={session.baseRef}
       working={activeRunId !== null}
-      changedFiles={diff ? parseDiff(diff).length : 0}
+      stats={{
+        files: files.length,
+        additions: files.reduce((n, f) => n + f.additions, 0),
+        deletions: files.reduce((n, f) => n + f.deletions, 0),
+      }}
       changes={<Changes diff={diff} />}
+      revision={`${session.turns.length}:${last?.status ?? ''}:${traces.reduce((n, t) => n + (t.ok ? t.data.events.length : 0), 0)}`}
     >
       <AutoRefresh active={activeRunId !== null} />
-      <div className="mx-auto flex min-h-full max-w-3xl flex-col px-6">
-        <ol className="grid flex-1 grid-cols-1 content-start gap-12 py-10">
+      <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-6">
+        <ol className="grid flex-1 grid-cols-1 content-start gap-14 pt-10 pb-6">
           {session.turns.map((run, i) => {
             const trace = traces[i];
             return <Turn key={run.id} run={run} events={trace?.ok ? trace.data.events : []} />;
