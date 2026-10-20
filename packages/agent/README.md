@@ -84,6 +84,32 @@ pnpm --filter @weft/agent demo <dir> "<task>"       # any local repo
 Copies the repo into a fresh sandbox, commits it, runs the agent with a live trace, then reruns
 the tests independently and prints the `git diff`.
 
+## Eval
+
+```bash
+pnpm --filter @weft/agent eval --provider gemini --model gemini-3.1-flash-lite --label baseline
+pnpm --filter @weft/agent eval --only q- --repeat 3   # a subset, several rounds
+```
+
+A small, repeatable check of how the agent behaves in a chat, run against a real model in real
+sandboxes. `fixtures/shop` is a tiny cart/discount/money library with a real bug (1005 cents
+prints as `$10.5`), so questions about it tempt the agent to "just fix it". The nine cases in
+`eval/cases.ts`:
+
+| Kind                  | Cases                                                                       | Passes when                                         |
+| --------------------- | --------------------------------------------------------------------------- | --------------------------------------------------- |
+| Questions             | how a discount is applied, why 1005 prints wrong, a review, the test runner | no file changed, the reply names the right code     |
+| Changes               | fix the money bug, no shipping on an empty cart                             | files changed, tests pass, a behaviour check passes |
+| Follow-ups (question) | "what did you change?", "does that fix work for negatives?"                 | no edits, the agent owns its earlier change         |
+| Follow-up (change)    | case-insensitive codes after adding `FREESHIP`                              | the change works and `FREESHIP` still does          |
+
+Follow-ups replay an earlier turn the way the worker does: the earlier message and reply as
+history, and the earlier change applied to the files but not committed. Each case runs like a
+chat turn (no test command configured). The run prints each case with its problems, then
+questions passed, changes passed, searches aimed at other languages (`*.py` in a JS repo), steps
+and tokens, and saves everything, replies included, to `eval/results/` (git-ignored). Scoring is
+in `eval/score.ts`, with unit tests.
+
 ## Running tools
 
 Tools execute inside a sandbox from `@weft/sandbox`, relative to the repo root:

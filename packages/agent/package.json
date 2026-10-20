@@ -11,7 +11,8 @@
     "typecheck": "tsc",
     "test": "vitest run --exclude '**/*.int.test.ts'",
     "test:integration": "vitest run .int.test",
-    "demo": "node --env-file=../../.env scripts/demo.ts"
+    "demo": "node --env-file=../../.env scripts/demo.ts",
+    "eval": "node --env-file=../../.env eval/run.ts"
   },
   "dependencies": {
     "@weft/llm": "workspace:*",

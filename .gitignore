@@ -8,3 +8,5 @@ coverage/
 .env.*
 !.env.example
 results/**/raw/
+
+packages/agent/eval/results/

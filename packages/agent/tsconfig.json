@@ -1,4 +1,4 @@
 {
   "extends": "@weft/tsconfig/node.json",
-  "include": ["src", "test", "scripts", "vitest.config.ts"]
+  "include": ["src", "test", "scripts", "eval", "vitest.config.ts"]
 }
