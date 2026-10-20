@@ -8,7 +8,7 @@ export type Run = {
   repoUrl: string;
   baseRef: string | null;
   task: string;
-  testCommand: string;
+  testCommand: string | null;
   config: { provider?: string; model?: string; maxSteps?: number };
   createdAt: string;
   startedAt: string | null;

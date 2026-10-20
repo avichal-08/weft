@@ -13,4 +13,4 @@ export async function testDb() {
 
 export type TestDb = Awaited<ReturnType<typeof testDb>>;
 
-export const reset = (db: TestDb) => db.execute(sql`truncate table runs cascade`);
+export const reset = (db: TestDb) => db.execute(sql`truncate table sessions, runs cascade`);

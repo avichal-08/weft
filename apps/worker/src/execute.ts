@@ -98,6 +98,16 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     });
   };
 
+  const testCommand = run.testCommand;
+  if (!testCommand) {
+    stopWatching();
+    return finish({
+      status: 'error',
+      failureKind: 'no_test_command',
+      failureDetail: 'runs without a test command are not supported yet',
+    });
+  }
+
   try {
     checkout = await cloneRepo(run.repoUrl, run.baseRef, {
       allowFileRepos: deps.allowFileRepos ?? false,
@@ -110,7 +120,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     abort.signal.throwIfAborted();
     await sandbox.putFiles(checkout.dir, REPO_ROOT);
 
-    const ctx = createToolContext({ sandbox, root: REPO_ROOT, testCommand: run.testCommand });
+    const ctx = createToolContext({ sandbox, root: REPO_ROOT, testCommand });
     const result = await runAgent({
       llm: withRetry(deps.createLLM(config), {
         ...deps.retry,
@@ -125,7 +135,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     if (result.status === 'aborted')
       return await finish({ status: 'error', failureKind: 'aborted' });
 
-    const verify = await sandbox.exec(run.testCommand, {
+    const verify = await sandbox.exec(testCommand, {
       cwd: REPO_ROOT,
       timeoutMs: ctx.testTimeoutMs,
     });

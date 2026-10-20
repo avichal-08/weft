@@ -1,5 +1,5 @@
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
-import type { runEvents, runs, schema } from './schema.ts';
+import type { runEvents, runs, schema, sessions } from './schema.ts';
 
 export type Schema = typeof schema;
 export type Db = PgDatabase<PgQueryResultHKT, Schema>;
@@ -10,7 +10,7 @@ export type RunStatus = Run['status'];
 export type CreateRunInput = {
   repoUrl: string;
   task: string;
-  testCommand: string;
+  testCommand?: string;
   baseRef?: string;
   config?: Record<string, unknown>;
 };
@@ -50,3 +50,22 @@ export type ListRunEventsOptions = {
   afterSeq?: number;
   limit?: number;
 };
+
+export type Session = typeof sessions.$inferSelect;
+
+export type CreateSessionInput = {
+  repoUrl: string;
+  message: string;
+  baseRef?: string;
+  testCommand?: string;
+  config?: Record<string, unknown>;
+};
+
+export type SessionSummary = Session & {
+  turns: number;
+  lastStatus: RunStatus | null;
+};
+
+export type SessionWithTurns = Session & { turns: Run[] };
+
+export type AddTurnResult = { ok: true; run: Run } | { ok: false; reason: 'not_found' | 'busy' };

@@ -1,7 +1,8 @@
 export type * from './types.ts';
 export { createDb } from './client.ts';
 export { MIGRATIONS_DIR } from './migrate.ts';
-export { runEvents, runEventType, runs, runStatus, schema } from './schema.ts';
+export { runEvents, runEventType, runs, runStatus, schema, sessions } from './schema.ts';
+export { addTurn, createSession, getSession, listSessions, titleFrom } from './sessions.ts';
 export { appendRunEvents, listRunEvents } from './events.ts';
 export {
   cancelRun,

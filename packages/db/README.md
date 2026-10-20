@@ -61,6 +61,25 @@ Indexed on `(status, created_at)` for "next queued runs" and on `created_at desc
 dashboard's run list. `attempt` and `worker_id` are there for crash recovery: a re-delivered
 run gets a new attempt, and updates will be fenced on it.
 
+**`sessions`**: a chat with the agent about one repository: `title` (from the first message),
+`repo_url`, `base_ref`, an optional `test_command`, `config`, and `updated_at` for ordering.
+Each message is a run in that session (`runs.session_id`, `runs.turn` = 1, 2, 3, …), so turns
+reuse the whole run pipeline. Deleting a session deletes its runs.
+
+Two indexes guard the conversation: `(session_id, turn)` is unique, and a partial unique index on
+`session_id` where `status in ('queued', 'running')` allows at most one active turn per session.
+The second one is what makes "don't accept a message while the agent is working" hold even for
+messages sent at the same instant from two tabs: one insert wins, the other hits the index.
+Verified on Neon with four simultaneous messages, five rounds: one accepted, three busy, every
+time.
+
+| Function                                                                | Effect                                                                                   |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `createSession(db, { repoUrl, message, baseRef, testCommand, config })` | Creates the session and its first turn in one transaction.                               |
+| `addTurn(db, sessionId, message)`                                       | Next turn, or `{ ok: false, reason: 'busy' }` while a turn is active (or `'not_found'`). |
+| `getSession(db, id)`                                                    | The session with its turns in order.                                                     |
+| `listSessions(db, limit)`                                               | Most recently active first, with turn count and latest status.                           |
+
 **`run_events`**: the step-by-step trace of a run, one row per model call (`llm`) or tool call
 (`tool`), keyed by `(run_id, attempt, seq)`. `data` holds the details as JSON (tokens, latency
 and text for `llm`; name, args, error flag, duration and output for `tool`). Rows are deleted

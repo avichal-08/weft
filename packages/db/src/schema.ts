@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   bigserial,
   index,
@@ -20,10 +21,27 @@ export const runStatus = pgEnum('run_status', [
   'cancelled',
 ]);
 
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    title: text('title').notNull(),
+    repoUrl: text('repo_url').notNull(),
+    baseRef: text('base_ref'),
+    testCommand: text('test_command'),
+    config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('sessions_updated_idx').on(t.updatedAt.desc())],
+);
+
 export const runs = pgTable(
   'runs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    sessionId: uuid('session_id').references(() => sessions.id, { onDelete: 'cascade' }),
+    turn: integer('turn'),
     status: runStatus('status').notNull().default('queued'),
     attempt: integer('attempt').notNull().default(0),
     workerId: text('worker_id'),
@@ -31,7 +49,7 @@ export const runs = pgTable(
     repoUrl: text('repo_url').notNull(),
     baseRef: text('base_ref'),
     task: text('task').notNull(),
-    testCommand: text('test_command').notNull(),
+    testCommand: text('test_command'),
     config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -51,6 +69,10 @@ export const runs = pgTable(
   (t) => [
     index('runs_status_created_idx').on(t.status, t.createdAt),
     index('runs_created_idx').on(t.createdAt.desc()),
+    uniqueIndex('runs_session_turn_idx').on(t.sessionId, t.turn),
+    uniqueIndex('runs_one_active_turn_idx')
+      .on(t.sessionId)
+      .where(sql`${t.status} in ('queued', 'running')`),
   ],
 );
 
@@ -73,4 +95,4 @@ export const runEvents = pgTable(
   (t) => [uniqueIndex('run_events_run_attempt_seq_idx').on(t.runId, t.attempt, t.seq)],
 );
 
-export const schema = { runStatus, runs, runEventType, runEvents };
+export const schema = { runStatus, sessions, runs, runEventType, runEvents };
