@@ -54,6 +54,14 @@ const worker = new Worker<RunJobData>(
         allowFileRepos: env.ALLOW_FILE_REPOS,
         log: (line) => console.log(line),
         live: (runId, message) => publishLive(publisher, runId, message),
+        ...(env.INSTALL_CACHE_DIR
+          ? {
+              installCache: {
+                dir: env.INSTALL_CACHE_DIR,
+                maxBytes: env.INSTALL_CACHE_MAX_MB * 1024 * 1024,
+              },
+            }
+          : {}),
       },
       job.data.runId,
     );

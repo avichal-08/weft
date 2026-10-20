@@ -1,5 +1,6 @@
+import { PassThrough } from 'node:stream';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createSandbox } from '../src/docker.ts';
+import { createSandbox, imageId } from '../src/docker.ts';
 import type { Sandbox } from '../src/types.ts';
 
 const image = process.env.SANDBOX_IMAGE ?? 'weft-sandbox:dev';
@@ -35,6 +36,19 @@ describe('sandbox.exec', () => {
       env: { GREETING: 'hi' },
     });
     expect(res.stdout).toBe('hi from /tmp\n');
+  });
+
+  it('streams stdout to a writable instead of capping it', async () => {
+    const out = new PassThrough();
+    let bytes = 0;
+    out.on('data', (chunk: Buffer) => (bytes += chunk.length));
+    const res = await sandbox.exec('head -c 3000000 /dev/zero; echo done >&2', { stdout: out });
+    expect(bytes).toBe(3_000_000);
+    expect(res).toMatchObject({ exitCode: 0, stdout: '', stderr: 'done\n', truncated: false });
+  });
+
+  it('resolves an image to its id', async () => {
+    expect(await imageId(image)).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
   it('caps runaway output without buffering it all', async () => {

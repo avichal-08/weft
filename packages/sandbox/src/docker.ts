@@ -54,7 +54,8 @@ async function runExec(
   });
 
   const max = opts.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
-  const stdout = new CappedBuffer(max);
+  const captured = new CappedBuffer(max);
+  const stdout = opts.stdout ?? captured;
   const stderr = new CappedBuffer(max);
   const stream = await exec.start({ hijack: true, stdin: opts.stdin !== undefined });
   docker.modem.demuxStream(stream, stdout, stderr);
@@ -79,9 +80,9 @@ async function runExec(
   clearTimeout(backstop);
 
   const output = () => ({
-    stdout: stdout.text(),
+    stdout: opts.stdout ? '' : captured.text(),
     stderr: stderr.text(),
-    truncated: stdout.truncated || stderr.truncated,
+    truncated: (!opts.stdout && captured.truncated) || stderr.truncated,
     durationMs: Math.round(performance.now() - started),
   });
 
@@ -99,6 +100,10 @@ async function runExec(
     await runExec(docker, container, state, SWEEP_SCRIPT, { timeoutMs: 5000 }, false);
   }
   return { exitCode, timedOut, ...result };
+}
+
+export async function imageId(image: string, docker: Docker = new Docker()): Promise<string> {
+  return (await docker.getImage(image).inspect()).Id;
 }
 
 export async function createSandbox(

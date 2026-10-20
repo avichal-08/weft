@@ -11,9 +11,10 @@ import {
 } from '@weft/db';
 import { emptyUsage, LLMError, withRetry } from '@weft/llm';
 import type { LiveMessage, LivePhase } from '@weft/queue';
-import { createSandbox, type Sandbox } from '@weft/sandbox';
+import { createSandbox, imageId, type Sandbox } from '@weft/sandbox';
 import { CloneError, cloneRepo } from './clone.ts';
 import { buildHistory, latestDiff } from './history.ts';
+import { installCache, installKey, touchesManifests } from './install-cache.ts';
 import { detectSetup, runSetup, SetupError } from './setup.ts';
 import { describeEvent, describeRetry, shortId } from './log.ts';
 import { toRunEvent } from './trace.ts';
@@ -129,19 +130,34 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
       allowFileRepos: deps.allowFileRepos ?? false,
     });
     const plan = await detectSetup(checkout.dir);
+    const base = latestDiff(previous);
+    const cache =
+      plan && deps.installCache && !touchesManifests(base) ? installCache(deps.installCache) : null;
+    const key =
+      plan && cache
+        ? await installKey(checkout.dir, {
+            repoUrl: run.repoUrl,
+            imageId: await imageId(deps.sandboxImage),
+            command: plan.command,
+          })
+        : null;
+    const cached = cache && key ? await cache.lookup(key) : null;
+
     phase('sandbox');
     sandbox = await createSandbox({
       image: deps.sandboxImage,
       owner: workerId,
       labels: { 'weft.run': runId },
       ...(plan
-        ? { network: 'bridge' as const, limits: { memoryMb: 2048, workspaceMb: 2048, tmpMb: 512 } }
+        ? {
+            ...(cached ? {} : { network: 'bridge' as const }),
+            limits: { memoryMb: 2048, workspaceMb: 2048, tmpMb: 512 },
+          }
         : {}),
     });
     abort.signal.throwIfAborted();
     await sandbox.putFiles(checkout.dir, REPO_ROOT);
 
-    const base = latestDiff(previous);
     if (base) {
       phase('restore');
       const applied = await sandbox.exec(['git', 'apply', '--whitespace=nowarn', '-'], {
@@ -153,11 +169,28 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
       }
     }
 
-    if (plan) {
+    if (plan && cache && cached) {
+      log('setup: restoring dependencies from cache');
+      phase('setup', 'cache');
+      const started = performance.now();
+      await cache.restore(sandbox, REPO_ROOT, cached);
+      log(`setup: restored in ${seconds(started)}s, no network`);
+    } else if (plan) {
       log(`setup: ${plan.command}`);
       phase('setup', plan.command);
       const ms = await runSetup(sandbox, REPO_ROOT, plan);
       log(`setup: done in ${(ms / 1000).toFixed(1)}s, network disconnected`);
+      if (cache && key) {
+        const started = performance.now();
+        try {
+          const bytes = await cache.save(sandbox, REPO_ROOT, key);
+          if (bytes !== null) {
+            log(`setup: cached ${(bytes / 1e6).toFixed(0)} MB in ${seconds(started)}s`);
+          }
+        } catch (err) {
+          log(`setup: caching failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
     }
 
     phase('agent');
@@ -209,6 +242,8 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     await checkout?.cleanup();
   }
 }
+
+const seconds = (since: number) => ((performance.now() - since) / 1000).toFixed(1);
 
 const summaryOf = (summary: string | undefined) => (summary ? { summary } : {});
 

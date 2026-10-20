@@ -1,4 +1,4 @@
-import type { Readable } from 'node:stream';
+import type { Readable, Writable } from 'node:stream';
 
 export type SandboxLimits = {
   cpus: number;
@@ -22,6 +22,7 @@ export type ExecOptions = {
   maxOutputBytes?: number;
   timeoutMs?: number;
   stdin?: string | Buffer | Readable;
+  stdout?: Writable;
 };
 
 export type PutFilesOptions = {

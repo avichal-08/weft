@@ -38,6 +38,9 @@ function Ticker({ since }: { since: string }) {
 }
 
 function activity(events: RunEvent[], phase: LivePhase | null): StepLabel {
+  if (phase?.phase === 'setup' && phase.detail === 'cache') {
+    return { verb: 'Restoring cached dependencies' };
+  }
   if (phase && phase.phase !== 'agent') {
     return {
       verb: PHASES[phase.phase],
