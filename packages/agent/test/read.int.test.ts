@@ -28,7 +28,9 @@ beforeAll(async () => {
     'src/server.ts': Array.from({ length: 120 }, (_, i) => `// line ${i + 1}`).join('\n') + '\n',
     'test/config.test.ts': "import { parseConfig } from '../src/config';\n",
     'dist/bundle.js': 'function parseConfig(){}\n',
-    '.gitignore': 'dist/\n',
+    'node_modules/dep/index.js': 'export function parseConfig() {}\n',
+    '.github/workflows/ci.yml': 'name: ci\n',
+    '.gitignore': 'dist/\nnode_modules/\n',
     'README.md': '# fixture\n',
     'empty.txt': '',
     'logo.bin': Buffer.from([0, 1, 2, 0, 255]),
@@ -100,6 +102,31 @@ describe('grep', () => {
   });
 });
 
+describe('ignore rules', () => {
+  it('never lets a broad glob pull in ignored folders or .git', async () => {
+    const out = await glob(ctx, { pattern: '**/*', path: '.' });
+    const files = out.content.split('\n');
+    expect(files.some((f) => f.startsWith('node_modules/') || f.startsWith('dist/'))).toBe(false);
+    expect(files.some((f) => f.startsWith('.git/'))).toBe(false);
+    expect(files).toContain('.github/workflows/ci.yml');
+    expect(files).toContain('src/config.ts');
+  });
+
+  it('keeps grep inside ignore rules when a glob is given', async () => {
+    const out = await grep(ctx, { ...grepArgs, pattern: 'parseConfig', glob: '**/*' });
+    expect(out.content).toBe('src/config.ts\ntest/config.test.ts');
+  });
+
+  it('filters grep results by glob in every mode', async () => {
+    const files = await grep(ctx, { ...grepArgs, pattern: 'parseConfig', glob: '*.test.ts' });
+    expect(files.content).toBe('test/config.test.ts');
+    const count = await grep(ctx, { ...grepArgs, pattern: 'line', mode: 'count', glob: 'src/*' });
+    expect(count.content).toBe('src/server.ts:120');
+    const none = await grep(ctx, { ...grepArgs, pattern: 'parseConfig', glob: '*.py' });
+    expect(none.content).toBe('No matches in files matching *.py.');
+  });
+});
+
 describe('glob', () => {
   it('finds files by pattern', async () => {
     const out = await glob(ctx, { pattern: '**/*.ts', path: '.' });
@@ -112,6 +139,11 @@ describe('glob', () => {
 
   it('reports when nothing matches', async () => {
     expect((await glob(ctx, { pattern: '*.py', path: '.' })).content).toBe('No files found.');
+  });
+
+  it('matches relative to the search path', async () => {
+    const out = await glob(ctx, { pattern: '*.ts', path: 'src' });
+    expect(out.content.split('\n').sort()).toEqual(['src/config.ts', 'src/server.ts']);
   });
 });
 

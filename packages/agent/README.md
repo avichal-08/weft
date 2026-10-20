@@ -96,8 +96,14 @@ failures (a dead sandbox) throw, since the model can't fix those.
 - **Truncation says how to narrow.** Long results end with
   `[showing 100 of 2340 lines; narrow with path, glob or a more specific pattern]`; partial
   `view_file` reads end with `use offset=N to read more`.
-- **`grep`/`glob`** use ripgrep: `.gitignore` respected, output sorted (by path, or by mtime for
-  `glob`) so results are reproducible, minified lines cut at 300 columns.
+- **`grep`/`glob`** use ripgrep with `.gitignore` respected, dotfiles included and `.git/`
+  always excluded. The model's `glob` pattern is **never passed to ripgrep**: rg's `--glob`
+  overrides ignore rules whenever the pattern also matches a folder name, so `**/*` would list
+  all of `node_modules/` and `.git/`. Instead rg lists or searches with ignores intact, and
+  weft filters the paths with picomatch, so a pattern can only narrow results. Slash-free
+  patterns like `*.ts` match file names anywhere; patterns with a slash match paths relative to
+  `path`. `--null` separates paths from content so paths containing `:` or `-` parse safely.
+  Output is sorted (by path, or by mtime for `glob`) and minified lines are cut at 300 columns.
 - **`view_file`** numbers lines, cuts lines over 2000 characters, and refuses directories,
   binary files and offsets past the end.
 

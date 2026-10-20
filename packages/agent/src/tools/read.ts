@@ -1,4 +1,5 @@
 import type { ToolArgs, ToolContext, ToolOutput } from '../types.ts';
+import { formatLines, nullSeparated, pathMatcher, RG_BASE } from './rg.ts';
 import { fail, headLines, ok, outsideRoot, relativeArg, resolveInRoot } from './util.ts';
 
 const SEARCH_TIMEOUT_MS = 30_000;
@@ -9,22 +10,31 @@ export async function grep(ctx: ToolContext, args: ToolArgs['grep']): Promise<To
   const target = resolveInRoot(ctx.root, args.path);
   if (!target) return outsideRoot(args.path);
 
-  const argv = ['rg', '--color=never', '--sort=path', '--max-columns=300', '--max-columns-preview'];
+  const argv = [...RG_BASE, '--sort=path', '--max-columns=300', '--max-columns-preview'];
   if (args.ignore_case) argv.push('--ignore-case');
-  if (args.glob) argv.push('--glob', args.glob);
   if (args.mode === 'files') argv.push('--files-with-matches');
   if (args.mode === 'count') argv.push('--count', '--with-filename');
   if (args.mode === 'content') {
     argv.push('--line-number', '--with-filename', '--no-heading');
     if (args.context > 0) argv.push('--context', String(args.context));
   }
-  argv.push('--regexp', args.pattern, '--', ...relativeArg(ctx.root, target));
+  const scope = relativeArg(ctx.root, target);
+  argv.push('--regexp', args.pattern, '--', ...scope);
 
   const res = await ctx.sandbox.exec(argv, { cwd: ctx.root, timeoutMs: SEARCH_TIMEOUT_MS });
   if (res.exitCode === 1) return ok('No matches.');
   if (res.exitCode !== 0) return fail(res.stderr.trim() || `grep failed (exit ${res.exitCode})`);
+
+  const keep = args.glob ? pathMatcher(args.glob, scope[0] ?? '') : () => true;
+  const lines =
+    args.mode === 'files' ? nullSeparated(res.stdout).filter(keep) : formatLines(res.stdout, keep);
+  if (lines.length === 0) return ok(`No matches in files matching ${args.glob}.`);
   return ok(
-    headLines(res.stdout, args.head_limit, 'narrow with path, glob or a more specific pattern'),
+    headLines(
+      lines.join('\n'),
+      args.head_limit,
+      'narrow with path, glob or a more specific pattern',
+    ),
   );
 }
 
@@ -32,21 +42,18 @@ export async function glob(ctx: ToolContext, args: ToolArgs['glob']): Promise<To
   const target = resolveInRoot(ctx.root, args.path);
   if (!target) return outsideRoot(args.path);
 
-  const res = await ctx.sandbox.exec(
-    [
-      'rg',
-      '--files',
-      '--sortr=modified',
-      '--glob',
-      args.pattern,
-      '--',
-      ...relativeArg(ctx.root, target),
-    ],
-    { cwd: ctx.root, timeoutMs: SEARCH_TIMEOUT_MS },
-  );
-  if (res.exitCode === 1 && !res.stderr.trim()) return ok('No files found.');
-  if (res.exitCode !== 0) return fail(res.stderr.trim() || `glob failed (exit ${res.exitCode})`);
-  return ok(headLines(res.stdout, GLOB_LIMIT, 'use a more specific pattern or path'));
+  const scope = relativeArg(ctx.root, target);
+  const res = await ctx.sandbox.exec([...RG_BASE, '--files', '--sortr=modified', '--', ...scope], {
+    cwd: ctx.root,
+    timeoutMs: SEARCH_TIMEOUT_MS,
+  });
+  if (res.exitCode !== 0 && res.exitCode !== 1) {
+    return fail(res.stderr.trim() || `glob failed (exit ${res.exitCode})`);
+  }
+
+  const files = nullSeparated(res.stdout).filter(pathMatcher(args.pattern, scope[0] ?? ''));
+  if (files.length === 0) return ok('No files found.');
+  return ok(headLines(files.join('\n'), GLOB_LIMIT, 'use a more specific pattern or path'));
 }
 
 const VIEW_SCRIPT = `

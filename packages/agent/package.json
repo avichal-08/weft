@@ -16,10 +16,12 @@
   "dependencies": {
     "@weft/llm": "workspace:*",
     "@weft/sandbox": "workspace:*",
+    "picomatch": "^4.0.7",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
+    "@types/picomatch": "^4.0.3",
     "@weft/eslint-config": "workspace:*",
     "@weft/tsconfig": "workspace:*",
     "eslint": "^10.13.0",
