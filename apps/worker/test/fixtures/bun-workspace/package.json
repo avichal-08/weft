@@ -1,0 +1,16 @@
+{
+  "name": "bun-workspace",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.6",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@fixture/greet": "workspace:*",
+    "ms": "2.1.3"
+  }
+}

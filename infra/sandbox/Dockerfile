@@ -1,3 +1,7 @@
+ARG BUN_VERSION=1.3.6
+
+FROM oven/bun:${BUN_VERSION}-slim AS bun
+
 FROM node:22-bookworm-slim
 
 RUN apt-get update \
@@ -19,6 +23,9 @@ RUN export COREPACK_HOME=/opt/corepack \
   && pnpm --version >/dev/null \
   && yarn --version >/dev/null \
   && chmod -R a+rX /opt/corepack
+
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+RUN ln -s bun /usr/local/bin/bunx && bun --version >/dev/null
 
 COPY --chmod=755 weft-init.sh /usr/local/bin/weft-init
 ENV COREPACK_HOME=/tmp/corepack

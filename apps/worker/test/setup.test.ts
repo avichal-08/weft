@@ -58,6 +58,31 @@ describe('detectSetup', () => {
     ).toBe('yarn install --immutable');
   });
 
+  it('uses bun with a bun lockfile, text or binary', async () => {
+    for (const lock of ['bun.lock', 'bun.lockb']) {
+      expect(await detectSetup(await repo({ 'package.json': pkg(), [lock]: '' }))).toEqual({
+        manager: 'bun',
+        command: 'bun install --frozen-lockfile',
+      });
+    }
+  });
+
+  it('follows packageManager when there is no lockfile', async () => {
+    const managed = (packageManager: string) =>
+      JSON.stringify({ packageManager, dependencies: { ms: '2.1.3' } });
+    expect(await detectSetup(await repo({ 'package.json': managed('bun@1.3.6') }))).toEqual({
+      manager: 'bun',
+      command: 'bun install',
+    });
+    expect(await detectSetup(await repo({ 'package.json': managed('pnpm@10.33.0') }))).toEqual({
+      manager: 'pnpm',
+      command: 'pnpm install',
+    });
+    expect(await detectSetup(await repo({ 'package.json': managed('cargo@1') }))).toMatchObject({
+      manager: 'npm',
+    });
+  });
+
   it('counts dev dependencies too', async () => {
     const dir = await repo({
       'package.json': JSON.stringify({ devDependencies: { vitest: '1' } }),

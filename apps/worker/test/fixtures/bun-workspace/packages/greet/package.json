@@ -1,0 +1,6 @@
+{
+  "name": "@fixture/greet",
+  "private": true,
+  "type": "module",
+  "exports": "./index.js"
+}
