@@ -12,7 +12,7 @@ agentic search, and returns a diff only if the tests pass in a clean sandbox.
 apps/
   api/           http api: create, list, cancel runs
   web/           Next.js dashboard
-  worker         (next)
+  worker/        runs jobs: clone → sandbox → agent → verify → diff
 infra/
   compose.yml    redis
   sandbox/       image every agent run executes in
@@ -37,6 +37,18 @@ pnpm infra:up               # redis
 pnpm db:migrate             # create tables on neon
 pnpm sandbox:build && pnpm sandbox:smoke
 pnpm typecheck && pnpm lint && pnpm build
+```
+
+Run it end to end (two terminals):
+
+```bash
+pnpm --filter @weft/api dev
+pnpm --filter @weft/worker dev
+```
+
+```bash
+curl -X POST localhost:3001/runs -H 'content-type: application/json' \
+  -d '{"repoUrl":"https://github.com/you/repo","task":"Make the failing test pass","testCommand":"npm test"}'
 ```
 
 Postgres is hosted on [Neon](https://neon.tech). `DATABASE_URL` is the pooled connection used by

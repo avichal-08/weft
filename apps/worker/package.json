@@ -1,0 +1,34 @@
+{
+  "name": "@weft/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file=../../.env --watch src/main.ts",
+    "start": "node src/main.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc",
+    "test": "vitest run --exclude '**/*.int.test.ts'",
+    "test:integration": "vitest run .int.test"
+  },
+  "dependencies": {
+    "@weft/agent": "workspace:*",
+    "@weft/db": "workspace:*",
+    "@weft/llm": "workspace:*",
+    "@weft/queue": "workspace:*",
+    "@weft/sandbox": "workspace:*",
+    "bullmq": "^6.3.17",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.10",
+    "@types/dockerode": "^4.0.2",
+    "@types/node": "^22.20.5",
+    "@weft/eslint-config": "workspace:*",
+    "@weft/tsconfig": "workspace:*",
+    "dockerode": "^5.0.1",
+    "eslint": "^10.13.0",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.5"
+  }
+}

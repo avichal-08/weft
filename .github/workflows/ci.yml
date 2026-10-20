@@ -40,5 +40,6 @@ jobs:
       - run: sh infra/sandbox/smoke.sh weft-sandbox:dev
       - run: pnpm --filter @weft/sandbox test:integration
       - run: pnpm --filter @weft/agent test:integration
+      - run: pnpm --filter @weft/worker test:integration
       - run: docker compose -f infra/compose.yml up -d --wait
       - run: docker compose -f infra/compose.yml exec -T redis redis-cli config get maxmemory-policy | grep -q noeviction
