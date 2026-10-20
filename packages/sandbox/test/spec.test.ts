@@ -32,6 +32,12 @@ describe('containerSpec', () => {
     expect(host.Tmpfs!['/workspace']).toContain('uid=1000');
   });
 
+  it('allows executing files in tmpfs, which docker otherwise mounts noexec', () => {
+    for (const opts of Object.values(host.Tmpfs!)) {
+      expect(opts.split(',')).toContain('exec');
+    }
+  });
+
   it('always sets the sandbox label', () => {
     const s = containerSpec({ image: 'img', labels: { [SANDBOX_LABEL]: 'x', run: 'r1' } });
     expect(s.Labels).toEqual({ run: 'r1', [SANDBOX_LABEL]: '1' });

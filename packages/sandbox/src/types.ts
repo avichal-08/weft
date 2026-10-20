@@ -1,3 +1,5 @@
+import type { Readable } from 'node:stream';
+
 export type SandboxLimits = {
   cpus: number;
   memoryMb: number;
@@ -17,6 +19,16 @@ export type ExecOptions = {
   env?: Record<string, string>;
   maxOutputBytes?: number;
   timeoutMs?: number;
+  stdin?: string | Buffer | Readable;
+};
+
+export type PutFilesOptions = {
+  timeoutMs?: number;
+  ignore?: (path: string) => boolean;
+};
+
+export type ReadFileOptions = {
+  maxBytes?: number;
 };
 
 export type ExecResult = {
@@ -31,5 +43,7 @@ export type ExecResult = {
 export type Sandbox = {
   readonly id: string;
   exec(command: string | string[], opts?: ExecOptions): Promise<ExecResult>;
+  putFiles(localDir: string, dest?: string, opts?: PutFilesOptions): Promise<void>;
+  readFile(path: string, opts?: ReadFileOptions): Promise<string>;
   destroy(): Promise<void>;
 };

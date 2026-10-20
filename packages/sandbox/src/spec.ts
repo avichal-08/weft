@@ -31,8 +31,8 @@ export function containerSpec(opts: SandboxOptions): ContainerCreateOptions {
       MemorySwap: limits.memoryMb * MB,
       PidsLimit: limits.pids,
       Tmpfs: {
-        '/tmp': `rw,nosuid,nodev,size=${limits.tmpMb}m`,
-        '/workspace': `rw,nosuid,nodev,size=${limits.workspaceMb}m,uid=1000,gid=1000`,
+        '/tmp': `rw,exec,nosuid,nodev,size=${limits.tmpMb}m`,
+        '/workspace': `rw,exec,nosuid,nodev,size=${limits.workspaceMb}m,uid=1000,gid=1000`,
       },
     },
   };

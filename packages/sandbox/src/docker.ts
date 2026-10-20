@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import { finished } from 'node:stream/promises';
 import Docker from 'dockerode';
 import {
@@ -7,6 +8,7 @@ import {
   SWEEP_SCRIPT,
   wrapCommand,
 } from './command.ts';
+import { putFiles, readFile } from './files.ts';
 import { CappedBuffer } from './output.ts';
 import { containerSpec } from './spec.ts';
 import type { ExecOptions, ExecResult, Sandbox, SandboxOptions } from './types.ts';
@@ -44,6 +46,7 @@ async function runExec(
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const exec = await container.exec({
     Cmd: wrapCommand(command, timeoutMs),
+    AttachStdin: opts.stdin !== undefined,
     AttachStdout: true,
     AttachStderr: true,
     ...(opts.cwd ? { WorkingDir: opts.cwd } : {}),
@@ -53,8 +56,14 @@ async function runExec(
   const max = opts.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
   const stdout = new CappedBuffer(max);
   const stderr = new CappedBuffer(max);
-  const stream = await exec.start({ hijack: true, stdin: false });
+  const stream = await exec.start({ hijack: true, stdin: opts.stdin !== undefined });
   docker.modem.demuxStream(stream, stdout, stderr);
+  if (opts.stdin instanceof Readable) {
+    opts.stdin.on('error', (err) => stream.destroy(err));
+    opts.stdin.pipe(stream);
+  } else if (opts.stdin !== undefined) {
+    stream.end(opts.stdin);
+  }
 
   let backstop: NodeJS.Timeout | undefined;
   const escaped = new Promise<'escaped'>((resolve) => {
@@ -63,7 +72,10 @@ async function runExec(
       timeoutMs + KILL_AFTER_SECONDS * 1000 + BACKSTOP_GRACE_MS,
     );
   });
-  const outcome = await Promise.race([finished(stream).then(() => 'done' as const), escaped]);
+  const outcome = await Promise.race([
+    finished(stream, { writable: false }).then(() => 'done' as const),
+    escaped,
+  ]);
   clearTimeout(backstop);
 
   const output = () => ({
@@ -104,9 +116,14 @@ export async function createSandbox(
 
   const state: State = { broken: false };
 
+  const exec: Sandbox['exec'] = (command, execOpts) =>
+    runExec(docker, container, state, command, execOpts);
+
   return {
     id: container.id,
-    exec: (command, execOpts) => runExec(docker, container, state, command, execOpts),
+    exec,
+    putFiles: (localDir, dest, putOpts) => putFiles(exec, localDir, dest, putOpts),
+    readFile: (path, readOpts) => readFile(exec, path, readOpts),
     async destroy() {
       try {
         await container.remove({ force: true });

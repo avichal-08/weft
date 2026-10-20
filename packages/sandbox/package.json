@@ -13,11 +13,13 @@
     "test:integration": "vitest run .int.test"
   },
   "dependencies": {
-    "dockerode": "^5.0.1"
+    "dockerode": "^5.0.1",
+    "tar-fs": "^3.1.3"
   },
   "devDependencies": {
     "@types/dockerode": "^4.0.2",
     "@types/node": "^22.20.5",
+    "@types/tar-fs": "^2.0.4",
     "@weft/eslint-config": "workspace:*",
     "@weft/tsconfig": "workspace:*",
     "eslint": "^10.12.0",
