@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "typecheck": "tsc",
     "test": "vitest run --exclude '**/*.int.test.ts'",
-    "test:integration": "vitest run .int.test"
+    "test:integration": "vitest run .int.test",
+    "demo": "node --env-file=../../.env scripts/demo.ts"
   },
   "dependencies": {
     "@weft/llm": "workspace:*",

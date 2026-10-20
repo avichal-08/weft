@@ -1,6 +1,6 @@
 # @weft/agent
 
-The coding agent: the tools it can call and (soon) the loop that drives them. Tools follow
+The coding agent: the tools it can call and the loop that drives them. Tools follow
 Claude Code's design: the agent finds code with `grep`, `glob` and `view_file` (agentic search,
 no embedding index) and edits with exact string replacement.
 
@@ -32,6 +32,46 @@ for (const call of toolCalls(res.content).map(parseToolCall)) {
 | `run_command`      | Run a shell command (no network)                                            |
 | `run_tests`        | Run the repo's configured test command                                      |
 | `finish`           | End the run with a summary of the change                                    |
+
+## The loop
+
+```ts
+const ctx = createToolContext({ sandbox, root: '/workspace/repo', testCommand: 'npm test' });
+const res = await runAgent({
+  llm,
+  ctx,
+  task: 'Make the failing tests pass.',
+  onEvent: console.log,
+});
+// res.status, res.summary, res.steps, res.usage, res.events, res.messages
+```
+
+Each step sends the conversation to the model, runs every tool call it made, and sends all the
+results back in one message (the APIs require every call to be answered, failed ones included).
+
+| Status         | When                                                                   |
+| -------------- | ---------------------------------------------------------------------- |
+| `finished`     | The model called `finish`; `summary` holds its description.            |
+| `max_steps`    | The step budget (default 30) ran out.                                  |
+| `no_tool_call` | The model replied without a tool, was reminded once, and did it again. |
+| `max_tokens`   | A response hit the output token limit without a tool call.             |
+| `refusal`      | The model declined.                                                    |
+| `aborted`      | The `signal` fired; checked between steps and passed to the LLM call.  |
+
+Errors the model can't fix (auth, exhausted retries, a dead sandbox) are thrown rather than
+fed back. `onEvent` receives one `llm` event per step (tokens, latency, stop reason, text) and one
+`tool` event per call (args, duration, error flag, first 2000 characters of output); the same
+events are returned in `res.events`. The system prompt is in `src/prompt.ts`.
+
+## Demo
+
+```bash
+pnpm --filter @weft/agent demo                      # fixtures/add-bug with the LLM from .env
+pnpm --filter @weft/agent demo <dir> "<task>"       # any local repo
+```
+
+Copies the repo into a fresh sandbox, commits it, runs the agent with a live trace, then reruns
+the tests independently and prints the `git diff`.
 
 ## Running tools
 
@@ -109,5 +149,5 @@ are usually summarised at the end.
 
 ```bash
 pnpm --filter @weft/agent test               # unit tests
-pnpm --filter @weft/agent test:integration   # tools against a fixture repo in a real sandbox
+pnpm --filter @weft/agent test:integration   # tools and a scripted agent run in a real sandbox
 ```

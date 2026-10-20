@@ -1,3 +1,4 @@
+import type { LLMProvider, Message, StopReason, Usage } from '@weft/llm';
 import type { Sandbox } from '@weft/sandbox';
 import type { z } from 'zod';
 import type { TOOLS } from './tools/definitions.ts';
@@ -35,4 +36,51 @@ export type EditResult =
 export type ToolOutput = {
   content: string;
   isError: boolean;
+};
+
+export type AgentStatus =
+  'finished' | 'max_steps' | 'no_tool_call' | 'max_tokens' | 'refusal' | 'aborted';
+
+export type AgentEvent =
+  | {
+      type: 'llm';
+      step: number;
+      stopReason: StopReason;
+      usage: Usage;
+      latencyMs: number;
+      text: string;
+    }
+  | {
+      type: 'tool';
+      step: number;
+      id: string;
+      name: string;
+      args: unknown;
+      isError: boolean;
+      durationMs: number;
+      output: string;
+    };
+
+export type ToolExecutor = (ctx: ToolContext, call: ParsedToolCall) => Promise<ToolOutput>;
+
+export type AgentOptions = {
+  llm: LLMProvider;
+  ctx: ToolContext;
+  task: string;
+  system?: string;
+  maxSteps?: number;
+  maxNudges?: number;
+  maxTokens?: number;
+  signal?: AbortSignal;
+  onEvent?: (event: AgentEvent) => void;
+  execute?: ToolExecutor;
+};
+
+export type AgentResult = {
+  status: AgentStatus;
+  summary: string | undefined;
+  steps: number;
+  usage: Usage;
+  messages: Message[];
+  events: AgentEvent[];
 };
