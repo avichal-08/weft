@@ -1,7 +1,13 @@
-import { cancelRun, createRun, getRun, listRuns } from '@weft/db';
+import { cancelRun, createRun, getRun, listRunEvents, listRuns } from '@weft/db';
 import express, { type ErrorRequestHandler, type Express } from 'express';
 import { ZodError } from 'zod';
-import { createRunBody, definedOnly, listRunsQuery, runIdParam } from './schemas.ts';
+import {
+  createRunBody,
+  definedOnly,
+  listEventsQuery,
+  listRunsQuery,
+  runIdParam,
+} from './schemas.ts';
 import type { AppDeps } from './types.ts';
 
 const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next) => {
@@ -65,6 +71,19 @@ export function createApp(deps: AppDeps): Express {
       return;
     }
     res.json({ run });
+  });
+
+  app.get('/runs/:id/events', async (req, res) => {
+    const { id } = runIdParam.parse(req.params);
+    const query = definedOnly(listEventsQuery.parse(req.query));
+    const run = await getRun(deps.db, id);
+    if (!run) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    const attempt = query.attempt ?? run.attempt;
+    const events = await listRunEvents(deps.db, id, { ...query, attempt });
+    res.json({ attempt, status: run.status, events });
   });
 
   app.post('/runs/:id/cancel', async (req, res) => {

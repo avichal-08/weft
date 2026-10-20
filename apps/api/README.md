@@ -18,14 +18,15 @@ curl -X POST localhost:3001/runs -H 'content-type: application/json' -d '{
 
 ## Routes
 
-| Route                   | Response                                                                   |
-| ----------------------- | -------------------------------------------------------------------------- |
-| `POST /runs`            | `201 { run }` with `Location`; `400` invalid body; `503` queue unavailable |
-| `GET /runs`             | `{ runs }`, newest first. `?status=queued` and `?limit=1..200`             |
-| `GET /runs/:id`         | `{ run }`; `404` unknown; `400` not a uuid                                 |
-| `POST /runs/:id/cancel` | `{ run }` now `cancelled`; `409` if it had already finished                |
-| `GET /healthz`          | `200` while the process is up                                              |
-| `GET /readyz`           | `{ db, redis }`; `503` if either check fails                               |
+| Route                   | Response                                                                                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /runs`            | `201 { run }` with `Location`; `400` invalid body; `503` queue unavailable                                                                      |
+| `GET /runs`             | `{ runs }`, newest first. `?status=queued` and `?limit=1..200`                                                                                  |
+| `GET /runs/:id`         | `{ run }`; `404` unknown; `400` not a uuid                                                                                                      |
+| `GET /runs/:id/events`  | `{ attempt, status, events }`: the run's step trace, current attempt by default; `?afterSeq=` returns only newer events; `?attempt=`, `?limit=` |
+| `POST /runs/:id/cancel` | `{ run }` now `cancelled`; `409` if it had already finished                                                                                     |
+| `GET /healthz`          | `200` while the process is up                                                                                                                   |
+| `GET /readyz`           | `{ db, redis }`; `503` if either check fails                                                                                                    |
 
 Errors are JSON: `{ error: 'invalid_request', issues: [{ path, message }] }`,
 `{ error: 'invalid_json' }`, `{ error: 'not_found' }`, `{ error: 'internal' }`.

@@ -3,7 +3,7 @@ import { cp, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { cancelRun, claimRun, createRun, getRun } from '@weft/db';
+import { cancelRun, claimRun, createRun, getRun, listRunEvents } from '@weft/db';
 import { reset, testDb, type TestDb } from '@weft/db/testing';
 import {
   createMockProvider,
@@ -108,6 +108,24 @@ describe('executeRun', () => {
       '#4 llm T in=0 out=0',
       '   ✓ finish T',
     ]);
+
+    const events = await listRunEvents(db, run.id, { attempt: 1 });
+    expect(events.map((e) => e.seq)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(events.map((e) => (e.type === 'tool' ? e.data.name : e.type))).toEqual([
+      'llm',
+      'view_file',
+      'llm',
+      'str_replace_edit',
+      'llm',
+      'run_tests',
+      'llm',
+      'finish',
+    ]);
+    expect(events[3]?.data).toMatchObject({
+      isError: false,
+      args: { path: 'src/math.js', old_str: 'a - b', new_str: 'a + b' },
+    });
+    expect(events[5]?.data.output).toMatch(/^Tests passed/);
   });
 
   it('logs model retries and still finishes the run', async () => {

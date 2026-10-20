@@ -23,6 +23,12 @@ export const listRunsQuery = z.object({
 
 export const runIdParam = z.object({ id: z.uuid() });
 
+export const listEventsQuery = z.object({
+  attempt: z.coerce.number().int().min(1).optional(),
+  afterSeq: z.coerce.number().int().min(-1).optional(),
+  limit: z.coerce.number().int().min(1).max(1000).optional(),
+});
+
 export const definedOnly = <T extends Record<string, unknown>>(obj: T) =>
   Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as {
     [K in keyof T]: Exclude<T[K], undefined>;

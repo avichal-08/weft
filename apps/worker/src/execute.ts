@@ -1,9 +1,18 @@
 import { createToolContext, runAgent, type AgentEvent } from '@weft/agent';
-import { claimRun, completeRun, getRun, recordProgress, type CompleteRunInput } from '@weft/db';
+import {
+  appendRunEvents,
+  claimRun,
+  completeRun,
+  getRun,
+  recordProgress,
+  type CompleteRunInput,
+  type NewRunEvent,
+} from '@weft/db';
 import { emptyUsage, LLMError, withRetry } from '@weft/llm';
 import { createSandbox, type Sandbox } from '@weft/sandbox';
 import { CloneError, cloneRepo } from './clone.ts';
 import { describeEvent, describeRetry, shortId } from './log.ts';
+import { toRunEvent } from './trace.ts';
 import type { RunConfig, RunOutcome, WorkerDeps } from './types.ts';
 import { DEFAULT_WATCH_INTERVAL_MS, watchRun } from './watch.ts';
 
@@ -40,7 +49,23 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     lose,
   );
 
+  let pending: NewRunEvent[] = [];
+  let seq = 0;
+  const flushEvents = () => {
+    progress = progress.then(async () => {
+      if (pending.length === 0) return;
+      const batch = pending;
+      pending = [];
+      try {
+        await appendRunEvents(db, runId, attempt, batch);
+      } catch (err) {
+        log(`trace write failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    });
+  };
+
   const finish = async (outcome: CompleteRunInput): Promise<RunOutcome> => {
+    flushEvents();
     await progress;
     if (fenced) return { kind: 'fenced' };
     const recorded = await completeRun(db, runId, attempt, {
@@ -55,7 +80,9 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
 
   const onEvent = (event: AgentEvent) => {
     log(describeEvent(event));
+    pending.push(toRunEvent(event, seq++));
     if (event.type !== 'llm') return;
+    flushEvents();
     usage.steps = event.step;
     usage.inputTokens += event.usage.inputTokens;
     usage.outputTokens += event.usage.outputTokens;

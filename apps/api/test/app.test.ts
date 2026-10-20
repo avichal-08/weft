@@ -1,6 +1,6 @@
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
-import { getRun } from '@weft/db';
+import { appendRunEvents, claimRun, getRun } from '@weft/db';
 import { reset, testDb, type TestDb } from '@weft/db/testing';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.ts';
@@ -135,6 +135,39 @@ describe('GET /runs/:id', () => {
   it('answers 404 for an unknown id and 400 for a malformed one', async () => {
     expect((await api('/runs/00000000-0000-4000-8000-000000000000')).status).toBe(404);
     expect((await api('/runs/not-a-uuid')).status).toBe(400);
+  });
+});
+
+describe('GET /runs/:id/events', () => {
+  const llm = (seq: number) => ({
+    seq,
+    type: 'llm' as const,
+    step: seq + 1,
+    data: { text: `s${seq}` },
+  });
+
+  it('returns the current attempt by default, and pages with afterSeq', async () => {
+    const run = runOf((await post('/runs', valid)).body);
+    await claimRun(db, run.id, 'w1');
+    await claimRun(db, run.id, 'w2');
+    await appendRunEvents(db, run.id, 1, [llm(0)]);
+    await appendRunEvents(db, run.id, 2, [llm(0), llm(1), llm(2)]);
+
+    const all = await api(`/runs/${run.id}/events`);
+    expect(all.body).toMatchObject({ attempt: 2, status: 'running' });
+    expect((all.body.events as { seq: number }[]).map((e) => e.seq)).toEqual([0, 1, 2]);
+
+    const newer = await api(`/runs/${run.id}/events?afterSeq=0`);
+    expect((newer.body.events as { seq: number }[]).map((e) => e.seq)).toEqual([1, 2]);
+
+    const old = await api(`/runs/${run.id}/events?attempt=1`);
+    expect(old.body).toMatchObject({ attempt: 1, events: [{ seq: 0, data: { text: 's0' } }] });
+  });
+
+  it('answers 404 for unknown runs and 400 for bad queries', async () => {
+    expect((await api('/runs/00000000-0000-4000-8000-000000000000/events')).status).toBe(404);
+    const run = runOf((await post('/runs', valid)).body);
+    expect((await api(`/runs/${run.id}/events?limit=0`)).status).toBe(400);
   });
 });
 

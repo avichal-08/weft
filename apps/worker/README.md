@@ -24,6 +24,15 @@ pnpm --filter @weft/worker dev
 6. **Diff.** `git add -A && git diff --cached`, so new files are included.
 7. **Record** with `completeRun` (fenced), then always remove the sandbox and the checkout.
 
+### Trace
+
+Every agent event, each model call and each tool call, is stored in `run_events` with a
+running `seq`, so the dashboard (and later the chat UI) can replay a run step by step. Events
+are buffered and written once per model step on the same background chain as progress, so the
+agent never waits on the database; whatever is left is written when the run ends. Long string
+arguments (a `create_file` with a whole file) are cut to 2000 characters; tool output is already
+capped by the agent. A failed trace write is logged and never fails the run.
+
 ### Logs
 
 Every line is tagged with the run's short id, so a slow or failed run can be read straight from
