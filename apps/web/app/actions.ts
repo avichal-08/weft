@@ -2,38 +2,56 @@
 
 import { refresh } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { cancelRun, createRun } from '@/lib/api';
+import { cancelRun, createSession, sendMessage, type ApiError } from '@/lib/api';
 import type { FormState } from '@/lib/types';
 
 const text = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
 
-export async function createRunAction(_prev: FormState, form: FormData): Promise<FormState> {
+const describe = (status: number, body: ApiError) =>
+  body.issues?.map((i) => `${i.path || 'request'}: ${i.message}`).join(' · ') ??
+  body.error ??
+  `request failed (${status})`;
+
+export async function createSessionAction(_prev: FormState, form: FormData): Promise<FormState> {
   const fields = {
     repoUrl: text(form, 'repoUrl'),
-    task: text(form, 'task'),
+    baseRef: text(form, 'baseRef'),
     testCommand: text(form, 'testCommand'),
     provider: text(form, 'provider'),
     model: text(form, 'model'),
-    maxSteps: text(form, 'maxSteps'),
+    message: text(form, 'message'),
   };
-
-  const config = {
-    ...(fields.provider ? { provider: fields.provider } : {}),
-    ...(fields.model ? { model: fields.model } : {}),
-    ...(fields.maxSteps ? { maxSteps: Number(fields.maxSteps) } : {}),
-  };
-  const res = await createRun({
+  const res = await createSession({
     repoUrl: fields.repoUrl,
-    task: fields.task,
-    testCommand: fields.testCommand,
-    config,
+    message: fields.message,
+    ...(fields.baseRef ? { baseRef: fields.baseRef } : {}),
+    ...(fields.testCommand ? { testCommand: fields.testCommand } : {}),
+    config: {
+      ...(fields.provider ? { provider: fields.provider } : {}),
+      ...(fields.model ? { model: fields.model } : {}),
+    },
   });
+  if (!res.ok) return { error: describe(res.status, res.body), fields };
+  redirect(`/sessions/${res.data.session.id}`);
+}
 
+export async function sendMessageAction(
+  sessionId: string,
+  _prev: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const message = text(form, 'message');
+  if (!message) return {};
+  const res = await sendMessage(sessionId, message);
   if (!res.ok) {
-    const issues = res.body.issues?.map((i) => `${i.path || 'request'}: ${i.message}`).join(' · ');
-    return { error: issues ?? res.body.error ?? `request failed (${res.status})`, fields };
+    const error =
+      res.status === 409
+        ? 'weft is still working on your last message.'
+        : describe(res.status, res.body);
+    return { error, fields: { message } };
   }
-  redirect(`/runs/${res.data.run.id}`);
+  refresh();
+  return { sent: Date.now() };
 }
 
 export async function cancelRunAction(id: string): Promise<void> {

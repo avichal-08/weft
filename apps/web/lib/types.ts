@@ -2,6 +2,8 @@ export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'error' 
 
 export type Run = {
   id: string;
+  sessionId: string | null;
+  turn: number | null;
   status: RunStatus;
   attempt: number;
   workerId: string | null;
@@ -26,6 +28,7 @@ export type Run = {
 export type FormState = {
   error?: string;
   fields?: Record<string, string>;
+  sent?: number;
 };
 
 export const ACTIVE: readonly RunStatus[] = ['queued', 'running'];
@@ -49,3 +52,18 @@ export type ToolEventData = {
 export type RunEvent =
   | { seq: number; step: number; type: 'llm'; data: LlmEventData; createdAt: string }
   | { seq: number; step: number; type: 'tool'; data: ToolEventData; createdAt: string };
+
+export type Session = {
+  id: string;
+  title: string;
+  repoUrl: string;
+  baseRef: string | null;
+  testCommand: string | null;
+  config: { provider?: string; model?: string; maxSteps?: number };
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SessionSummary = Session & { turns: number; lastStatus: RunStatus | null };
+
+export type SessionWithTurns = Session & { turns: Run[] };

@@ -1,5 +1,5 @@
 import 'server-only';
-import type { Run, RunEvent } from './types';
+import type { Run, RunEvent, Session, SessionSummary, SessionWithTurns } from './types';
 
 const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 
@@ -21,11 +21,20 @@ async function call<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> 
     : { ok: false, status: res.status, body: body as ApiError };
 }
 
-export const listRuns = () => call<{ runs: Run[] }>('/runs?limit=50');
 export const getRun = (id: string) => call<{ run: Run }>(`/runs/${id}`);
-export const createRun = (body: unknown) =>
-  call<{ run: Run }>('/runs', { method: 'POST', body: JSON.stringify(body) });
 export const getRunEvents = (id: string) =>
   call<{ attempt: number; status: string; events: RunEvent[] }>(`/runs/${id}/events?limit=1000`);
 export const cancelRun = (id: string) =>
   call<{ run: Run }>(`/runs/${id}/cancel`, { method: 'POST' });
+export const listSessions = () => call<{ sessions: SessionSummary[] }>('/sessions?limit=50');
+export const getSession = (id: string) => call<{ session: SessionWithTurns }>(`/sessions/${id}`);
+export const createSession = (body: unknown) =>
+  call<{ session: Session; run: Run }>('/sessions', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+export const sendMessage = (id: string, message: string) =>
+  call<{ run: Run }>(`/sessions/${id}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  });

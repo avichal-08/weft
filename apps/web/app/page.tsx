@@ -1,23 +1,18 @@
-import { Suspense } from 'react';
-import { NewRunForm } from '@/components/new-run-form';
-import { RunsList } from '@/components/runs-list';
+import { NewChatForm } from '@/components/new-chat-form';
 
 export default function Home() {
   return (
-    <div className="grid grid-cols-1 gap-10">
-      <section>
-        <h1 className="mb-1 text-xl font-semibold">New run</h1>
-        <p className="mb-4 text-sm text-zinc-500">
-          The agent works in an isolated sandbox and returns a diff once the tests pass.
-        </p>
-        <NewRunForm />
-      </section>
-      <section>
-        <h2 className="mb-3 text-lg font-semibold">Runs</h2>
-        <Suspense fallback={<p className="text-sm text-zinc-500">Loading runs…</p>}>
-          <RunsList />
-        </Suspense>
-      </section>
+    <div className="flex-1 overflow-y-auto">
+      <div className="mx-auto grid max-w-2xl grid-cols-1 gap-6 px-6 py-16">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">What should weft work on?</h1>
+          <p className="mt-2 text-sm text-zinc-500">
+            Point it at a repository, then ask a question or describe a change. It works in an
+            isolated sandbox, shows each step, and keeps the conversation going.
+          </p>
+        </div>
+        <NewChatForm />
+      </div>
     </div>
   );
 }

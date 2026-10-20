@@ -1,35 +1,49 @@
 # @weft/web
 
-The weft dashboard: start a run, watch it progress, read the summary and the diff. Next.js 16
-(App Router, Cache Components), React 19, Tailwind 4.
+The weft app: chat with a coding agent about a repository. Next.js 16 (App Router, Cache
+Components), React 19, Tailwind 4.
 
 ```bash
-pnpm --filter @weft/web dev     # http://localhost:3000 (needs the api on :3001)
+pnpm --filter @weft/web dev     # http://localhost:3000 (needs the api on :3001 and a worker)
 ```
 
-## Pages
+## Screens
 
-| Route        | What it shows                                                                              |
-| ------------ | ------------------------------------------------------------------------------------------ |
-| `/`          | New-run form (repo, task, test command, provider, model, max steps) and the 50 latest runs |
-| `/runs/[id]` | Status, steps, tokens, duration, summary, failure details, coloured diff, cancel           |
+| Route            | What it shows                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------- |
+| `/`              | New chat: repository, optional branch, test command, provider and model, and the first message |
+| `/sessions/[id]` | The conversation, a composer, and the chat's cumulative changes                                |
+| `/runs/[id]`     | One turn in detail (status, tokens, timeline, diff), linked from each turn                     |
 
-Both refresh every 2 s while a run is `queued` or `running`, and stop once it finishes.
+The sidebar lists every chat, most recently active first, with a dot for the latest turn's state
+(blue and pulsing while the agent works).
 
-## Activity timeline
+## The conversation
 
-The run page renders the run's trace (`GET /runs/:id/events`) step by step: each model call
-with its latency, tokens and any narration, followed by the tool calls it made. Each tool gets a
-one-line summary (the grep pattern, the file and line range, the command) instead of raw
-JSON; its output sits in a collapsed `<details>`, and failed calls open by default.
-`str_replace_edit` shows its old and new text as a small diff. The run and its trace are
-fetched in parallel, and the 2 s refresh makes the timeline grow while the run is active.
+Each turn shows your message, then the agent's work, then its reply:
+
+- **While it works**, the activity timeline is open and grows live: each model step with its
+  latency and tokens, each tool call with a one-line summary, collapsed output, failed calls
+  opened, and edits shown as small diffs.
+- **Once done**, the activity folds into "worked · 7 steps · 2m 4s · 21.5k tokens" (click to
+  expand, or follow "details" to the run page) and the reply appears below it. A turn that didn't
+  complete says why (`tests_failed`, `apply_failed`, rate limit, …); if the chat has a test
+  command, a passing run shows "✓ tests pass".
+- **The composer** sends with Enter (Shift+Enter for a new line). While a turn is running it is
+  disabled and shows **Stop**, which cancels the turn. The API refuses a second message while one
+  is in progress, and the form says so.
+- **Changes** is the latest cumulative diff: everything the agent has changed in this chat, beside
+  the conversation on wide screens and under it on narrow ones.
+
+Pages refresh every 2 s while a turn is active and stop when it finishes; pushing updates as they
+happen (WebSockets or SSE) is planned.
 
 ## How it talks to the API
 
-The browser never calls the API. Server Components fetch runs and Server Actions create and
-cancel them, all from the Next.js server (`lib/api.ts`, marked `server-only`). So there is no
-CORS to configure and the API doesn't need to be reachable from the browser.
+The browser never calls the API. Server Components read sessions, turns and traces; Server
+Actions create chats, send messages and cancel turns, all from the Next.js server
+(`lib/api.ts`, marked `server-only`). There is no CORS to configure and the API doesn't need to be
+reachable from the browser.
 
 | Variable  | Default                 |
 | --------- | ----------------------- |
@@ -37,13 +51,10 @@ CORS to configure and the API doesn't need to be reachable from the browser.
 
 ## Notes
 
-- **Cache Components is on**, so data is fetched fresh on every request and any component
-  reading request data (`fetch`, route `params`) must sit inside `<Suspense>`; the build fails
-  otherwise. Pages are partially prerendered: the static shell is served instantly and run data
-  streams in.
-- **Unknown run ids** render the 404 page but with HTTP status 200: the shell, status
-  included, is sent before the run lookup finishes. A known trade-off of streaming.
-- Validation errors from the API (`POST /runs` → 400) are shown on the form, which keeps what
-  you typed (`useActionState`).
-- The timeline updates by polling every 2 s; pushing steps as they happen (WebSockets or SSE)
-  comes with the chat UI.
+- **Cache Components is on**: data is fetched fresh on every request, and anything reading
+  request data (`fetch`, route `params`) sits inside `<Suspense>`, or the build fails. Pages are
+  partially prerendered: the shell is served at once and the data streams in.
+- **Single-column grids use `grid-cols-1`** (`minmax(0, 1fr)`). A bare `grid` sizes its column to
+  the widest unwrappable child, so one long task title or diff line would widen the whole page.
+- **Unknown ids** render the 404 page with HTTP 200, since the shell is sent before the lookup
+  finishes; a known trade-off of streaming.
