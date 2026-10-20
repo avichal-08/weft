@@ -36,7 +36,7 @@ cp .env.example .env        # fill in the Neon urls and an LLM key
 pnpm infra:up               # redis
 pnpm db:migrate             # create tables on neon
 pnpm sandbox:build && pnpm sandbox:smoke
-pnpm typecheck && pnpm lint && pnpm build
+pnpm check                  # lint, typecheck, unit tests; two tasks at a time to spare memory
 ```
 
 Run it end to end (three terminals), then open http://localhost:3000:
