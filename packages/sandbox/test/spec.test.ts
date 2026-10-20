@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { containerSpec, DEFAULT_LIMITS, SANDBOX_LABEL } from '../src/spec.ts';
+import { containerSpec, DEFAULT_LIMITS, OWNER_LABEL, SANDBOX_LABEL } from '../src/spec.ts';
 
 describe('containerSpec', () => {
   const spec = containerSpec({ image: 'img' });
@@ -41,5 +41,10 @@ describe('containerSpec', () => {
   it('always sets the sandbox label', () => {
     const s = containerSpec({ image: 'img', labels: { [SANDBOX_LABEL]: 'x', run: 'r1' } });
     expect(s.Labels).toEqual({ run: 'r1', [SANDBOX_LABEL]: '1' });
+  });
+
+  it('records the owner, which callers cannot spoof through labels', () => {
+    const s = containerSpec({ image: 'img', owner: 'w1', labels: { [OWNER_LABEL]: 'evil' } });
+    expect(s.Labels?.[OWNER_LABEL]).toBe('w1');
   });
 });

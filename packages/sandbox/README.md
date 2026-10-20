@@ -6,7 +6,11 @@ and every tool call the agent makes (read a file, run tests, grep) executes insi
 ```ts
 import { createSandbox } from '@weft/sandbox';
 
-const sandbox = await createSandbox({ image: 'weft-sandbox:dev', limits: { cpus: 2 } });
+const sandbox = await createSandbox({
+  image: 'weft-sandbox:dev',
+  owner: workerId,
+  limits: { cpus: 2 },
+});
 try {
   await sandbox.putFiles('./checkout', '/workspace', { ignore: (p) => p.includes('node_modules') });
   const res = await sandbox.exec('npm test', { cwd: '/workspace', timeoutMs: 60_000 });
@@ -26,6 +30,8 @@ try {
 | `sandbox.putFiles(localDir, dest?, { ignore, timeoutMs })`          | Copies a local directory into the sandbox (default `/workspace`). Files end up owned by uid 1000, modes kept.                                                                      |
 | `sandbox.readFile(path, { maxBytes })`                              | Returns a file's contents as text. Throws if it's missing or over `maxBytes` (default 1 MB).                                                                                       |
 | `sandbox.destroy()`                                                 | Force-removes the container. Safe to call more than once.                                                                                                                          |
+| `reapSandboxes({ isOwnerAlive, minAgeMs, maxAgeMs, labels })`       | Removes leftover sandboxes; returns what it removed and why. See [Cleanup](#cleanup).                                                                                              |
+| `listSandboxes(docker, labels?)`                                    | Every `weft.sandbox` container with its state, age and owner.                                                                                                                      |
 | `containerSpec(opts)`                                               | Pure function: options → Docker create request. Useful to inspect or test the policy.                                                                                              |
 | `DEFAULT_LIMITS`, `DEFAULT_MAX_OUTPUT_BYTES`, `DEFAULT_TIMEOUT_MS`  | 1 CPU, 1 GB memory, 256 processes, 256 MB `/tmp`, 1 GB `/workspace`; 1 MB output per stream; 120 s per command.                                                                    |
 
@@ -75,6 +81,22 @@ Docker has no API to kill an exec, so timeouts work in three layers:
 
 A more precise per-command process tracker (an in-sandbox daemon) is planned for M2.
 
+## Cleanup
+
+`destroy()` runs in a `finally`, which only helps while the worker is alive. If a worker crashes,
+its sandboxes keep running. `reapSandboxes` lists every `weft.sandbox` container and removes:
+
+| Reason        | When                                                                          |
+| ------------- | ----------------------------------------------------------------------------- |
+| `not-running` | It stopped (crash, OOM kill, backstop) but was never removed.                 |
+| `too-old`     | Older than `maxAgeMs` (default 1 h). No healthy run lasts that long.          |
+| `owner-dead`  | `isOwnerAlive(owner)` returns false, e.g. the worker's heartbeat has expired. |
+
+Sandboxes younger than `minAgeMs` (default 30 s) are never touched: between `create` and
+`start` a new sandbox looks stopped. Docker's container list can lag a few hundred ms behind a
+container's real state, so a sandbox that just stopped is caught on the next sweep. The worker
+runs this on boot and on an interval.
+
 ## Testing
 
 ```bash
@@ -83,4 +105,5 @@ pnpm sandbox:build                             # once: build weft-sandbox:dev
 pnpm --filter @weft/sandbox test:integration   # real containers
 ```
 
-Integration tests use `SANDBOX_IMAGE` (default `weft-sandbox:dev`) and run in CI's `infra` job.
+Integration tests use `SANDBOX_IMAGE` (default `weft-sandbox:dev`), have a 30 s timeout (a
+cold container start takes 2–8 s on a loaded laptop) and run in CI's `infra` job.

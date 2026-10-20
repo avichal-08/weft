@@ -10,6 +10,7 @@ export const DEFAULT_LIMITS: SandboxLimits = {
 };
 
 export const SANDBOX_LABEL = 'weft.sandbox';
+export const OWNER_LABEL = 'weft.owner';
 
 const MB = 1024 * 1024;
 
@@ -20,7 +21,11 @@ export function containerSpec(opts: SandboxOptions): ContainerCreateOptions {
     Image: opts.image,
     User: '1000:1000',
     WorkingDir: '/workspace',
-    Labels: { ...opts.labels, [SANDBOX_LABEL]: '1' },
+    Labels: {
+      ...opts.labels,
+      [SANDBOX_LABEL]: '1',
+      ...(opts.owner ? { [OWNER_LABEL]: opts.owner } : {}),
+    },
     HostConfig: {
       NetworkMode: 'none',
       ReadonlyRootfs: true,
