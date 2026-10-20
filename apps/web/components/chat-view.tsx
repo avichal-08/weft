@@ -5,11 +5,11 @@ import { getRunEvents, getSession } from '@/lib/api';
 import { parseDiff } from '@/lib/diff';
 import { repoName, tokens } from '@/lib/format';
 import { ACTIVE, type Run, type RunEvent } from '@/lib/types';
-import { AutoRefresh } from './auto-refresh';
 import { Changes } from './changes';
 import { ChatShell } from './chat-shell';
 import { Composer } from './composer';
 import { CopyButton } from './copy-button';
+import { LiveWorkLog } from './live-work-log';
 import { LogoMark } from './logo';
 import { Prose } from './prose';
 import { WorkLog } from './work-log';
@@ -47,7 +47,7 @@ function Outcome({ run }: { run: Run }) {
   );
 }
 
-function Turn({ run, events }: { run: Run; events: RunEvent[] }) {
+function Turn({ run, events, attempt }: { run: Run; events: RunEvent[]; attempt: number }) {
   const active = ACTIVE.includes(run.status);
 
   return (
@@ -58,13 +58,22 @@ function Turn({ run, events }: { run: Run; events: RunEvent[] }) {
       <div className="group/turn flex gap-3.5">
         <LogoMark className="mt-0.5 size-6 shrink-0" />
         <div className="grid min-w-0 flex-1 grid-cols-1 gap-3">
-          <WorkLog
-            events={events}
-            active={active}
-            startedAt={run.startedAt}
-            finishedAt={run.finishedAt}
-            reply={run.summary}
-          />
+          {active ? (
+            <LiveWorkLog
+              runId={run.id}
+              attempt={attempt}
+              events={events}
+              startedAt={run.startedAt}
+            />
+          ) : (
+            <WorkLog
+              events={events}
+              active={false}
+              startedAt={run.startedAt}
+              finishedAt={run.finishedAt}
+              reply={run.summary}
+            />
+          )}
           {!active && run.summary && <Prose>{run.summary}</Prose>}
           {!active && <Outcome run={run} />}
           {!active && (
@@ -125,14 +134,19 @@ export async function ChatView({ params }: { params: Promise<{ id: string }> }) 
         deletions: files.reduce((n, f) => n + f.deletions, 0),
       }}
       changes={<Changes diff={diff} />}
-      revision={`${session.turns.length}:${last?.status ?? ''}:${traces.reduce((n, t) => n + (t.ok ? t.data.events.length : 0), 0)}`}
     >
-      <AutoRefresh active={activeRunId !== null} />
-      <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-6">
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6">
         <ol className="grid flex-1 grid-cols-1 content-start gap-14 pt-10 pb-6">
           {session.turns.map((run, i) => {
             const trace = traces[i];
-            return <Turn key={run.id} run={run} events={trace?.ok ? trace.data.events : []} />;
+            return (
+              <Turn
+                key={run.id}
+                run={run}
+                events={trace?.ok ? trace.data.events : []}
+                attempt={trace?.ok ? trace.data.attempt : run.attempt}
+              />
+            );
           })}
         </ol>
         <Composer

@@ -25,8 +25,9 @@ mechanics stay out of the way until you want them.
 
 - **Your messages** are bubbles on the right. **The agent's replies** are rendered Markdown (code
   blocks, lists, tables, inline code) with raw HTML ignored, so a reply can't inject markup.
-- **The agent's work** is one line per turn: a spinner with the current step ("Working… Read
-  src/lru.js") while it runs, then "Worked for 31s" once done. Expand it for compact steps:
+- **The agent's work** is one line per turn: what it is doing right now with a running timer
+  while it works ("Installing dependencies `pnpm install --frozen-lockfile` 1m 12s", then "Read
+  `src/lru.js`"), then "Worked for 31s" once done. Expand it for compact steps:
   _Searched for `get(`_, _Read `src/lru.js`_, _Edited `src/lru.js` +4 −1_, _Tests passed_, any
   text the model wrote between steps, and, per step, its output or the edit as a small diff.
   Failed steps are marked ✗.
@@ -38,8 +39,22 @@ mechanics stay out of the way until you want them.
 - **The composer** stays at the bottom: Enter sends, Shift+Enter adds a line, the model in use is
   shown beside the button, and while a turn runs it turns into **Stop**, which cancels the turn.
 
-Pages refresh every 2 s while a turn is active and stop when it finishes; pushing updates as they
-happen (WebSockets or SSE) is planned.
+### Live updates
+
+A running turn is pushed to the browser as it happens, over server-sent events:
+
+1. The page renders on the server with the turn's events so far.
+2. `LiveWorkLog`, a client component, opens an `EventSource` on `/api/runs/:id/stream`, asking
+   only for events after the last one it already has (`?attempt=&after=`).
+3. That route handler proxies the API's `GET /runs/:id/stream` byte for byte, passing
+   `Last-Event-ID` through, so the browser still never talks to the API directly.
+4. `phase` messages update the status line, `event` messages append steps, `attempt` resets the
+   list when another worker takes over, and `end` closes the stream and refreshes the page once,
+   which swaps in the final reply, diff and stats.
+
+If the connection drops, `EventSource` reconnects and resumes from `Last-Event-ID`; if it gives
+up, the component reconnects after 3 s. Nothing polls any more. SSE rather than WebSockets
+because the traffic is one way, it is plain HTTP, and resuming is built in.
 
 ## Design system
 
@@ -52,19 +67,23 @@ The accent is a warm orange, used sparingly: the brand mark, the send button, fo
 
 - **Markdown** is rendered with `react-markdown` + `remark-gfm` and custom components for every
   element (lists, tables, quotes, inline code), with raw HTML skipped.
-- **Code blocks** are highlighted on the server with Shiki (`github-light` / `github-dark-default`
-  via CSS variables, so one render serves both themes), with a language label and a copy button.
-  No highlighter ships to the browser.
+- **Code blocks** in replies are highlighted on the server with Shiki (`github-light` /
+  `github-dark-default` via CSS variables, so one render serves both themes), with a language
+  label and a copy button. No highlighter ships to the browser: the live work log renders on the
+  client, so the text the model writes between steps uses `MarkdownText` with plain code blocks,
+  and `Prose` adds Shiki on top for server-rendered replies.
 - **Diffs** carry old and new line numbers and the hunk's context line, like GitHub.
 - **Icons** are `lucide-react`; the logo is an inline SVG woven mark (`components/logo.tsx`).
 - **Chats open at the latest message** and follow new steps while the agent works, but only if you
-  are already near the bottom, so reading an earlier turn is never interrupted.
+  are already near the bottom, so reading an earlier turn is never interrupted. A
+  `ResizeObserver` on the conversation keeps it pinned whenever content grows, whether from a
+  live step or a server refresh.
 
 ## How it talks to the API
 
 The browser never calls the API. Server Components read sessions, turns and traces; Server
-Actions create chats, send messages and cancel turns, all from the Next.js server
-(`lib/api.ts`, marked `server-only`). There is no CORS to configure and the API doesn't need to be
+Actions create chats, send messages and cancel turns, and one route handler proxies the live
+stream, all from the Next.js server (`lib/api.ts`, marked `server-only`). There is no CORS to configure and the API doesn't need to be
 reachable from the browser.
 
 | Variable  | Default                 |

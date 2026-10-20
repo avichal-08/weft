@@ -33,6 +33,11 @@ export type FormState = {
 
 export const ACTIVE: readonly RunStatus[] = ['queued', 'running'];
 
+export type LivePhase = {
+  phase: 'clone' | 'sandbox' | 'restore' | 'setup' | 'agent' | 'verify';
+  detail: string | null;
+};
+
 export type LlmEventData = {
   stopReason?: string;
   usage?: { inputTokens: number; outputTokens: number; cacheReadTokens: number };

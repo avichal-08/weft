@@ -10,7 +10,6 @@ export function ChatShell({
   working,
   stats,
   changes,
-  revision,
   children,
 }: {
   title: string;
@@ -19,22 +18,22 @@ export function ChatShell({
   working: boolean;
   stats: { files: number; additions: number; deletions: number };
   changes: ReactNode;
-  revision: string;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
-  const seen = useRef<string | null>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const pinned = useRef(true);
 
   useEffect(() => {
     const el = scroller.current;
-    if (!el || seen.current === revision) return;
-    const first = seen.current === null;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
-    seen.current = revision;
-    if (first || nearBottom)
-      el.scrollTo({ top: el.scrollHeight, behavior: first ? 'instant' : 'smooth' });
-  }, [revision]);
+    if (!el || !content.current) return;
+    const observer = new ResizeObserver(() => {
+      if (pinned.current) el.scrollTop = el.scrollHeight;
+    });
+    observer.observe(content.current);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
@@ -73,8 +72,17 @@ export function ChatShell({
             )}
           </button>
         </header>
-        <div ref={scroller} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-          {children}
+        <div
+          ref={scroller}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
+          }}
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto"
+        >
+          <div ref={content} className="flex min-h-full flex-col">
+            {children}
+          </div>
         </div>
       </div>
       {open && (

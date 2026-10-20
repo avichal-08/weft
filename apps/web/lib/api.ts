@@ -1,7 +1,7 @@
 import 'server-only';
 import type { Run, RunEvent, Session, SessionSummary, SessionWithTurns } from './types';
 
-const API_URL = process.env.API_URL ?? 'http://localhost:3001';
+export const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; body: ApiError };
 

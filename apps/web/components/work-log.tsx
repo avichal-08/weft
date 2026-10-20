@@ -1,3 +1,5 @@
+'use client';
+
 import {
   ChevronRight,
   FilePlus2,
@@ -9,10 +11,43 @@ import {
   Terminal,
   type LucideIcon,
 } from 'lucide-react';
-import { describeStep } from '@/lib/steps';
+import { useEffect, useState } from 'react';
+import { describeStep, type StepLabel } from '@/lib/steps';
 import { elapsed } from '@/lib/format';
-import type { RunEvent, ToolEventData } from '@/lib/types';
-import { Prose } from './prose';
+import type { LivePhase, RunEvent, ToolEventData } from '@/lib/types';
+import { MarkdownText } from './markdown';
+
+const PHASES: Record<LivePhase['phase'], string> = {
+  clone: 'Cloning the repository',
+  sandbox: 'Starting the sandbox',
+  restore: 'Restoring earlier changes',
+  setup: 'Installing dependencies',
+  agent: 'Thinking',
+  verify: 'Running the tests',
+};
+
+function Ticker({ since }: { since: string }) {
+  const [text, setText] = useState('');
+  useEffect(() => {
+    const tick = () => setText(elapsed(since, null));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [since]);
+  return text ? <span className="text-faint tabular-nums">{text}</span> : null;
+}
+
+function activity(events: RunEvent[], phase: LivePhase | null): StepLabel {
+  if (phase && phase.phase !== 'agent') {
+    return {
+      verb: PHASES[phase.phase],
+      ...(phase.phase === 'setup' && phase.detail ? { target: phase.detail } : {}),
+    };
+  }
+  const last = events.findLast((e) => e.type === 'tool');
+  if (last?.type === 'tool' && last.data.name !== 'finish') return describeStep(last.data);
+  return { verb: events.length > 0 || phase ? 'Thinking' : 'Starting' };
+}
 
 const ICONS: Record<string, LucideIcon> = {
   grep: Search,
@@ -91,12 +126,14 @@ function Step({ data }: { data: ToolEventData }) {
 export function WorkLog({
   events,
   active,
+  phase = null,
   startedAt,
   finishedAt,
   reply,
 }: {
   events: RunEvent[];
   active: boolean;
+  phase?: LivePhase | null;
   startedAt: string | null;
   finishedAt: string | null;
   reply: string | null;
@@ -107,8 +144,7 @@ export function WorkLog({
       (e.type === 'llm' && e.data.text?.trim() && e.data.text.trim() !== reply?.trim()),
   );
   const tools = items.filter((e) => e.type === 'tool').length;
-  const lastTool = [...items].reverse().find((e) => e.type === 'tool');
-  const now = lastTool?.type === 'tool' ? describeStep(lastTool.data) : null;
+  const now = activity(events, phase);
 
   if (!active && items.length === 0) return null;
 
@@ -121,12 +157,12 @@ export function WorkLog({
           <ChevronRight className="size-3.5 transition group-open/log:rotate-90" />
         )}
         {active ? (
-          <span className="shimmer-text font-medium">
-            {events.length === 0
-              ? 'Setting up the sandbox'
-              : now
-                ? `${now.verb} ${now.target ?? ''}`
-                : 'Thinking'}
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="shimmer-text truncate font-medium">
+              {now.verb}
+              {now.target && <span className="ml-1.5 font-mono text-[12px]">{now.target}</span>}
+            </span>
+            {startedAt && <Ticker since={startedAt} />}
           </span>
         ) : (
           <span>
@@ -144,7 +180,7 @@ export function WorkLog({
             <Step key={e.seq} data={e.data} />
           ) : (
             <div key={e.seq} className="px-2 py-1.5">
-              <Prose size="sm">{e.data.text!.trim()}</Prose>
+              <MarkdownText size="sm">{e.data.text!.trim()}</MarkdownText>
             </div>
           ),
         )}
