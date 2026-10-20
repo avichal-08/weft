@@ -27,6 +27,14 @@ describe('createSandbox', () => {
     await expect(sandbox.destroy()).resolves.toBeUndefined();
   });
 
+  it('makes concurrent destroy calls wait for the same removal', async () => {
+    const sandbox = await createSandbox({ image }, docker);
+    await Promise.all([sandbox.destroy(), sandbox.destroy(), sandbox.destroy()]);
+    await expect(docker.getContainer(sandbox.id).inspect()).rejects.toMatchObject({
+      statusCode: 404,
+    });
+  });
+
   it('fails cleanly for a missing image', async () => {
     await expect(
       createSandbox({ image: 'weft-does-not-exist:nope' }, docker),

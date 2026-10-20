@@ -115,6 +115,7 @@ export async function createSandbox(
   }
 
   const state: State = { broken: false };
+  let removal: Promise<void> | undefined;
 
   const exec: Sandbox['exec'] = (command, execOpts) =>
     runExec(docker, container, state, command, execOpts);
@@ -124,12 +125,16 @@ export async function createSandbox(
     exec,
     putFiles: (localDir, dest, putOpts) => putFiles(exec, localDir, dest, putOpts),
     readFile: (path, readOpts) => readFile(exec, path, readOpts),
-    async destroy() {
-      try {
-        await container.remove({ force: true });
-      } catch (err) {
-        if (!isNotFound(err)) throw err;
-      }
+    destroy() {
+      removal ??= container.remove({ force: true }).then(
+        () => undefined,
+        (err: unknown) => {
+          if (isNotFound(err)) return;
+          removal = undefined;
+          throw err;
+        },
+      );
+      return removal;
     },
   };
 }
