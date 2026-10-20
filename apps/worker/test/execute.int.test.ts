@@ -3,7 +3,16 @@ import { cp, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { cancelRun, claimRun, createRun, getRun, listRunEvents } from '@weft/db';
+import {
+  addTurn,
+  cancelRun,
+  claimRun,
+  completeRun,
+  createRun,
+  createSession,
+  getRun,
+  listRunEvents,
+} from '@weft/db';
 import { reset, testDb, type TestDb } from '@weft/db/testing';
 import {
   createMockProvider,
@@ -289,5 +298,100 @@ describe('executeRun', () => {
     expect(await executeRun(deps(llm), run.id)).toEqual({ kind: 'fenced' });
     expect(performance.now() - started).toBeLessThan(20_000);
     expect(await leftovers(run.id)).toBe(0);
+  });
+});
+
+describe('conversations', () => {
+  const session = (testCommand?: string) =>
+    createSession(db, {
+      repoUrl,
+      message: 'Fix the add function.',
+      ...(testCommand ? { testCommand } : {}),
+    });
+
+  it('continues from the previous turn, with its history', async () => {
+    const { session: s, run: first } = await session('node --test');
+    await executeRun(deps(createMockProvider(fixScript)), first.id);
+    expect((await getRun(db, first.id))?.status).toBe('succeeded');
+
+    const next = await addTurn(db, s.id, 'Now add a subtract helper in src/subtract.js.');
+    if (!next.ok) throw new Error('turn 2 was refused');
+
+    const turn2 = createMockProvider([
+      call('view_file', { path: 'src/math.js' }),
+      call('create_file', {
+        path: 'src/subtract.js',
+        content: 'export const subtract = (a, b) => a - b;\n',
+      }),
+      call('finish', { summary: 'Added src/subtract.js.' }),
+    ]);
+    const outcome = await executeRun(deps(turn2), next.run.id);
+    expect(outcome).toMatchObject({ kind: 'completed', status: 'succeeded' });
+
+    const req = turn2.calls[0]!;
+    expect(
+      req.messages.map((m) => [m.role, m.content[0]?.type === 'text' ? m.content[0].text : '']),
+    ).toEqual([
+      ['user', 'Fix the add function.'],
+      ['assistant', 'add subtracted'],
+      ['user', 'Now add a subtract helper in src/subtract.js.'],
+    ]);
+
+    const viewed = (await listRunEvents(db, next.run.id, { attempt: 1 }))[1]!;
+    expect(viewed.data.output).toContain('return a + b;');
+
+    const diff = (await getRun(db, next.run.id))?.diff ?? '';
+    expect(diff).toContain('+  return a + b;');
+    expect(diff).toContain('+export const subtract = (a, b) => a - b;');
+  });
+
+  it('answers a question without a test command or any changes', async () => {
+    const { run } = await createSession(db, { repoUrl, message: 'What does multiply do?' });
+    const llm = createMockProvider([
+      call('view_file', { path: 'src/math.js' }),
+      call('finish', { summary: 'It multiplies its two arguments.' }),
+    ]);
+
+    expect(await executeRun(deps(llm), run.id)).toMatchObject({ status: 'succeeded' });
+    expect(await getRun(db, run.id)).toMatchObject({
+      status: 'succeeded',
+      summary: 'It multiplies its two arguments.',
+      diff: '',
+      failureKind: null,
+    });
+    expect(llm.calls[0]!.tools!.map((t) => t.name)).not.toContain('run_tests');
+  });
+
+  it('fails clearly when the previous changes no longer apply', async () => {
+    const { session: s, run: first } = await session();
+    const attempt = (await claimRun(db, first.id, 'w'))!;
+    await completeRun(db, first.id, attempt, {
+      status: 'succeeded',
+      summary: 'done',
+      diff: 'diff --git a/src/math.js b/src/math.js\n--- a/src/math.js\n+++ b/src/math.js\n@@ -1,1 +1,1 @@\n-this line is not in the file\n+replacement\n',
+    });
+    const next = await addTurn(db, s.id, 'continue');
+    if (!next.ok) throw new Error('turn 2 was refused');
+
+    await executeRun(deps(createMockProvider(fixScript)), next.run.id);
+    const done = await getRun(db, next.run.id);
+    expect(done).toMatchObject({ status: 'error', failureKind: 'apply_failed' });
+    expect(done?.failureDetail).toMatch(/no longer apply/);
+    expect(await leftovers(next.run.id)).toBe(0);
+  });
+
+  it('starts from the base branch when the previous turn recorded no changes', async () => {
+    const { session: s, run: first } = await session();
+    await cancelRun(db, first.id);
+    const next = await addTurn(db, s.id, 'try again');
+    if (!next.ok) throw new Error('turn 2 was refused');
+
+    const llm = createMockProvider([call('finish', { summary: 'ok' })]);
+    await executeRun(deps(llm), next.run.id);
+    expect(llm.calls[0]!.messages[1]).toEqual({
+      role: 'assistant',
+      content: [{ type: 'text', text: '(this turn ended without a reply: cancelled)' }],
+    });
+    expect((await getRun(db, next.run.id))?.status).toBe('succeeded');
   });
 });

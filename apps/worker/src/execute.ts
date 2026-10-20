@@ -4,6 +4,7 @@ import {
   claimRun,
   completeRun,
   getRun,
+  getSession,
   recordProgress,
   type CompleteRunInput,
   type NewRunEvent,
@@ -11,12 +12,17 @@ import {
 import { emptyUsage, LLMError, withRetry } from '@weft/llm';
 import { createSandbox, type Sandbox } from '@weft/sandbox';
 import { CloneError, cloneRepo } from './clone.ts';
+import { buildHistory, latestDiff } from './history.ts';
 import { describeEvent, describeRetry, shortId } from './log.ts';
 import { toRunEvent } from './trace.ts';
 import type { RunConfig, RunOutcome, WorkerDeps } from './types.ts';
 import { DEFAULT_WATCH_INTERVAL_MS, watchRun } from './watch.ts';
 
 export const REPO_ROOT = '/workspace/repo';
+
+export class ApplyError extends Error {
+  override name = 'ApplyError';
+}
 const DEFAULT_MAX_STEPS = 30;
 
 export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOutcome> {
@@ -98,17 +104,12 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     });
   };
 
-  const testCommand = run.testCommand;
-  if (!testCommand) {
-    stopWatching();
-    return finish({
-      status: 'error',
-      failureKind: 'no_test_command',
-      failureDetail: 'runs without a test command are not supported yet',
-    });
-  }
-
   try {
+    const previous =
+      run.sessionId && run.turn && run.turn > 1
+        ? ((await getSession(db, run.sessionId))?.turns ?? []).filter((t) => t.turn! < run.turn!)
+        : [];
+
     checkout = await cloneRepo(run.repoUrl, run.baseRef, {
       allowFileRepos: deps.allowFileRepos ?? false,
     });
@@ -120,7 +121,18 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     abort.signal.throwIfAborted();
     await sandbox.putFiles(checkout.dir, REPO_ROOT);
 
-    const ctx = createToolContext({ sandbox, root: REPO_ROOT, testCommand });
+    const base = latestDiff(previous);
+    if (base) {
+      const applied = await sandbox.exec(['git', 'apply', '--whitespace=nowarn', '-'], {
+        cwd: REPO_ROOT,
+        stdin: base,
+      });
+      if (applied.exitCode !== 0) {
+        throw new ApplyError(applied.stderr.trim() || 'git apply failed');
+      }
+    }
+
+    const ctx = createToolContext({ sandbox, root: REPO_ROOT, testCommand: run.testCommand });
     const result = await runAgent({
       llm: withRetry(deps.createLLM(config), {
         ...deps.retry,
@@ -128,6 +140,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
       }),
       ctx,
       task: run.task,
+      history: buildHistory(previous),
       maxSteps: config.maxSteps ?? DEFAULT_MAX_STEPS,
       signal: abort.signal,
       onEvent,
@@ -135,14 +148,13 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     if (result.status === 'aborted')
       return await finish({ status: 'error', failureKind: 'aborted' });
 
-    const verify = await sandbox.exec(testCommand, {
+    const verify = run.testCommand
+      ? await sandbox.exec(run.testCommand, { cwd: REPO_ROOT, timeoutMs: ctx.testTimeoutMs })
+      : null;
+    const diff = await sandbox.exec('git add -A && git diff --cached --binary --no-color', {
       cwd: REPO_ROOT,
-      timeoutMs: ctx.testTimeoutMs,
     });
-    const diff = await sandbox.exec('git add -A && git diff --cached --no-color', {
-      cwd: REPO_ROOT,
-    });
-    const passed = verify.exitCode === 0;
+    const passed = verify ? verify.exitCode === 0 : true;
 
     if (result.status === 'finished' && passed) {
       return await finish({ status: 'succeeded', diff: diff.stdout, ...summaryOf(result.summary) });
@@ -151,9 +163,9 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
       status: 'failed',
       diff: diff.stdout,
       failureKind: result.status === 'finished' ? 'tests_failed' : result.status,
-      failureDetail: passed
-        ? 'tests pass but the agent did not finish'
-        : tail(verify.stdout + verify.stderr),
+      failureDetail: !passed
+        ? tail(verify!.stdout + verify!.stderr)
+        : 'the agent stopped without replying',
       ...summaryOf(result.summary),
     });
   } catch (err) {
@@ -171,6 +183,12 @@ const tail = (text: string, max = 4000) => (text.length > max ? text.slice(-max)
 
 function describeError(err: unknown): { failureKind: string; failureDetail: string } {
   if (err instanceof CloneError) return { failureKind: 'clone_failed', failureDetail: err.message };
+  if (err instanceof ApplyError) {
+    return {
+      failureKind: 'apply_failed',
+      failureDetail: `the previous turn's changes no longer apply to the branch: ${err.message}`,
+    };
+  }
   if (err instanceof LLMError)
     return { failureKind: `llm_${err.kind}`, failureDetail: err.message.slice(0, 2000) };
   return {

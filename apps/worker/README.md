@@ -17,12 +17,20 @@ pnpm --filter @weft/worker dev
    transport and friends are refused.
 3. **Sandbox.** A fresh container labelled with the worker id (`weft.owner`) and run id
    (`weft.run`); the checkout, `.git` included, is copied to `/workspace/repo`.
-4. **Agent.** `runAgent` with the LLM from the run's `config` (`provider`, `model`), falling back
-   to `.env`, and `maxSteps` (default 30). After every step the worker saves steps and tokens
-   with `recordProgress`.
-5. **Verify.** The worker reruns `testCommand` itself instead of trusting the agent.
-6. **Diff.** `git add -A && git diff --cached`, so new files are included.
-7. **Record** with `completeRun` (fenced), then always remove the sandbox and the checkout.
+4. **Continue the conversation** (session turns after the first). The latest earlier turn that
+   recorded a diff is applied with `git apply`. Diffs are cumulative from the base branch, so
+   that one patch restores everything the agent changed so far. If it no longer applies (someone
+   pushed to the branch meanwhile), the turn fails as `apply_failed` instead of quietly working
+   on different code.
+5. **Agent.** `runAgent` with the LLM from the run's `config` (`provider`, `model`), falling back
+   to `.env`, and `maxSteps` (default 30). For later turns it also gets `history`: each earlier
+   message with the agent's reply, or a note like "(this turn ended without a reply: cancelled)".
+   After every step the worker saves steps and tokens with `recordProgress`.
+6. **Verify**, when the run has a `testCommand`: the worker reruns it itself instead of trusting
+   the agent. Without one (questions, repos without tests) there is nothing to rerun.
+7. **Diff.** `git add -A && git diff --cached --binary`, so new files and binary changes are
+   included and the patch can be applied by the next turn.
+8. **Record** with `completeRun` (fenced), then always remove the sandbox and the checkout.
 
 ### Trace
 
@@ -67,11 +75,11 @@ step, so a cancelled run stuck on a hanging model kept its worker and sandbox fo
 now it stops within a couple of seconds. Polling is the simple version; a Redis pub/sub cancel
 message would make it instant.
 
-| Outcome     | When                                                                           |
-| ----------- | ------------------------------------------------------------------------------ |
-| `succeeded` | The agent called `finish` and the tests pass.                                  |
-| `failed`    | `tests_failed`, or the agent stopped early (`max_steps`, `no_tool_call`, ...). |
-| `error`     | `clone_failed`, `llm_<kind>` (e.g. `llm_rate_limit`, `llm_auth`), `internal`.  |
+| Outcome     | When                                                                              |
+| ----------- | --------------------------------------------------------------------------------- |
+| `succeeded` | The agent replied with `finish`, and the tests pass if there is a test command.   |
+| `failed`    | `tests_failed`, or the agent stopped early (`max_steps`, `no_tool_call`, ...).    |
+| `error`     | `clone_failed`, `apply_failed`, `llm_<kind>` (e.g. `llm_rate_limit`), `internal`. |
 
 Failed runs keep the diff and the tail of the test output in `failure_detail`.
 
