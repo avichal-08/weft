@@ -14,6 +14,8 @@ export type SandboxOptions = {
   labels?: Record<string, string>;
   owner?: string;
   network?: 'none' | 'bridge';
+  diskCheckMs?: number;
+  onKilled?: (reason: string) => void;
 };
 
 export type ExecOptions = {

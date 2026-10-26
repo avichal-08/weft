@@ -99,10 +99,12 @@ worker, and needs a cold path to fall back on. This decision is that cold path.
   uid 1000 with no capabilities, so it can only write to `/workspace` and its home; the image's
   world-writable directories (`/tmp`, `/var/tmp`, `/run/lock`) each get a size-capped tmpfs.
   The lost layer of defence is planned to be replaced by running sandboxes under gVisor.
-- **Workspace writes go to disk, uncapped.** Docker can only cap a writable layer on xfs with
-  project quotas; on ext4 it cannot. `workspaceMb` needs a watchdog that measures the layer and
-  kills the sandbox. Until then a runaway process can fill the host disk. On the other hand,
-  `node_modules` no longer counts against the sandbox's memory limit, as it did in tmpfs.
+- **Workspace writes go to disk, uncapped by Docker.** Docker can only cap a writable layer on
+  xfs with project quotas; on ext4 it cannot. A watchdog in `@weft/sandbox` now polls the
+  layer's size every 10 s and kills a sandbox over `workspaceMb` (the run fails as
+  `disk_limit`). It is a soft limit: a fast writer can overshoot by what it writes between
+  checks. On the other hand, `node_modules` no longer counts against the sandbox's memory limit,
+  as it did in tmpfs.
 - Dependency images take disk until evicted (about the size of `node_modules` each), and their
   build costs about 3 minutes of background IO per new lockfile.
 - An image a sandbox is using cannot be evicted, so the cache can sit above its budget until that

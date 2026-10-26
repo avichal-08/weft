@@ -16,6 +16,8 @@ export type WorkerDeps = {
   createLLM: (config: RunConfig) => LLMProvider;
   allowFileRepos?: boolean;
   watchIntervalMs?: number;
+  diskLimitMb?: number;
+  diskCheckMs?: number;
   retry?: RetryOptions;
   log?: (line: string) => void;
   live?: (runId: string, message: LiveMessage) => Promise<void>;

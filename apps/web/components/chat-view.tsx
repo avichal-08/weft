@@ -30,7 +30,9 @@ function Outcome({ run }: { run: Run }) {
         ? 'The model provider returned an error'
         : run.failureKind === 'apply_failed'
           ? "Earlier changes don't apply to the branch any more"
-          : "This turn didn't finish";
+          : run.failureKind === 'disk_limit'
+            ? 'The sandbox ran out of disk space'
+            : "This turn didn't finish";
   return (
     <details className="group rounded-xl border border-warn/25 bg-warn-soft text-sm">
       <summary className="flex cursor-pointer list-none items-center gap-2 px-3.5 py-2.5 text-warn">

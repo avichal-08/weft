@@ -25,7 +25,7 @@ try {
 
 | Export                                                                      | What it does                                                                                                                                                                                                                                                                                 |
 | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createSandbox(opts, docker?)`                                              | Creates and starts a container. Removes it again if `start` fails.                                                                                                                                                                                                                           |
+| `createSandbox(opts, docker?)`                                              | Creates and starts a container. Removes it again if `start` fails. `diskCheckMs` and `onKilled` configure the [disk watchdog](#disk-watchdog).                                                                                                                                               |
 | `sandbox.exec(cmd, { cwd, env, stdin, stdout, maxOutputBytes, timeoutMs })` | Runs a command. A string runs via `sh -c`; an array runs as-is. `stdin` takes a string, Buffer or stream. `stdout` takes a writable to stream output to, uncapped (e.g. a tar to a file); otherwise it is captured. Returns exit code, stdout, stderr, `truncated`, `timedOut` and duration. |
 | `sandbox.putFiles(localDir, dest?, { ignore, timeoutMs })`                  | Copies a local directory into the sandbox (default `/workspace`). Files end up owned by uid 1000, modes kept.                                                                                                                                                                                |
 | `sandbox.readFile(path, { maxBytes })`                                      | Returns a file's contents as text. Throws if it's missing or over `maxBytes` (default 1 MB).                                                                                                                                                                                                 |
@@ -98,8 +98,27 @@ exists. The helper container gets no owner label on purpose: a commit copies the
 labels into the image, and sandboxes started from it would inherit the builder's owner.
 
 Because `/workspace` lives on the writable layer, sandboxes no longer use a read-only root
-filesystem. Writes there go to the host disk, not RAM, and are not size-capped by Docker on
-ext4; `workspaceMb` will be enforced by a watchdog.
+filesystem. Writes there go to the host disk, not RAM, and Docker can't size-cap them on ext4
+(only on xfs with project quotas), so a watchdog enforces `workspaceMb` instead.
+
+## Disk watchdog
+
+Every `diskCheckMs` (default 10 s) the sandbox asks Docker for the size of its writable layer
+(`SizeRw`, from inspecting the container with `size=true`). Over `workspaceMb`, the sandbox is
+marked killed, `onKilled(reason)` is called, and then the container is SIGKILLed; every later
+command throws `sandbox was killed: it wrote 2210 MB, over its 2048 MB disk limit`. The callback
+runs before the kill on purpose, so the caller knows why before any command can fail.
+
+`SizeRw` counts only what the sandbox itself wrote, home directory included; files shared from
+the image (a dependency image's `node_modules`) don't count. The alternatives were worse: `du`
+inside the sandbox counts the image's files too, and the cgroup's `io.stat` counts every byte
+ever written, deleted files included, so a fresh install or a test suite that churns temp files
+would trip it. A check costs about 0.5–1 s of daemon time on a layer with 22k files, and almost
+nothing on the small layer of a sandbox started from a dependency image. Checks never overlap
+and stop when the sandbox is destroyed.
+
+The limit is soft: a process can write as much as the disk allows in the 10 s between checks
+before it is caught. It stops runaway writes, not exact quotas.
 
 ## How `exec` works
 

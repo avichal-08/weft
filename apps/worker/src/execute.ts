@@ -45,6 +45,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
   let checkout: Awaited<ReturnType<typeof cloneRepo>> | undefined;
   let sandbox: Sandbox | undefined;
   let build: { key: string; base: string } | undefined;
+  let killed: string | undefined;
   const timings: PhaseTiming[] = [];
   const timed = async <T>(name: string, fn: () => Promise<T>): Promise<T> => {
     const started = performance.now();
@@ -161,12 +162,17 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
         image: hit?.kind === 'image' ? hit.image : deps.sandboxImage,
         owner: workerId,
         labels: { 'weft.run': runId },
-        ...(plan
-          ? {
-              ...(hit ? {} : { network: 'bridge' as const }),
-              limits: { memoryMb: 2048, workspaceMb: 2048, tmpMb: 512 },
-            }
-          : {}),
+        onKilled: (reason) => {
+          killed = reason;
+          log(`sandbox killed: ${reason}`);
+          abort.abort();
+        },
+        ...(plan && !hit ? { network: 'bridge' as const } : {}),
+        limits: {
+          ...(plan ? { memoryMb: 2048, workspaceMb: 2048, tmpMb: 512 } : {}),
+          ...(deps.diskLimitMb ? { workspaceMb: deps.diskLimitMb } : {}),
+        },
+        ...(deps.diskCheckMs ? { diskCheckMs: deps.diskCheckMs } : {}),
       }),
     );
     abort.signal.throwIfAborted();
@@ -225,6 +231,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
         onEvent,
       }),
     );
+    if (killed) return await finish(diskLimit(killed));
     if (result.status === 'aborted')
       return await finish({ status: 'error', failureKind: 'aborted' });
 
@@ -255,6 +262,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
       ...summaryOf(result.summary),
     });
   } catch (err) {
+    if (killed) return await finish(diskLimit(killed));
     return await finish({ status: 'error', ...describeError(err) });
   } finally {
     stopWatching();
@@ -268,6 +276,12 @@ const seconds = (ms: number) => (ms / 1000).toFixed(1);
 
 export const describeTimings = (timings: PhaseTiming[]) =>
   timings.map(({ phase, ms }) => `${phase} ${seconds(ms)}s`).join(', ') || 'none';
+
+const diskLimit = (reason: string): CompleteRunInput => ({
+  status: 'error',
+  failureKind: 'disk_limit',
+  failureDetail: `the sandbox was stopped because ${reason}`,
+});
 
 const summaryOf = (summary: string | undefined) => (summary ? { summary } : {});
 

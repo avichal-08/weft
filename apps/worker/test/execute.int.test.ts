@@ -376,6 +376,30 @@ describe('conversations', () => {
     expect(diff).toContain('+export const subtract = (a, b) => a - b;');
   });
 
+  it('stops a run that fills the disk and says why', async () => {
+    const { run } = await createSession(db, { repoUrl, message: 'Make a big file.' });
+    const llm = createMockProvider([
+      call('run_command', {
+        command: 'head -c 20000000 /dev/urandom > big.bin && sleep 30',
+        timeout_sec: 60,
+      }),
+      call('finish', { summary: 'never reached' }),
+    ]);
+    const lines: string[] = [];
+
+    await executeRun(
+      deps(llm, { diskLimitMb: 5, diskCheckMs: 200, log: (l) => lines.push(l) }),
+      run.id,
+    );
+    const done = await getRun(db, run.id);
+    expect(done).toMatchObject({ status: 'error', failureKind: 'disk_limit' });
+    expect(done?.failureDetail).toMatch(
+      /^the sandbox was stopped because it wrote \d+ MB, over its 5 MB disk limit$/,
+    );
+    expect(lines.some((l) => l.includes('sandbox killed: it wrote'))).toBe(true);
+    expect(await leftovers(run.id)).toBe(0);
+  });
+
   it('answers a question without a test command or any changes', async () => {
     const { run } = await createSession(db, { repoUrl, message: 'What does multiply do?' });
     const llm = createMockProvider([

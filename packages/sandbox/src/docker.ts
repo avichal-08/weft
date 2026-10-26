@@ -10,13 +10,16 @@ import {
 } from './command.ts';
 import { putFiles, readFile } from './files.ts';
 import { CappedBuffer } from './output.ts';
-import { containerSpec } from './spec.ts';
+import { containerSpec, DEFAULT_LIMITS } from './spec.ts';
 import type { ExecOptions, ExecResult, Sandbox, SandboxOptions } from './types.ts';
 
 export const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
 export const BACKSTOP_GRACE_MS = 5_000;
+export const DISK_CHECK_MS = 10_000;
 
-type State = { broken: boolean; offline: boolean };
+const MB = 1024 * 1024;
+
+type State = { killed: string | undefined; offline: boolean };
 
 const isNotFound = (err: unknown) =>
   typeof err === 'object' && err !== null && (err as { statusCode?: number }).statusCode === 404;
@@ -38,9 +41,7 @@ async function runExec(
   opts: ExecOptions = {},
   sweepOnTimeout = true,
 ): Promise<ExecResult> {
-  if (state.broken) {
-    throw new Error('sandbox was killed after a command escaped its timeout');
-  }
+  if (state.killed) throw new Error(`sandbox was killed: ${state.killed}`);
 
   const started = performance.now();
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -87,7 +88,7 @@ async function runExec(
   });
 
   if (outcome === 'escaped') {
-    state.broken = true;
+    state.killed = 'a command escaped its timeout';
     stream.destroy();
     await container.kill({ signal: 'SIGKILL' }).catch(() => {});
     return { exitCode: 137, timedOut: true, ...output() };
@@ -100,6 +101,13 @@ async function runExec(
     await runExec(docker, container, state, SWEEP_SCRIPT, { timeoutMs: 5000 }, false);
   }
   return { exitCode, timedOut, ...result };
+}
+
+type SizedInspect = (opts: { size: true }) => Promise<{ SizeRw?: number }>;
+
+async function writableLayerBytes(container: Docker.Container): Promise<number> {
+  const inspect = container.inspect.bind(container) as unknown as SizedInspect;
+  return (await inspect({ size: true })).SizeRw ?? 0;
 }
 
 export async function imageId(image: string, docker: Docker = new Docker()): Promise<string> {
@@ -119,8 +127,29 @@ export async function createSandbox(
     throw err;
   }
 
-  const state: State = { broken: false, offline: false };
+  const state: State = { killed: undefined, offline: false };
   let removal: Promise<void> | undefined;
+  let watchdog: NodeJS.Timeout | undefined;
+
+  const limitMb = { ...DEFAULT_LIMITS, ...opts.limits }.workspaceMb;
+  const checkDisk = async () => {
+    try {
+      const used = await writableLayerBytes(container);
+      if (used > limitMb * MB) {
+        state.killed = `it wrote ${Math.round(used / MB)} MB, over its ${limitMb} MB disk limit`;
+        opts.onKilled?.(state.killed);
+        await container.kill({ signal: 'SIGKILL' }).catch(() => {});
+        return;
+      }
+    } catch (err) {
+      if (isNotFound(err)) return;
+    }
+    if (!removal && !state.killed) schedule();
+  };
+  const schedule = () => {
+    watchdog = setTimeout(() => void checkDisk(), opts.diskCheckMs ?? DISK_CHECK_MS).unref();
+  };
+  schedule();
 
   const exec: Sandbox['exec'] = (command, execOpts) =>
     runExec(docker, container, state, command, execOpts);
@@ -143,6 +172,7 @@ export async function createSandbox(
       await exec(SWEEP_SCRIPT, { timeoutMs: 10_000 });
     },
     destroy() {
+      clearTimeout(watchdog);
       removal ??= container.remove({ force: true }).then(
         () => undefined,
         (err: unknown) => {

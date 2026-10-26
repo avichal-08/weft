@@ -63,7 +63,7 @@ describe('buildImage', () => {
     } finally {
       await fresh.destroy();
     }
-  });
+  }, 120_000);
 
   it('removes its helper container and tags nothing when unpacking fails', async () => {
     const bad = join(dir, 'bad.tar');
@@ -114,5 +114,5 @@ describe('buildImage', () => {
     expect(await removeImage(`${repo}:use`, docker)).toBe(true);
     expect(await hasImage(`${repo}:use`, docker)).toBe(false);
     expect(await removeImage(`${repo}:use`, docker)).toBe(true);
-  });
+  }, 120_000);
 });

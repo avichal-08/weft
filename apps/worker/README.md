@@ -17,7 +17,9 @@ pnpm --filter @weft/worker dev
    transport and friends are refused.
 3. **Sandbox.** A fresh container labelled with the worker id (`weft.owner`) and run id
    (`weft.run`); the checkout, `.git` included, is copied to `/workspace/repo`. A repo with
-   dependencies gets network for the setup phase and larger limits (2 GB memory and workspace).
+   dependencies gets network for the setup phase and larger limits (2 GB memory and disk). If the
+   sandbox writes more than its disk limit, the disk watchdog kills it and the run ends as
+   `disk_limit`, whatever phase it was in.
 4. **Continue the conversation** (session turns after the first). The latest earlier turn that
    recorded a diff is applied with `git apply`. Diffs are cumulative from the base branch, so
    that one patch restores everything the agent changed so far. If it no longer applies (someone
@@ -172,11 +174,11 @@ step, so a cancelled run stuck on a hanging model kept its worker and sandbox fo
 now it stops within a couple of seconds. Polling is the simple version; a Redis pub/sub cancel
 message would make it instant.
 
-| Outcome     | When                                                                                              |
-| ----------- | ------------------------------------------------------------------------------------------------- |
-| `succeeded` | The agent replied with `finish`, and the tests pass if there is a test command.                   |
-| `failed`    | `tests_failed`, or the agent stopped early (`max_steps`, `no_tool_call`, ...).                    |
-| `error`     | `clone_failed`, `apply_failed`, `setup_failed`, `llm_<kind>` (e.g. `llm_rate_limit`), `internal`. |
+| Outcome     | When                                                                                                            |
+| ----------- | --------------------------------------------------------------------------------------------------------------- |
+| `succeeded` | The agent replied with `finish`, and the tests pass if there is a test command.                                 |
+| `failed`    | `tests_failed`, or the agent stopped early (`max_steps`, `no_tool_call`, ...).                                  |
+| `error`     | `clone_failed`, `apply_failed`, `setup_failed`, `disk_limit`, `llm_<kind>` (e.g. `llm_rate_limit`), `internal`. |
 
 Failed runs keep the diff and the tail of the test output in `failure_detail`.
 
@@ -204,8 +206,6 @@ the worker stops taking jobs, lets active runs finish, then closes Redis and Pos
 - **Every turn sets up dependencies, even a question.** "Summarise this repo" needs no `node_modules`, but
   still waits for the install (or the restore), and a large monorepo can fail setup before the
   agent reads a file.
-- **Workspace writes are not size-capped yet.** `/workspace` is on the container's writable
-  layer (on disk, see ADR 0001), which Docker can't cap on ext4; a watchdog is next.
 - **Install scripts have network.** They run sandboxed, but online; egress is not yet limited
   to the package registries.
 - **Verification runs in the agent's sandbox.** M2 moves it to a fresh sandbox with the test
