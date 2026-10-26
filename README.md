@@ -1,30 +1,30 @@
 # weft
 
-A cloud coding agent, in the spirit of Claude Code on the web. Connect a GitHub repo and hand it
-work: fix a bug, build a feature, refactor, review, or explain how something works. It clones the
-repo into an isolated sandbox, installs dependencies, reads and edits the code, runs the tests,
-and hands back the change, while you watch every step live and steer it with follow-up messages.
+A cloud coding agent, in the spirit of Claude Code on the web: hand it work on a GitHub repo, or
+start from nothing, and watch it build in an isolated sandbox.
 
-- **Does the work, end to end.** Plans from the code, edits files, runs tests and commands, and
-  independently re-runs the tests before calling a change done. The result is a diff today and a
-  pull request next.
-- **Steer it like a teammate.** Every task is a conversation: follow-ups continue from the
-  previous turn's changes ("now handle the empty case too"), and questions get answers without
-  touching the code.
-- **Agentic search, no index.** Like Claude Code, it finds code with `grep`, `glob` and reading
-  files, then edits with exact string replacement guarded against stale views.
-- **A locked-down sandbox per turn.** A Docker container with no capabilities, a read-only root,
-  resource limits and three layers of timeouts. Dependencies install with network (npm, pnpm,
-  Yarn or Bun, picked from the lockfile), then the network is cut and the agent works offline.
-  Model keys never enter the box.
-- **Live.** Every phase, model call and tool call streams to the browser as it happens (Redis
-  Streams + server-sent events), and is stored as a trace you can replay.
-- **Built to survive failure.** Runs go through a queue, workers fence every write with an
-  attempt number, cancel stops a run within seconds, and a janitor removes leftover sandboxes.
-- **Provider-agnostic.** Anthropic, OpenAI, Gemini or OpenRouter, with retries that respect
-  rate limits.
+> Early and in active development. The first list is where it's headed; the second is what works
+> today.
 
-> Work in progress
+## Where it's going
+
+- **Hand it real work.** Connect a repo and ask it to fix a bug, build a feature, refactor,
+  review, or explain how something works.
+- **Steer it like a teammate.** One conversation per task: follow-ups, corrections and questions,
+  with every step visible live.
+- **Ship the result.** Changes come back as a pull request, checked by the tests.
+- **Start from scratch.** No repo needed: describe an app, watch it get built, and use a live
+  preview of it.
+
+## Where it is now
+
+- Chat sessions on public GitHub repos; each turn continues from the previous one's changes, and
+  the result is a diff.
+- A locked-down Docker sandbox per turn: dependencies install with network (npm, pnpm, Yarn or
+  Bun), then the network is cut and the agent works offline; installs are cached by lockfile.
+- Claude Code-style agentic search (`grep`, `glob`, reading files), no embedding index.
+- Every step streams live to the browser and is stored as a replayable trace.
+- A queue, fenced writes and fast cancel; works with Anthropic, OpenAI, Gemini or OpenRouter.
 
 ## Layout
 
