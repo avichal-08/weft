@@ -34,8 +34,12 @@ const createLLM = (config: RunConfig) =>
 
 async function janitor() {
   try {
-    for (const { id, reason } of await reapSandboxes()) {
-      console.log(`janitor: removed sandbox ${id.slice(0, 12)} (${reason})`);
+    for (const { id, reason, error } of await reapSandboxes()) {
+      console.log(
+        error
+          ? `janitor: could not remove sandbox ${id.slice(0, 12)} (${reason}): ${error}`
+          : `janitor: removed sandbox ${id.slice(0, 12)} (${reason})`,
+      );
     }
   } catch (err) {
     console.error('janitor failed', err);

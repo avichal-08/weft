@@ -75,4 +75,4 @@ export type ReapOptions = Partial<ReapPolicy> & {
   now?: number;
 };
 
-export type Reaped = { id: string; reason: ReapReason };
+export type Reaped = { id: string; reason: ReapReason; error?: string };

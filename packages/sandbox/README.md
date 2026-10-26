@@ -174,6 +174,12 @@ Sandboxes younger than `minAgeMs` (default 30 s) are never touched: between `cre
 container's real state, so a sandbox that just stopped is caught on the next sweep. The worker
 runs this on boot and on an interval.
 
+A sandbox Docker is already removing (state `removing`, or a `409` from the remove call) is
+skipped: since `/workspace` is on disk, removing one with a large writable layer can take a
+while, and the worker's own `destroy()` may still be at it. Any other failed removal is returned
+with an `error` and the sweep carries on, so one stuck container can't stop the rest from being
+cleaned up.
+
 ## Testing
 
 ```bash

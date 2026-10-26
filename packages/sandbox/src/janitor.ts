@@ -12,7 +12,7 @@ export function reapReason(
   policy: ReapPolicy,
   ownerAlive: boolean,
 ): ReapReason | undefined {
-  if (info.ageMs < policy.minAgeMs) return undefined;
+  if (info.ageMs < policy.minAgeMs || info.state === 'removing') return undefined;
   if (info.state !== 'running' && info.state !== 'paused') return 'not-running';
   if (info.ageMs > policy.maxAgeMs) return 'too-old';
   if (info.owner && !ownerAlive) return 'owner-dead';
@@ -59,7 +59,9 @@ export async function reapSandboxes(
       await docker.getContainer(info.id).remove({ force: true });
       reaped.push({ id: info.id, reason });
     } catch (err) {
-      if ((err as { statusCode?: number }).statusCode !== 404) throw err;
+      const status = (err as { statusCode?: number }).statusCode;
+      if (status === 404 || status === 409) continue;
+      reaped.push({ id: info.id, reason, error: err instanceof Error ? err.message : String(err) });
     }
   }
 
