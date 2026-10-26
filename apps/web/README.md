@@ -13,7 +13,7 @@ pnpm --filter @weft/web dev     # http://localhost:3000 (needs the api on :3001 
 | ---------------- | ---------------------------------------------------------------------------------------------- |
 | `/`              | New chat: repository, optional branch, test command, provider and model, and the first message |
 | `/sessions/[id]` | The conversation, a composer, and the chat's cumulative changes                                |
-| `/runs/[id]`     | One turn in detail (status, tokens, timeline, diff), linked from each turn                     |
+| `/runs/[id]`     | One turn in detail (status, tokens, time per phase, timeline, diff), linked from each turn     |
 
 The sidebar lists every chat, most recently active first, with a dot for the latest turn's state
 (blue and pulsing while the agent works).

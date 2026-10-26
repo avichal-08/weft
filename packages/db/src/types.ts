@@ -33,7 +33,10 @@ export type CompleteRunInput = Partial<RunUsage> & {
   diff?: string;
   failureKind?: string;
   failureDetail?: string;
+  timings?: PhaseTiming[];
 };
+
+export type PhaseTiming = { phase: string; ms: number };
 
 export type RunEvent = typeof runEvents.$inferSelect;
 export type RunEventType = RunEvent['type'];

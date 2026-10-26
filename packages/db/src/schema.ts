@@ -1,3 +1,4 @@
+import type { PhaseTiming } from './types.ts';
 import { sql } from 'drizzle-orm';
 import {
   bigserial,
@@ -65,6 +66,7 @@ export const runs = pgTable(
     diff: text('diff'),
     failureKind: text('failure_kind'),
     failureDetail: text('failure_detail'),
+    timings: jsonb('timings').$type<PhaseTiming[]>(),
   },
   (t) => [
     index('runs_status_created_idx').on(t.status, t.createdAt),

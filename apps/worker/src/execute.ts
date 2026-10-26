@@ -7,6 +7,7 @@ import {
   getSession,
   recordProgress,
   type CompleteRunInput,
+  type PhaseTiming,
   type NewRunEvent,
 } from '@weft/db';
 import { emptyUsage, LLMError, withRetry } from '@weft/llm';
@@ -43,6 +44,15 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
   let progress = Promise.resolve();
   let checkout: Awaited<ReturnType<typeof cloneRepo>> | undefined;
   let sandbox: Sandbox | undefined;
+  const timings: PhaseTiming[] = [];
+  const timed = async <T>(name: string, fn: () => Promise<T>): Promise<T> => {
+    const started = performance.now();
+    try {
+      return await fn();
+    } finally {
+      timings.push({ phase: name, ms: Math.round(performance.now() - started) });
+    }
+  };
 
   const lose = () => {
     if (fenced) return;
@@ -86,11 +96,13 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     flushEvents();
     await progress;
     if (fenced) return { kind: 'fenced' };
+    log(`timings: ${describeTimings(timings)}`);
     const recorded = await completeRun(db, runId, attempt, {
       steps: usage.steps,
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       cacheReadTokens: usage.cacheReadTokens,
+      timings,
       ...outcome,
     });
     live({ kind: 'end', attempt });
@@ -126,44 +138,49 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
         : [];
 
     phase('clone');
-    checkout = await cloneRepo(run.repoUrl, run.baseRef, {
-      allowFileRepos: deps.allowFileRepos ?? false,
-    });
-    const plan = await detectSetup(checkout.dir);
+    checkout = await timed('clone', () =>
+      cloneRepo(run.repoUrl, run.baseRef, { allowFileRepos: deps.allowFileRepos ?? false }),
+    );
+    const { dir } = checkout;
+    const plan = await detectSetup(dir);
     const base = latestDiff(previous);
     const cache =
       plan && deps.installCache && !touchesManifests(base) ? installCache(deps.installCache) : null;
     const key =
       plan && cache
-        ? await installKey(checkout.dir, {
-            repoUrl: run.repoUrl,
-            imageId: await imageId(deps.sandboxImage),
-            command: plan.command,
-          })
+        ? await timed('cacheKey', async () =>
+            installKey(dir, {
+              repoUrl: run.repoUrl,
+              imageId: await imageId(deps.sandboxImage),
+              command: plan.command,
+            }),
+          )
         : null;
     const cached = cache && key ? await cache.lookup(key) : null;
 
     phase('sandbox');
-    sandbox = await createSandbox({
-      image: deps.sandboxImage,
-      owner: workerId,
-      labels: { 'weft.run': runId },
-      ...(plan
-        ? {
-            ...(cached ? {} : { network: 'bridge' as const }),
-            limits: { memoryMb: 2048, workspaceMb: 2048, tmpMb: 512 },
-          }
-        : {}),
-    });
+    sandbox = await timed('sandbox', () =>
+      createSandbox({
+        image: deps.sandboxImage,
+        owner: workerId,
+        labels: { 'weft.run': runId },
+        ...(plan
+          ? {
+              ...(cached ? {} : { network: 'bridge' as const }),
+              limits: { memoryMb: 2048, workspaceMb: 2048, tmpMb: 512 },
+            }
+          : {}),
+      }),
+    );
     abort.signal.throwIfAborted();
-    await sandbox.putFiles(checkout.dir, REPO_ROOT);
+    const box = sandbox;
+    await timed('copy', () => box.putFiles(dir, REPO_ROOT));
 
     if (base) {
       phase('restore');
-      const applied = await sandbox.exec(['git', 'apply', '--whitespace=nowarn', '-'], {
-        cwd: REPO_ROOT,
-        stdin: base,
-      });
+      const applied = await timed('apply', () =>
+        box.exec(['git', 'apply', '--whitespace=nowarn', '-'], { cwd: REPO_ROOT, stdin: base }),
+      );
       if (applied.exitCode !== 0) {
         throw new ApplyError(applied.stderr.trim() || 'git apply failed');
       }
@@ -172,20 +189,18 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     if (plan && cache && cached) {
       log('setup: restoring dependencies from cache');
       phase('setup', 'cache');
-      const started = performance.now();
-      await cache.restore(sandbox, REPO_ROOT, cached);
-      log(`setup: restored in ${seconds(started)}s, no network`);
+      await timed('cacheRestore', () => cache.restore(box, REPO_ROOT, cached));
+      log(`setup: restored in ${seconds(timings.at(-1)!.ms)}s, no network`);
     } else if (plan) {
       log(`setup: ${plan.command}`);
       phase('setup', plan.command);
-      const ms = await runSetup(sandbox, REPO_ROOT, plan);
-      log(`setup: done in ${(ms / 1000).toFixed(1)}s, network disconnected`);
+      await timed('install', () => runSetup(box, REPO_ROOT, plan));
+      log(`setup: done in ${seconds(timings.at(-1)!.ms)}s, network disconnected`);
       if (cache && key) {
-        const started = performance.now();
         try {
-          const bytes = await cache.save(sandbox, REPO_ROOT, key);
+          const bytes = await timed('cacheSave', () => cache.save(box, REPO_ROOT, key));
           if (bytes !== null) {
-            log(`setup: cached ${(bytes / 1e6).toFixed(0)} MB in ${seconds(started)}s`);
+            log(`setup: cached ${(bytes / 1e6).toFixed(0)} MB in ${seconds(timings.at(-1)!.ms)}s`);
           }
         } catch (err) {
           log(`setup: caching failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -194,31 +209,35 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     }
 
     phase('agent');
-    const ctx = createToolContext({ sandbox, root: REPO_ROOT, testCommand: run.testCommand });
-    const result = await runAgent({
-      llm: withRetry(deps.createLLM(config), {
-        ...deps.retry,
-        onRetry: ({ attempt, delayMs, error }) => log(describeRetry(attempt, delayMs, error)),
+    const ctx = createToolContext({ sandbox: box, root: REPO_ROOT, testCommand: run.testCommand });
+    const result = await timed('agent', () =>
+      runAgent({
+        llm: withRetry(deps.createLLM(config), {
+          ...deps.retry,
+          onRetry: ({ attempt, delayMs, error }) => log(describeRetry(attempt, delayMs, error)),
+        }),
+        ctx,
+        task: run.task,
+        history: buildHistory(previous),
+        maxSteps: config.maxSteps ?? DEFAULT_MAX_STEPS,
+        signal: abort.signal,
+        onEvent,
       }),
-      ctx,
-      task: run.task,
-      history: buildHistory(previous),
-      maxSteps: config.maxSteps ?? DEFAULT_MAX_STEPS,
-      signal: abort.signal,
-      onEvent,
-    });
+    );
     if (result.status === 'aborted')
       return await finish({ status: 'error', failureKind: 'aborted' });
 
     if (run.testCommand) phase('verify');
     const verify = run.testCommand
-      ? await sandbox.exec(run.testCommand, { cwd: REPO_ROOT, timeoutMs: ctx.testTimeoutMs })
+      ? await timed('verify', () =>
+          box.exec(run.testCommand!, { cwd: REPO_ROOT, timeoutMs: ctx.testTimeoutMs }),
+        )
       : null;
-    const diff = await sandbox.exec(
-      "git add -A -- . ':!node_modules' && git diff --cached --binary --no-color -- . ':!node_modules'",
-      {
-        cwd: REPO_ROOT,
-      },
+    const diff = await timed('diff', () =>
+      box.exec(
+        "git add -A -- . ':!node_modules' && git diff --cached --binary --no-color -- . ':!node_modules'",
+        { cwd: REPO_ROOT },
+      ),
     );
     const passed = verify ? verify.exitCode === 0 : true;
 
@@ -243,7 +262,10 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
   }
 }
 
-const seconds = (since: number) => ((performance.now() - since) / 1000).toFixed(1);
+const seconds = (ms: number) => (ms / 1000).toFixed(1);
+
+export const describeTimings = (timings: PhaseTiming[]) =>
+  timings.map(({ phase, ms }) => `${phase} ${seconds(ms)}s`).join(', ') || 'none';
 
 const summaryOf = (summary: string | undefined) => (summary ? { summary } : {});
 

@@ -111,6 +111,14 @@ describe('executeRun', () => {
     });
     expect(done?.diff).toContain('-  return a - b;\n+  return a + b;');
     expect(done?.finishedAt).toBeInstanceOf(Date);
+    expect((done?.timings ?? []).map((t) => t.phase)).toEqual([
+      'clone',
+      'sandbox',
+      'copy',
+      'agent',
+      'verify',
+      'diff',
+    ]);
     expect(await leftovers(run.id)).toBe(0);
 
     const prefix = `run ${run.id.slice(0, 8)} `;
@@ -124,6 +132,7 @@ describe('executeRun', () => {
       '   ✓ run_tests T',
       '#4 llm T in=0 out=0',
       '   ✓ finish T',
+      'timings: clone T, sandbox T, copy T, agent T, verify T, diff T',
     ]);
 
     const events = await listRunEvents(db, run.id, { attempt: 1 });
@@ -399,6 +408,12 @@ describe('conversations', () => {
     const done = await getRun(db, next.run.id);
     expect(done).toMatchObject({ status: 'error', failureKind: 'apply_failed' });
     expect(done?.failureDetail).toMatch(/no longer apply/);
+    expect((done?.timings ?? []).map((t) => t.phase)).toEqual([
+      'clone',
+      'sandbox',
+      'copy',
+      'apply',
+    ]);
     expect(await leftovers(next.run.id)).toBe(0);
   });
 

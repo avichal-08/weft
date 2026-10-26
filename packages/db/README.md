@@ -53,12 +53,13 @@ overwriting a run that was cancelled or already completed. Each check is a singl
 | ------------ | ------------------------------------------------------------------------------------------ |
 | Identity     | `id` (uuid), `status` (`run_status` enum, default `queued`), `attempt`, `worker_id`        |
 | Input        | `repo_url`, `base_ref`, `task`, `test_command`, `config` (jsonb: provider, model, budgets) |
-| Timing       | `created_at`, `started_at`, `finished_at`                                                  |
+| Timing       | `created_at`, `started_at`, `finished_at`, `timings`                                       |
 | Usage        | `steps`, `input_tokens`, `output_tokens`, `cache_read_tokens`                              |
 | Outcome      | `summary`, `diff`, `failure_kind`, `failure_detail`                                        |
 
 Indexed on `(status, created_at)` for "next queued runs" and on `created_at desc` for the
-dashboard's run list. `attempt` and `worker_id` are there for crash recovery: a re-delivered
+dashboard's run list. `timings` is how long each phase of the run took, as an ordered list of
+`{ phase, ms }` (a list, not an object, because `jsonb` does not keep key order). `attempt` and `worker_id` are there for crash recovery: a re-delivered
 run gets a new attempt, and updates will be fenced on it.
 
 **`sessions`**: a chat with the agent about one repository: `title` (from the first message),

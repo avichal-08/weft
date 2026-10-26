@@ -7,6 +7,7 @@ import { AutoRefresh } from './auto-refresh';
 import { DiffView } from './diff-view';
 import { RunTimeline } from './run-timeline';
 import { StatusBadge } from './status-badge';
+import { Timings } from './timings';
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -63,6 +64,13 @@ export async function RunDetail({ params }: { params: Promise<{ id: string }> })
         <h2 className="mb-3 text-sm font-semibold">Activity</h2>
         <RunTimeline events={trace.ok ? trace.data.events : []} active={active} />
       </section>
+
+      {run.timings && run.timings.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold">Where the time went</h2>
+          <Timings timings={run.timings} />
+        </section>
+      )}
 
       {run.summary && (
         <section>

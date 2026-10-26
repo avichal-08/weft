@@ -101,6 +101,21 @@ through Docker's exec connection (about 18 MB/s); a read-only volume per entry w
 One host directory is the single-machine version; across machines the same tarballs would live
 in object storage.
 
+### Phase timings
+
+Each phase is timed and stored on the run as `timings`, in the order it ran, and logged as one
+line when the run ends:
+
+```
+run 3f2a9c1e timings: clone 1.2s, cacheKey 0.1s, sandbox 0.9s, copy 0.4s, cacheRestore 35.1s, agent 21.7s, verify 3.2s, diff 0.2s
+```
+
+Phases: `clone`, `cacheKey` (hashing dependency files), `sandbox` (create and start), `copy`
+(repo into the sandbox), `apply` (previous turn's diff), then `cacheRestore` or `install` and
+`cacheSave`, `agent`, `verify`, `diff`. A phase that didn't run is absent; a run that failed
+keeps the phases it got through, so a slow failure still shows where the time went. This is what
+every sandbox speed change is measured against.
+
 ### Live progress
 
 With `deps.live` set (`main.ts` wires it to `publishLive`), the worker also streams each phase

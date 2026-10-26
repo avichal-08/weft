@@ -23,6 +23,7 @@ export type Run = {
   diff: string | null;
   failureKind: string | null;
   failureDetail: string | null;
+  timings: { phase: string; ms: number }[] | null;
 };
 
 export type FormState = {
