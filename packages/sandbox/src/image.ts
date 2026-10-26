@@ -33,6 +33,7 @@ export async function buildImage(
     const { Id } = (await docker.getContainer(helper.id).commit({
       repo: opts.repo,
       tag: opts.tag,
+      pause: false,
     })) as { Id: string };
     return Id;
   } finally {

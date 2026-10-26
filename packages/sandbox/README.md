@@ -95,7 +95,11 @@ The build is slow because Docker's containerd image store handles every file sev
 (diff, compress into a blob, unpack into a snapshot), plus about 5 s of fixed cost per
 commit; so callers should build in the background and keep using the tar until the image
 exists. The helper container gets no owner label on purpose: a commit copies the container's
-labels into the image, and sandboxes started from it would inherit the builder's owner.
+labels into the image, and sandboxes started from it would inherit the builder's owner. The
+commit doesn't pause the helper: nothing runs in it after the unpack, so there is nothing to
+freeze, and a commit of a large layer takes minutes. The janitor also treats a paused sandbox
+as alive (until the max age), since an earlier version reaped the helper mid-commit as
+`not-running`.
 
 Because `/workspace` lives on the writable layer, sandboxes no longer use a read-only root
 filesystem. Writes there go to the host disk, not RAM, and Docker can't size-cap them on ext4
@@ -159,11 +163,11 @@ A more precise per-command process tracker (an in-sandbox daemon) is planned for
 `destroy()` runs in a `finally`, which only helps while the worker is alive. If a worker crashes,
 its sandboxes keep running. `reapSandboxes` lists every `weft.sandbox` container and removes:
 
-| Reason        | When                                                                          |
-| ------------- | ----------------------------------------------------------------------------- |
-| `not-running` | It stopped (crash, OOM kill, backstop) but was never removed.                 |
-| `too-old`     | Older than `maxAgeMs` (default 1 h). No healthy run lasts that long.          |
-| `owner-dead`  | `isOwnerAlive(owner)` returns false, e.g. the worker's heartbeat has expired. |
+| Reason        | When                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------- |
+| `not-running` | It stopped (crash, OOM kill, backstop) but was never removed. Paused counts as alive. |
+| `too-old`     | Older than `maxAgeMs` (default 1 h). No healthy run lasts that long.                  |
+| `owner-dead`  | `isOwnerAlive(owner)` returns false, e.g. the worker's heartbeat has expired.         |
 
 Sandboxes younger than `minAgeMs` (default 30 s) are never touched: between `create` and
 `start` a new sandbox looks stopped. Docker's container list can lag a few hundred ms behind a

@@ -13,7 +13,7 @@ export function reapReason(
   ownerAlive: boolean,
 ): ReapReason | undefined {
   if (info.ageMs < policy.minAgeMs) return undefined;
-  if (info.state !== 'running') return 'not-running';
+  if (info.state !== 'running' && info.state !== 'paused') return 'not-running';
   if (info.ageMs > policy.maxAgeMs) return 'too-old';
   if (info.owner && !ownerAlive) return 'owner-dead';
   return undefined;

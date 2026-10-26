@@ -24,6 +24,13 @@ describe('reapReason', () => {
     expect(reapReason(box({ state: 'exited' }), policy, true)).toBe('not-running');
   });
 
+  it('keeps paused sandboxes, which docker commit pauses for minutes, until the max age', () => {
+    expect(reapReason(box({ state: 'paused' }), policy, true)).toBeUndefined();
+    expect(reapReason(box({ state: 'paused', ageMs: 2 * 60 * 60_000 }), policy, true)).toBe(
+      'too-old',
+    );
+  });
+
   it('reaps sandboxes past the max age', () => {
     expect(reapReason(box({ ageMs: 2 * 60 * 60_000 }), policy, true)).toBe('too-old');
   });
