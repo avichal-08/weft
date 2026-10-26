@@ -28,7 +28,6 @@ export function containerSpec(opts: SandboxOptions): ContainerCreateOptions {
     },
     HostConfig: {
       NetworkMode: opts.network === 'bridge' ? 'bridge' : 'none',
-      ReadonlyRootfs: true,
       CapDrop: ['ALL'],
       SecurityOpt: ['no-new-privileges'],
       NanoCpus: Math.round(limits.cpus * 1e9),
@@ -37,7 +36,8 @@ export function containerSpec(opts: SandboxOptions): ContainerCreateOptions {
       PidsLimit: limits.pids,
       Tmpfs: {
         '/tmp': `rw,exec,nosuid,nodev,size=${limits.tmpMb}m`,
-        '/workspace': `rw,exec,nosuid,nodev,size=${limits.workspaceMb}m,uid=1000,gid=1000`,
+        '/var/tmp': `rw,noexec,nosuid,nodev,size=${limits.tmpMb}m`,
+        '/run/lock': 'rw,noexec,nosuid,nodev,size=1m',
       },
     },
   };

@@ -49,12 +49,14 @@ describe('putFiles', () => {
     expect(res.stdout).toContain('src');
   });
 
-  it('fails cleanly when the workspace is full', async () => {
+  it('fails cleanly when the target filesystem is full', async () => {
     const big = await mkdtemp(join(tmpdir(), 'weft-big-'));
     await writeFile(join(big, 'blob.bin'), Buffer.alloc(3 * 1024 * 1024, 1));
-    const tiny = await createSandbox({ image, limits: { workspaceMb: 1 } });
+    const tiny = await createSandbox({ image, limits: { tmpMb: 1 } });
     try {
-      await expect(tiny.putFiles(big)).rejects.toThrow(/copying .* failed: tar: .*Wrote only/);
+      await expect(tiny.putFiles(big, '/tmp/in')).rejects.toThrow(
+        /copying .* failed: tar: .*Wrote only/,
+      );
       expect((await tiny.exec('echo alive')).stdout).toBe('alive\n');
     } finally {
       await tiny.destroy();

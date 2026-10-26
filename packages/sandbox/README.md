@@ -34,21 +34,23 @@ try {
 | `sandbox.destroy()`                                                         | Force-removes the container. Safe to call more than once; concurrent calls all wait for the same removal.                                                                                                                                                                                    |
 | `reapSandboxes({ isOwnerAlive, minAgeMs, maxAgeMs, labels })`               | Removes leftover sandboxes; returns what it removed and why. See [Cleanup](#cleanup).                                                                                                                                                                                                        |
 | `listSandboxes(docker, labels?)`                                            | Every `weft.sandbox` container with its state, age and owner.                                                                                                                                                                                                                                |
+| `buildImage({ base, repo, tag, tar, dest, labels, timeoutMs })`             | Unpacks a tar into `dest` in a fresh sandbox of `base` and commits it as `repo:tag`; returns the image id. See [Dependency images](#dependency-images).                                                                                                                                      |
 | `imageId(image)`                                                            | The image's content id (`sha256:…`), e.g. to key caches to the exact image.                                                                                                                                                                                                                  |
 | `containerSpec(opts)`                                                       | Pure function: options → Docker create request. Useful to inspect or test the policy.                                                                                                                                                                                                        |
-| `DEFAULT_LIMITS`, `DEFAULT_MAX_OUTPUT_BYTES`, `DEFAULT_TIMEOUT_MS`          | 1 CPU, 1 GB memory, 256 processes, 256 MB `/tmp`, 1 GB `/workspace`; 1 MB output per stream; 120 s per command.                                                                                                                                                                              |
+| `DEFAULT_LIMITS`, `DEFAULT_MAX_OUTPUT_BYTES`, `DEFAULT_TIMEOUT_MS`          | 1 CPU, 1 GB memory, 256 processes, 256 MB `/tmp`, 1 GB `/workspace` (not enforced yet, see below); 1 MB output per stream; 120 s per command.                                                                                                                                                |
 
 ## Isolation policy
 
-| Setting                             | Why                                                                                                                                                                      |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `NetworkMode: none`                 | No exfiltration, no downloading payloads. `network: 'bridge'` is only for the setup phase; see [Setup network](#setup-network).                                          |
-| `ReadonlyRootfs` + tmpfs mounts     | Only `/tmp` and `/workspace` are writable, both size-capped. Both are mounted `exec`, since Docker adds `noexec` by default and that breaks `node_modules/.bin` scripts. |
-| `CapDrop: ALL`, `no-new-privileges` | No root-level powers, no privilege gain through setuid binaries.                                                                                                         |
-| `User: 1000:1000`                   | Never runs as root.                                                                                                                                                      |
-| `MemorySwap = Memory`               | Swap off, so a memory hog is killed instead of thrashing.                                                                                                                |
-| `PidsLimit`                         | Fork bombs hit the limit instead of taking down the host.                                                                                                                |
-| `weft.sandbox` label                | Lets a janitor find and reap sandboxes left behind by a crashed worker.                                                                                                  |
+| Setting                             | Why                                                                                                                                                                                                                  |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NetworkMode: none`                 | No exfiltration, no downloading payloads. `network: 'bridge'` is only for the setup phase; see [Setup network](#setup-network).                                                                                      |
+| Writable root, non-root user        | uid 1000 can write to `/workspace` and its home, nothing else on the root filesystem (`/usr`, `/etc`, `/opt` and `/` belong to root).                                                                                |
+| tmpfs over world-writable dirs      | `/tmp`, `/var/tmp` and `/run/lock` are the image's only world-writable directories; each gets a size-capped tmpfs. Only `/tmp` is `exec` (Docker defaults to `noexec`, which breaks tools that run scripts from it). |
+| `CapDrop: ALL`, `no-new-privileges` | No root-level powers, no privilege gain through setuid binaries.                                                                                                                                                     |
+| `User: 1000:1000`                   | Never runs as root.                                                                                                                                                                                                  |
+| `MemorySwap = Memory`               | Swap off, so a memory hog is killed instead of thrashing.                                                                                                                                                            |
+| `PidsLimit`                         | Fork bombs hit the limit instead of taking down the host.                                                                                                                                                            |
+| `weft.sandbox` label                | Lets a janitor find and reap sandboxes left behind by a crashed worker.                                                                                                                                              |
 
 ## Setup network
 
@@ -60,18 +62,44 @@ created with `network: 'bridge'` runs the install online, then:
 2. `disconnectNetwork()` detaches the container from Docker's bridge. Only `lo` is left in
    `/sys/class/net`, so no command started later can reach anything.
 
-The rest of the hardening (read-only rootfs, no capabilities, uid 1000) applies during the
+The rest of the hardening (no capabilities, uid 1000, resource limits) applies during the
 install too, so install scripts run as untrusted code like everything else.
 
 ## The image
 
 `infra/sandbox/Dockerfile`: Node 22, git, ripgrep, tini, Bun (copied from the official
 `oven/bun` image, pinned with `BUN_VERSION`), and pnpm and yarn preinstalled with corepack
-under `/opt/corepack`. The root filesystem is read-only, but corepack writes to its home
+under `/opt/corepack`, which uid 1000 can't write to, but corepack writes to its home
 whenever a repo pins a different version (`"packageManager": "pnpm@10.33.0"`). So
 `COREPACK_HOME` points at `/tmp/corepack`, and the entrypoint (`weft-init.sh`) seeds it with
 symlinks to the preinstalled versions: those still work offline, and a pinned version can be
 downloaded during setup. `pnpm sandbox:smoke` checks all of this.
+
+## Dependency images
+
+A container's filesystem is the image's read-only layers with one thin writable layer on top.
+Starting from an image is copy-on-write: nothing is copied, and a file is only copied up into
+the writable layer when something changes it. `buildImage` uses that for installed
+dependencies: it unpacks a tar of `node_modules` into a sandbox of the base image and
+`docker commit`s it, so later sandboxes can start with the dependencies already in place.
+
+Measured on a repo with 639 MB of `node_modules` (22,642 files):
+
+| Getting dependencies into a sandbox             | Time    |
+| ----------------------------------------------- | ------- |
+| Streaming the tar in (`tar -x` over `exec`)     | 35–47 s |
+| Starting a sandbox from the dependency image    | ~4 s    |
+| Building the image (`buildImage`), once per key | ~3 min  |
+
+The build is slow because Docker's containerd image store handles every file several times
+(diff, compress into a blob, unpack into a snapshot), plus about 5 s of fixed cost per
+commit; so callers should build in the background and keep using the tar until the image
+exists. The helper container gets no owner label on purpose: a commit copies the container's
+labels into the image, and sandboxes started from it would inherit the builder's owner.
+
+Because `/workspace` lives on the writable layer, sandboxes no longer use a read-only root
+filesystem. Writes there go to the host disk, not RAM, and are not size-capped by Docker on
+ext4; `workspaceMb` will be enforced by a watchdog.
 
 ## How `exec` works
 
@@ -82,11 +110,11 @@ code comes from `exec.inspect()` once the stream ends.
 
 ## Copying files
 
-Docker's copy API (`putArchive`) refuses to write into a container with a read-only root
-filesystem, even into its writable tmpfs mounts. So `putFiles` packs the directory as a tar
-stream on the host and pipes it into `tar -x` running inside the sandbox, through the command's
-stdin. Because the unprivileged user does the extracting, files are owned by uid 1000 without
-any `chown`, and the copy gets `exec`'s timeout for free. `readFile` is `cat` with the output
+`putFiles` packs the directory as a tar stream on the host and pipes it into `tar -x` running
+inside the sandbox, through the command's stdin, instead of using Docker's copy API
+(`putArchive`). Because the unprivileged user does the extracting, files are owned by uid 1000
+without any `chown`, and the copy gets `exec`'s timeout for free (and `putArchive` used to
+refuse read-only root filesystems, which sandboxes had until dependency images). `readFile` is `cat` with the output
 cap. A full workspace makes `putFiles` throw with tar's error; the sandbox stays usable.
 
 ## Timeouts

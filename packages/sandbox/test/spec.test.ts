@@ -8,7 +8,7 @@ describe('containerSpec', () => {
   it('locks the container down', () => {
     expect(spec.User).toBe('1000:1000');
     expect(host.NetworkMode).toBe('none');
-    expect(host.ReadonlyRootfs).toBe(true);
+    expect(host.ReadonlyRootfs).toBeUndefined();
     expect(host.CapDrop).toEqual(['ALL']);
     expect(host.SecurityOpt).toEqual(['no-new-privileges']);
   });
@@ -27,15 +27,14 @@ describe('containerSpec', () => {
     expect(h.Memory).toBe(DEFAULT_LIMITS.memoryMb * 1024 * 1024);
   });
 
-  it('makes /tmp and /workspace the only writable paths', () => {
-    expect(Object.keys(host.Tmpfs!)).toEqual(['/tmp', '/workspace']);
-    expect(host.Tmpfs!['/workspace']).toContain('uid=1000');
+  it('covers every world-writable directory of the image with tmpfs', () => {
+    expect(Object.keys(host.Tmpfs!)).toEqual(['/tmp', '/var/tmp', '/run/lock']);
   });
 
-  it('allows executing files in tmpfs, which docker otherwise mounts noexec', () => {
-    for (const opts of Object.values(host.Tmpfs!)) {
-      expect(opts.split(',')).toContain('exec');
-    }
+  it('allows executing files in /tmp only, which docker otherwise mounts noexec', () => {
+    expect(host.Tmpfs!['/tmp']!.split(',')).toContain('exec');
+    expect(host.Tmpfs!['/var/tmp']!.split(',')).toContain('noexec');
+    expect(host.Tmpfs!['/run/lock']!.split(',')).toContain('noexec');
   });
 
   it('always sets the sandbox label', () => {
