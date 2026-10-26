@@ -6,6 +6,7 @@ import { Worker } from 'bullmq';
 import { loadEnv } from './env.ts';
 import { executeRun, REPO_ROOT } from './execute.ts';
 import { dockerDepsImages, installCache } from './install-cache.ts';
+import { sessionSandboxes } from './session-sandboxes.ts';
 import { describeOutcome, shortId } from './log.ts';
 import type { RunConfig } from './types.ts';
 
@@ -22,6 +23,12 @@ const cache = env.INSTALL_CACHE_DIR
       log: (line) => console.log(line),
     })
   : null;
+
+const sessions = sessionSandboxes({
+  max: env.SESSION_SANDBOXES_MAX,
+  idleMs: env.SESSION_SANDBOX_IDLE_MS,
+  log: (line) => console.log(line),
+});
 
 const createLLM = (config: RunConfig) =>
   createProvider(
@@ -69,6 +76,7 @@ const worker = new Worker<RunJobData>(
         log: (line) => console.log(line),
         live: (runId, message) => publishLive(publisher, runId, message),
         ...(cache ? { installCache: cache } : {}),
+        sessions,
       },
       job.data.runId,
     );
@@ -91,6 +99,7 @@ async function shutdown(signal: string) {
   console.log(`${signal}: finishing active runs, then exiting`);
   clearInterval(janitorTimer);
   await worker.close();
+  await sessions.clear();
   await connection.quit();
   await publisher.quit();
   await pool.end();

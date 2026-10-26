@@ -16,6 +16,12 @@ const envSchema = z.object({
   JANITOR_INTERVAL_MS: z.coerce.number().int().min(5000).default(60_000),
   INSTALL_CACHE_DIR: z.string().default(join(homedir(), '.cache', 'weft', 'installs')),
   INSTALL_CACHE_MAX_MB: z.coerce.number().int().min(0).default(10_240),
+  SESSION_SANDBOXES_MAX: z.coerce.number().int().min(0).default(2),
+  SESSION_SANDBOX_IDLE_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .default(10 * 60_000),
 });
 
 export const loadEnv = (env: NodeJS.ProcessEnv = process.env) => envSchema.parse(env);

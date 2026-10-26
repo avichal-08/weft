@@ -2,6 +2,7 @@ import type { Db } from '@weft/db';
 import type { LLMProvider, RetryOptions } from '@weft/llm';
 import type { LiveMessage } from '@weft/queue';
 import type { InstallCache } from './install-cache.ts';
+import type { SessionSandboxes } from './session-sandboxes.ts';
 
 export type RunConfig = {
   provider?: string;
@@ -22,6 +23,7 @@ export type WorkerDeps = {
   log?: (line: string) => void;
   live?: (runId: string, message: LiveMessage) => Promise<void>;
   installCache?: InstallCache;
+  sessions?: SessionSandboxes;
 };
 
 export type RunOutcome =

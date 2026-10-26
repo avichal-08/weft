@@ -44,7 +44,12 @@ before, and the worker logs it. That happens right after a fresh install (before
 built) and when the diff changes dependency files, since the image's `node_modules` would no
 longer match.
 
-Step one (this change) is the clean verification; keeping the session's sandbox is next.
+This was built in two steps: clean verification first, then keeping the session's sandbox.
+A kept sandbox is only used again after a check: the latest recorded diff is the one it ended
+with, `git ls-remote` shows the branch at the commit it was cloned from (the cold path always
+starts from the branch's current head), and it still answers a command. It is not kept after a
+turn that errored, was cancelled or was killed, or whose dependency files changed, since its
+`node_modules` would no longer match what a cold start installs.
 
 ## Alternatives considered
 

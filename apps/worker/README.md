@@ -15,7 +15,9 @@ pnpm --filter @weft/worker dev
    Only `https://` URLs are accepted, plus `file://` when `ALLOW_FILE_REPOS=true` for local
    development, since on a worker it means "read any path on this machine". Git's `ext::`
    transport and friends are refused.
-3. **Sandbox.** A fresh container labelled with the worker id (`weft.owner`) and run id
+3. **Sandbox.** A follow-up first tries the sandbox its session kept from the previous turn (see
+   [Session sandboxes](#session-sandboxes)) and, when it can use it, skips straight to step 6.
+   Otherwise a fresh container labelled with the worker id (`weft.owner`) and run id
    (`weft.run`); the checkout, `.git` included, is copied to `/workspace/repo`. A repo with
    dependencies gets network for the setup phase and larger limits (2 GB memory and disk). If the
    sandbox writes more than its disk limit, the disk watchdog kills it and the run ends as
@@ -127,6 +129,30 @@ tar takes 67 s (it was 35–47 s when `/workspace` was tmpfs); building the imag
 the background; and a turn that starts from the image reaches the agent in 6.9 s, against 55 s
 before. Numbers and trade-offs: [ADR 0001](../../docs/decisions/0001-dependency-images.md).
 
+### Session sandboxes
+
+A chat's sandbox outlives its turn, the way Claude Code on the web keeps a session's VM: the
+next message continues in it instead of cloning, starting a container, copying and applying
+the diff again. Why, and what it gives up:
+[ADR 0002](../../docs/decisions/0002-session-sandboxes-and-clean-verification.md).
+
+- **Kept only after a normal end.** A turn that succeeded or failed (tests, step limit) and was
+  recorded leaves its sandbox, its host checkout and what it was set up with in the worker's
+  pool. Errors, cancels, a lost run, a disk-limit kill, or a change to any dependency file
+  (`package.json`, a lockfile, `.npmrc`, ...: the sandbox's `node_modules` would no longer
+  match) destroy it as before.
+- **Checked before use** (the `resume` phase): the latest recorded diff must be the one it ended
+  with, `git ls-remote` must show the branch still at the commit it was cloned from, and it must
+  still answer a command. Otherwise it is released and the turn starts cold.
+- **Bounded.** At most `SESSION_SANDBOXES_MAX` per worker (the oldest session is evicted), each
+  released after `SESSION_SANDBOX_IDLE_MS` without a turn and never kept past 45 minutes, below
+  the janitor's 1 h limit. Shutdown releases all of them; after a crash the janitor reaps them.
+- **A workspace, not a clean room.** Whatever the agent left (files in its home directory,
+  background processes, tool caches) is there next turn. Verification still runs in a fresh
+  sandbox, and the recorded diff stays the source of truth whenever the sandbox is rebuilt.
+- The pool lives in one worker's memory: with several workers, a follow-up picked up by another
+  worker starts cold.
+
 ### Phase timings
 
 Each phase is timed and stored on the run as `timings`, in the order it ran, and logged as one
@@ -136,7 +162,8 @@ line when the run ends (here a small repo without dependencies, from the integra
 run 4aa22721 timings: clone 0.1s, sandbox 0.9s, copy 0.3s, agent 1.6s, diff 0.2s, verifySandbox 1.3s, verify 0.6s
 ```
 
-Phases: `clone`, `cacheKey` (hashing dependency files), `sandbox` (create and start), `copy`
+Phases: `resume` (checking a kept sandbox; when it can be used, the turn goes straight to
+`agent`), `clone`, `cacheKey` (hashing dependency files), `sandbox` (create and start), `copy`
 (repo into the sandbox), `apply` (previous turn's diff), then `cacheRestore` or `install` and
 `cacheSave`, `agent`, `diff`, `verifySandbox` (start the clean sandbox, copy, apply the diff)
 and `verify`. A phase that didn't run is absent; a run that failed
@@ -197,18 +224,20 @@ the worker stops taking jobs, lets active runs finish, then closes Redis and Pos
 
 ## Configuration
 
-| Variable               | Default                                            |
-| ---------------------- | -------------------------------------------------- |
-| `DATABASE_URL`         | required (Neon, pooled)                            |
-| `REDIS_URL`            | `redis://localhost:6379`                           |
-| `SANDBOX_IMAGE`        | `weft-sandbox:dev`                                 |
-| `WORKER_ID`            | `<hostname>-<random>`                              |
-| `WORKER_CONCURRENCY`   | `1`                                                |
-| `ALLOW_FILE_REPOS`     | `false`                                            |
-| `JANITOR_INTERVAL_MS`  | `60000`                                            |
-| `INSTALL_CACHE_DIR`    | `~/.cache/weft/installs`; empty disables the cache |
-| `INSTALL_CACHE_MAX_MB` | `10240`                                            |
-| `LLM_*`, API keys      | see `@weft/llm`                                    |
+| Variable                  | Default                                            |
+| ------------------------- | -------------------------------------------------- |
+| `DATABASE_URL`            | required (Neon, pooled)                            |
+| `REDIS_URL`               | `redis://localhost:6379`                           |
+| `SANDBOX_IMAGE`           | `weft-sandbox:dev`                                 |
+| `WORKER_ID`               | `<hostname>-<random>`                              |
+| `WORKER_CONCURRENCY`      | `1`                                                |
+| `ALLOW_FILE_REPOS`        | `false`                                            |
+| `JANITOR_INTERVAL_MS`     | `60000`                                            |
+| `INSTALL_CACHE_DIR`       | `~/.cache/weft/installs`; empty disables the cache |
+| `INSTALL_CACHE_MAX_MB`    | `10240`                                            |
+| `SESSION_SANDBOXES_MAX`   | `2`; sandboxes kept between turns, `0` disables    |
+| `SESSION_SANDBOX_IDLE_MS` | `600000` (10 min)                                  |
+| `LLM_*`, API keys         | see `@weft/llm`                                    |
 
 ## Known limits (M2)
 

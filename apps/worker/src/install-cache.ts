@@ -97,6 +97,23 @@ export async function installKey(
   return hash.digest('hex');
 }
 
+export async function manifestPrint(sandbox: Sandbox, root: string): Promise<string> {
+  const specs = [...MANIFESTS].map((name) => `:(glob)**/${name}`);
+  const res = await sandbox.exec(
+    [
+      'sh',
+      '-c',
+      'git ls-files -z -co --exclude-standard -- "$@" | sort -z | xargs -0 -r sha256sum',
+      'sh',
+      ...specs,
+      ':(exclude,glob)**/node_modules/**',
+    ],
+    { cwd: root },
+  );
+  if (res.exitCode !== 0) throw new Error(`hashing dependency files failed: ${res.stderr.trim()}`);
+  return createHash('sha256').update(res.stdout).digest('hex');
+}
+
 export function touchesManifests(diff: string | null): boolean {
   if (!diff) return false;
   return [...diff.matchAll(/^(?:--- a|\+\+\+ b)\/(.+)$/gm)].some(([, path]) =>

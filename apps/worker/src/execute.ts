@@ -13,9 +13,11 @@ import {
 import { emptyUsage, LLMError, withRetry } from '@weft/llm';
 import type { LiveMessage, LivePhase } from '@weft/queue';
 import { createSandbox, imageId, type ExecResult, type Sandbox } from '@weft/sandbox';
-import { CloneError, cloneRepo } from './clone.ts';
+import { CloneError, cloneRepo, type Checkout } from './clone.ts';
 import { buildHistory, latestDiff } from './history.ts';
-import { installKey, touchesManifests, type CacheHit } from './install-cache.ts';
+import { installKey, manifestPrint, touchesManifests, type CacheHit } from './install-cache.ts';
+import { diffHash, release, stillUsable, type KillHandler } from './session-sandboxes.ts';
+import type { SetupPlan } from './setup.ts';
 import { detectSetup, runSetup, SetupError } from './setup.ts';
 import { describeEvent, describeRetry, shortId } from './log.ts';
 import { toRunEvent } from './trace.ts';
@@ -42,8 +44,19 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
   const abort = new AbortController();
   let fenced = false;
   let progress = Promise.resolve();
-  let checkout: Awaited<ReturnType<typeof cloneRepo>> | undefined;
+  let checkout: Checkout | undefined;
   let sandbox: Sandbox | undefined;
+  let env:
+    | {
+        plan: SetupPlan | null;
+        key: string | null;
+        baseId: string | null;
+        depsPrint: string;
+        createdAt: number;
+      }
+    | undefined;
+  let keepDiff: string | undefined;
+  const onKilled: KillHandler = { current: () => {} };
   let checker: Sandbox | undefined;
   let build: { key: string; base: string } | undefined;
   let killed: string | undefined;
@@ -141,84 +154,114 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
         ? ((await getSession(db, run.sessionId))?.turns ?? []).filter((t) => t.turn! < run.turn!)
         : [];
 
-    phase('clone');
-    checkout = await timed('clone', () =>
-      cloneRepo(run.repoUrl, run.baseRef, { allowFileRepos: deps.allowFileRepos ?? false }),
-    );
-    const { dir } = checkout;
-    const plan = await detectSetup(dir);
     const base = latestDiff(previous);
-    const cache = plan && deps.installCache && !touchesManifests(base) ? deps.installCache : null;
-    const baseId = cache ? await imageId(deps.sandboxImage) : null;
-    const key =
-      plan && cache && baseId
-        ? await timed('cacheKey', () =>
-            installKey(dir, { repoUrl: run.repoUrl, imageId: baseId, command: plan.command }),
-          )
-        : null;
-    const hit: CacheHit | null = cache && key ? await cache.lookup(key) : null;
+    const allowFileRepos = deps.allowFileRepos ?? false;
+    let resumed = run.sessionId ? deps.sessions?.take(run.sessionId) : undefined;
+    if (resumed) {
+      phase('sandbox', 'resume');
+      const entry = resumed;
+      const stale = await timed('resume', () =>
+        stillUsable(entry, base, run.repoUrl, run.baseRef, allowFileRepos),
+      );
+      if (stale) {
+        log(`resume: starting fresh, the kept sandbox can't be used because ${stale}`);
+        void release(entry);
+        resumed = undefined;
+      }
+    }
+    onKilled.current = (reason) => {
+      killed = reason;
+      log(`sandbox killed: ${reason}`);
+      abort.abort();
+    };
 
     const boxFrom = (image: string, network = false) =>
       createSandbox({
         image,
         owner: workerId,
         labels: { 'weft.run': runId },
-        onKilled: (reason) => {
-          killed = reason;
-          log(`sandbox killed: ${reason}`);
-          abort.abort();
-        },
+        onKilled: (reason) => onKilled.current(reason),
         ...(network ? { network: 'bridge' as const } : {}),
         limits: {
-          ...(plan ? { memoryMb: 2048, workspaceMb: 2048, tmpMb: 512 } : {}),
+          ...(env?.plan ? { memoryMb: 2048, workspaceMb: 2048, tmpMb: 512 } : {}),
           ...(deps.diskLimitMb ? { workspaceMb: deps.diskLimitMb } : {}),
         },
         ...(deps.diskCheckMs ? { diskCheckMs: deps.diskCheckMs } : {}),
       });
 
-    phase('sandbox');
-    sandbox = await timed('sandbox', () =>
-      boxFrom(hit?.kind === 'image' ? hit.image : deps.sandboxImage, Boolean(plan && !hit)),
-    );
-    abort.signal.throwIfAborted();
-    const box = sandbox;
-    await timed('copy', () => box.putFiles(dir, REPO_ROOT));
-
-    if (base) {
-      phase('restore');
-      const applied = await timed('apply', () =>
-        box.exec(['git', 'apply', '--whitespace=nowarn', '-'], { cwd: REPO_ROOT, stdin: base }),
+    if (resumed) {
+      ({ checkout, sandbox } = resumed);
+      const { plan, key, baseId, depsPrint, createdAt } = resumed;
+      env = { plan, key, baseId, depsPrint, createdAt };
+      log(`resume: continuing in the sandbox kept from the previous turn`);
+    } else {
+      phase('clone');
+      checkout = await timed('clone', () =>
+        cloneRepo(run.repoUrl, run.baseRef, { allowFileRepos }),
       );
-      if (applied.exitCode !== 0) {
-        throw new ApplyError(applied.stderr.trim() || 'git apply failed');
-      }
-    }
+      const { dir } = checkout;
+      const plan = await detectSetup(dir);
+      const cache = plan && deps.installCache && !touchesManifests(base) ? deps.installCache : null;
+      const baseId = cache ? await imageId(deps.sandboxImage) : null;
+      const key =
+        plan && cache && baseId
+          ? await timed('cacheKey', () =>
+              installKey(dir, { repoUrl: run.repoUrl, imageId: baseId, command: plan.command }),
+            )
+          : null;
+      const hit: CacheHit | null = cache && key ? await cache.lookup(key) : null;
+      env = { plan, key, baseId, depsPrint: '', createdAt: Date.now() };
 
-    if (hit?.kind === 'image') {
-      log(`setup: dependencies already in ${hit.image.slice(0, 22)}, no network`);
-    } else if (cache && key && baseId && hit?.kind === 'tar') {
-      log('setup: restoring dependencies from cache');
-      phase('setup', 'cache');
-      await timed('cacheRestore', () => cache.restore(box, REPO_ROOT, hit.path));
-      log(`setup: restored in ${seconds(timings.at(-1)!.ms)}s, no network`);
-      build = { key, base: baseId };
-    } else if (plan) {
-      log(`setup: ${plan.command}`);
-      phase('setup', plan.command);
-      await timed('install', () => runSetup(box, REPO_ROOT, plan));
-      log(`setup: done in ${seconds(timings.at(-1)!.ms)}s, network disconnected`);
-      if (cache && key && baseId) {
-        try {
-          const bytes = await timed('cacheSave', () => cache.save(box, REPO_ROOT, key));
-          if (bytes !== null) {
-            log(`setup: cached ${(bytes / 1e6).toFixed(0)} MB in ${seconds(timings.at(-1)!.ms)}s`);
-            build = { key, base: baseId };
-          }
-        } catch (err) {
-          log(`setup: caching failed: ${err instanceof Error ? err.message : String(err)}`);
+      phase('sandbox');
+      sandbox = await timed('sandbox', () =>
+        boxFrom(hit?.kind === 'image' ? hit.image : deps.sandboxImage, Boolean(plan && !hit)),
+      );
+      abort.signal.throwIfAborted();
+      const box = sandbox;
+      await timed('copy', () => box.putFiles(dir, REPO_ROOT));
+
+      if (base) {
+        phase('restore');
+        const applied = await timed('apply', () =>
+          box.exec(['git', 'apply', '--whitespace=nowarn', '-'], { cwd: REPO_ROOT, stdin: base }),
+        );
+        if (applied.exitCode !== 0) {
+          throw new ApplyError(applied.stderr.trim() || 'git apply failed');
         }
       }
+
+      if (hit?.kind === 'image') {
+        log(`setup: dependencies already in ${hit.image.slice(0, 22)}, no network`);
+      } else if (cache && key && baseId && hit?.kind === 'tar') {
+        log('setup: restoring dependencies from cache');
+        phase('setup', 'cache');
+        await timed('cacheRestore', () => cache.restore(box, REPO_ROOT, hit.path));
+        log(`setup: restored in ${seconds(timings.at(-1)!.ms)}s, no network`);
+        build = { key, base: baseId };
+      } else if (plan) {
+        log(`setup: ${plan.command}`);
+        phase('setup', plan.command);
+        await timed('install', () => runSetup(box, REPO_ROOT, plan));
+        log(`setup: done in ${seconds(timings.at(-1)!.ms)}s, network disconnected`);
+        if (cache && key && baseId) {
+          try {
+            const bytes = await timed('cacheSave', () => cache.save(box, REPO_ROOT, key));
+            if (bytes !== null) {
+              log(
+                `setup: cached ${(bytes / 1e6).toFixed(0)} MB in ${seconds(timings.at(-1)!.ms)}s`,
+              );
+              build = { key, base: baseId };
+            }
+          } catch (err) {
+            log(`setup: caching failed: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+      }
+      env.depsPrint = await manifestPrint(box, REPO_ROOT).catch(() => 'unknown');
     }
+    const box = sandbox;
+    const { dir } = checkout;
+    const { plan, key } = env;
 
     phase('agent');
     const ctx = createToolContext({ sandbox: box, root: REPO_ROOT, testCommand: run.testCommand });
@@ -252,8 +295,8 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
       phase('verify');
       const clean = !plan
         ? deps.sandboxImage
-        : cache && key && !touchesManifests(diff.stdout)
-          ? await cache.lookup(key).then((h) => (h?.kind === 'image' ? h.image : null))
+        : deps.installCache && key && !touchesManifests(diff.stdout)
+          ? await deps.installCache.lookup(key).then((h) => (h?.kind === 'image' ? h.image : null))
           : null;
       let target = box;
       if (clean) {
@@ -279,26 +322,57 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
       );
     }
     const passed = verify ? verify.exitCode === 0 : true;
+    const reusable = await manifestPrint(box, REPO_ROOT).then(
+      (print) => print === env!.depsPrint,
+      () => false,
+    );
+    const keepIfRecorded = (outcome: RunOutcome) => {
+      if (reusable && outcome.kind === 'completed' && outcome.recorded) keepDiff = diff.stdout;
+      return outcome;
+    };
 
     if (result.status === 'finished' && passed) {
-      return await finish({ status: 'succeeded', diff: diff.stdout, ...summaryOf(result.summary) });
+      return keepIfRecorded(
+        await finish({ status: 'succeeded', diff: diff.stdout, ...summaryOf(result.summary) }),
+      );
     }
-    return await finish({
-      status: 'failed',
-      diff: diff.stdout,
-      failureKind: result.status === 'finished' ? 'tests_failed' : result.status,
-      failureDetail: !passed
-        ? tail(verify!.stdout + verify!.stderr)
-        : 'the agent stopped without replying',
-      ...summaryOf(result.summary),
-    });
+    return keepIfRecorded(
+      await finish({
+        status: 'failed',
+        diff: diff.stdout,
+        failureKind: result.status === 'finished' ? 'tests_failed' : result.status,
+        failureDetail: !passed
+          ? tail(verify!.stdout + verify!.stderr)
+          : 'the agent stopped without replying',
+        ...summaryOf(result.summary),
+      }),
+    );
   } catch (err) {
     if (killed) return await finish(diskLimit(killed));
     return await finish({ status: 'error', ...describeError(err) });
   } finally {
     stopWatching();
-    await Promise.all([sandbox?.destroy(), checker?.destroy()]).catch(() => {});
-    await checkout?.cleanup();
+    const kept =
+      keepDiff !== undefined &&
+      !fenced &&
+      !killed &&
+      deps.sessions &&
+      run.sessionId &&
+      sandbox &&
+      checkout &&
+      env
+        ? await deps.sessions.keep({
+            ...env,
+            sessionId: run.sessionId,
+            sandbox,
+            checkout,
+            diffHash: diffHash(keepDiff),
+            onKilled,
+          })
+        : false;
+    if (kept) log('keeping the sandbox for the next turn');
+    await Promise.all([kept ? undefined : sandbox?.destroy(), checker?.destroy()]).catch(() => {});
+    if (!kept) await checkout?.cleanup();
     if (build) deps.installCache?.scheduleBuild(build.key, build.base);
   }
 }

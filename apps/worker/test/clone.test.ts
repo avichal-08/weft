@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { CloneError, cloneRepo } from '../src/clone.ts';
+import { CloneError, cloneRepo, remoteHead } from '../src/clone.ts';
 
 let origin: string;
 
@@ -57,5 +57,31 @@ describe('cloneRepo', () => {
     await expect(
       cloneRepo(pathToFileURL(origin).href, 'no-such-branch', { allowFileRepos: true }),
     ).rejects.toThrow(/no-such-branch/);
+  });
+});
+
+describe('remoteHead', () => {
+  it('returns the commit a fresh clone would get, and moves when the branch does', async () => {
+    const url = pathToFileURL(origin).href;
+    const opts = { allowFileRepos: true };
+    const checkout = await cloneRepo(url, 'main', opts);
+    expect(checkout.commit).toMatch(/^[0-9a-f]{40}$/);
+    expect(await remoteHead(url, 'main', opts)).toBe(checkout.commit);
+    expect(await remoteHead(url, null, opts)).toBe(checkout.commit);
+    await checkout.cleanup();
+
+    execFileSync(
+      'git',
+      ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'next'],
+      { cwd: origin },
+    );
+    expect(await remoteHead(url, 'main', opts)).not.toBe(checkout.commit);
+    expect(await remoteHead(url, 'nope', opts)).toBeNull();
+  });
+
+  it('refuses file urls unless allowed', async () => {
+    await expect(
+      remoteHead(pathToFileURL(origin).href, null, { allowFileRepos: false }),
+    ).rejects.toThrow(/scheme file: is not allowed/);
   });
 });

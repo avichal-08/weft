@@ -41,6 +41,9 @@ function activity(events: RunEvent[], phase: LivePhase | null): StepLabel {
   if (phase?.phase === 'setup' && phase.detail === 'cache') {
     return { verb: 'Restoring cached dependencies' };
   }
+  if (phase?.phase === 'sandbox' && phase.detail === 'resume') {
+    return { verb: 'Resuming the sandbox' };
+  }
   if (phase && phase.phase !== 'agent') {
     return {
       verb: PHASES[phase.phase],

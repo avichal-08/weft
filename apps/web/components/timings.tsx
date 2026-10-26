@@ -1,6 +1,7 @@
 const LABELS: Record<string, string> = {
   clone: 'Clone repo',
   cacheKey: 'Hash manifests',
+  resume: 'Check kept sandbox',
   sandbox: 'Start sandbox',
   copy: 'Copy repo in',
   apply: 'Apply previous turn',
