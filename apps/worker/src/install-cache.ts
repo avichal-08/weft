@@ -1,12 +1,54 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, readdir, readFile, rename, rm, stat, utimes } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { basename, join, relative } from 'node:path';
 import { finished } from 'node:stream/promises';
-import type { Sandbox } from '@weft/sandbox';
+import { buildImage, hasImage, listImages, removeImage, type Sandbox } from '@weft/sandbox';
 import { SETUP_TIMEOUT_MS, SetupError } from './setup.ts';
 
-export type InstallCacheConfig = { dir: string; maxBytes: number };
+export type DepsImages = {
+  has(key: string): Promise<boolean>;
+  build(key: string, tar: string, base: string): Promise<void>;
+  remove(key: string): Promise<boolean>;
+  list(): Promise<{ key: string; bytes: number }[]>;
+};
+
+export type InstallCacheConfig = {
+  dir: string;
+  maxBytes: number;
+  images?: DepsImages;
+  log?: (line: string) => void;
+};
+
+export type CacheHit = { kind: 'image'; image: string } | { kind: 'tar'; path: string };
+
+export const DEPS_REPO = 'weft-deps';
+export const depsImage = (key: string) => `${DEPS_REPO}:${key}`;
+
+export function dockerDepsImages(dest: string): DepsImages {
+  return {
+    has: (key) => hasImage(depsImage(key)),
+    async build(key, tar, base) {
+      const { size } = await stat(tar);
+      await buildImage({
+        base,
+        repo: DEPS_REPO,
+        tag: key,
+        tar,
+        dest,
+        labels: { 'weft.deps': key, 'weft.bytes': String(size) },
+      });
+    },
+    remove: (key) => removeImage(depsImage(key)),
+    async list() {
+      return (await listImages('weft.deps')).flatMap(({ labels }) =>
+        labels['weft.deps']
+          ? [{ key: labels['weft.deps'], bytes: Number(labels['weft.bytes']) || 0 }]
+          : [],
+      );
+    },
+  };
+}
 
 const LOCKFILES = new Set([
   'bun.lock',
@@ -62,34 +104,95 @@ export function touchesManifests(diff: string | null): boolean {
   );
 }
 
-export async function evict({ dir, maxBytes }: InstallCacheConfig): Promise<string[]> {
-  const names = (await readdir(dir)).filter((n) => n.endsWith('.tar'));
-  const entries = await Promise.all(
-    names.map(async (name) => ({ path: join(dir, name), ...(await stat(join(dir, name))) })),
+const mtime = (path: string) =>
+  stat(path).then(
+    (s) => s.mtimeMs,
+    () => 0,
   );
-  entries.sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+async function touch(path: string) {
+  const now = new Date();
+  await utimes(path, now, now).catch(() => writeFile(path, ''));
+}
+
+type Entry = { name: string; bytes: number; used: number; remove: () => Promise<boolean> };
+
+export async function evict({ dir, maxBytes, images }: InstallCacheConfig): Promise<string[]> {
+  const tars: Entry[] = await Promise.all(
+    (await readdir(dir))
+      .filter((n) => n.endsWith('.tar'))
+      .map(async (name) => {
+        const { size, mtimeMs } = await stat(join(dir, name));
+        const remove = () => rm(join(dir, name), { force: true }).then(() => true);
+        return { name, bytes: size, used: mtimeMs, remove };
+      }),
+  );
+  const built: Entry[] = await Promise.all(
+    (await images?.list())?.map(async ({ key, bytes }) => {
+      const marker = join(dir, `${key}.used`);
+      const remove = async () => {
+        if (!(await images!.remove(key))) return false;
+        await rm(marker, { force: true });
+        return true;
+      };
+      return { name: depsImage(key), bytes, used: await mtime(marker), remove };
+    }) ?? [],
+  );
+
   const removed: string[] = [];
   let total = 0;
-  for (const entry of entries) {
-    total += entry.size;
+  for (const entry of [...tars, ...built].sort((a, b) => b.used - a.used)) {
+    total += entry.bytes;
     if (total <= maxBytes) continue;
-    await rm(entry.path, { force: true });
-    removed.push(entry.path);
+    if (await entry.remove()) removed.push(entry.name);
   }
   return removed;
 }
 
 export function installCache(config: InstallCacheConfig) {
   const file = (key: string) => join(config.dir, `${key}.tar`);
+  const marker = (key: string) => join(config.dir, `${key}.used`);
+  const queued = new Set<string>();
+  let builds = Promise.resolve();
 
   return {
-    async lookup(key: string): Promise<string | null> {
+    async lookup(key: string): Promise<CacheHit | null> {
+      await mkdir(config.dir, { recursive: true });
+      if (config.images && (await config.images.has(key))) {
+        await touch(marker(key));
+        return { kind: 'image', image: depsImage(key) };
+      }
       const now = new Date();
       return utimes(file(key), now, now).then(
-        () => file(key),
+        () => ({ kind: 'tar', path: file(key) }),
         () => null,
       );
     },
+
+    scheduleBuild(key: string, base: string) {
+      const images = config.images;
+      if (!images || queued.has(key)) return;
+      queued.add(key);
+      builds = builds.then(async () => {
+        const started = performance.now();
+        try {
+          if (!(await images.has(key))) await images.build(key, file(key), base);
+          await touch(marker(key));
+          await rm(file(key), { force: true });
+          const secs = ((performance.now() - started) / 1000).toFixed(1);
+          config.log?.(`install cache: built ${depsImage(key).slice(0, 22)} in ${secs}s`);
+          for (const name of await evict(config)) config.log?.(`install cache: evicted ${name}`);
+        } catch (err) {
+          config.log?.(
+            `install cache: building ${depsImage(key).slice(0, 22)} failed, the tar stays: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        } finally {
+          queued.delete(key);
+        }
+      });
+    },
+
+    idle: () => builds,
 
     async save(sandbox: Sandbox, root: string, key: string): Promise<number | null> {
       const found = await sandbox.exec(
@@ -136,3 +239,5 @@ export function installCache(config: InstallCacheConfig) {
     },
   };
 }
+
+export type InstallCache = ReturnType<typeof installCache>;

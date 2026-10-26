@@ -4,7 +4,8 @@ import { createRedis, publishLive, RUNS_QUEUE, type RunJobData } from '@weft/que
 import { reapSandboxes } from '@weft/sandbox';
 import { Worker } from 'bullmq';
 import { loadEnv } from './env.ts';
-import { executeRun } from './execute.ts';
+import { executeRun, REPO_ROOT } from './execute.ts';
+import { dockerDepsImages, installCache } from './install-cache.ts';
 import { describeOutcome, shortId } from './log.ts';
 import type { RunConfig } from './types.ts';
 
@@ -12,6 +13,15 @@ const env = loadEnv();
 const { db, pool } = createDb(env.DATABASE_URL);
 const connection = createRedis(env.REDIS_URL);
 const publisher = createRedis(env.REDIS_URL);
+
+const cache = env.INSTALL_CACHE_DIR
+  ? installCache({
+      dir: env.INSTALL_CACHE_DIR,
+      maxBytes: env.INSTALL_CACHE_MAX_MB * 1024 * 1024,
+      images: dockerDepsImages(REPO_ROOT),
+      log: (line) => console.log(line),
+    })
+  : null;
 
 const createLLM = (config: RunConfig) =>
   createProvider(
@@ -54,14 +64,7 @@ const worker = new Worker<RunJobData>(
         allowFileRepos: env.ALLOW_FILE_REPOS,
         log: (line) => console.log(line),
         live: (runId, message) => publishLive(publisher, runId, message),
-        ...(env.INSTALL_CACHE_DIR
-          ? {
-              installCache: {
-                dir: env.INSTALL_CACHE_DIR,
-                maxBytes: env.INSTALL_CACHE_MAX_MB * 1024 * 1024,
-              },
-            }
-          : {}),
+        ...(cache ? { installCache: cache } : {}),
       },
       job.data.runId,
     );

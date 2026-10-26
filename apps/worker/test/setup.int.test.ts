@@ -8,7 +8,8 @@ import { reset, testDb, type TestDb } from '@weft/db/testing';
 import { createMockProvider, type ContentBlock } from '@weft/llm';
 import type { LiveMessage } from '@weft/queue';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { executeRun } from '../src/execute.ts';
+import { executeRun, REPO_ROOT } from '../src/execute.ts';
+import { dockerDepsImages, installCache as createCache } from '../src/install-cache.ts';
 import type { WorkerDeps } from '../src/types.ts';
 
 const fixture = fileURLToPath(new URL('./fixtures/with-deps', import.meta.url));
@@ -129,7 +130,7 @@ describe('setup phase', () => {
   it('caches the install, then restores it offline on the next run', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'weft-install-cache-'));
     dirs.push(dir);
-    const installCache = { dir, maxBytes: 1e9 };
+    const installCache = createCache({ dir, maxBytes: 1e9 });
     const repoUrl = await origin();
 
     const first: string[] = [];
@@ -156,6 +157,48 @@ describe('setup phase', () => {
     expect(tests?.data.output).toMatch(/^Tests passed/);
     expect(probe?.data.output).toContain('offline');
   }, 240_000);
+
+  it('turns the cached install into an image in the background and starts from it', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'weft-install-cache-'));
+    dirs.push(dir);
+    const images = dockerDepsImages(REPO_ROOT);
+    const installCache = createCache({ dir, maxBytes: 1e9, images });
+    const repoUrl = await origin();
+
+    await run(repoUrl, [call('finish', { summary: 'one' })], [], [], { installCache });
+    await installCache.idle();
+    const key = (await readdir(dir)).find((n) => n.endsWith('.used'))?.slice(0, -'.used'.length);
+    try {
+      expect(key).toMatch(/^[0-9a-f]{64}$/);
+      expect(await images.has(key!)).toBe(true);
+      expect((await readdir(dir)).filter((n) => n.endsWith('.tar'))).toHaveLength(0);
+
+      const second: string[] = [];
+      const id = await run(
+        repoUrl,
+        [
+          call('run_tests', {}),
+          call('run_command', { command: reach, timeout_sec: 20 }),
+          call('finish', { summary: 'two' }),
+        ],
+        second,
+        [],
+        { installCache },
+      );
+      expect(second.some((l) => l.includes('setup: dependencies already in weft-deps:'))).toBe(
+        true,
+      );
+      expect(second.some((l) => /setup: (npm ci|restoring)/.test(l))).toBe(false);
+      const done = await getRun(db, id);
+      expect(done).toMatchObject({ status: 'succeeded', diff: '' });
+      expect(done?.timings?.map((t) => t.phase)).not.toContain('cacheRestore');
+      const [, tests, , probe] = await listRunEvents(db, id, { attempt: 1 });
+      expect(tests?.data.output).toMatch(/^Tests passed/);
+      expect(probe?.data.output).toContain('offline');
+    } finally {
+      if (key) await images.remove(key);
+    }
+  }, 600_000);
 
   it('runs the agent offline even though setup had network', async () => {
     const id = await run(await origin(), [

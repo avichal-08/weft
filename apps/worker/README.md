@@ -48,9 +48,10 @@ pnpm --filter @weft/worker dev
    connection; see Known limits.
 
    **Install cache.** After a fresh install, and before the agent runs, every `node_modules`
-   folder is tarred straight from the sandbox to `INSTALL_CACHE_DIR` on the worker host. The
-   next turn (or chat) with the same dependency files restores it instead: the sandbox starts
-   with no network at all and the tar is streamed back in. See [Install cache](#install-cache).
+   folder is tarred straight from the sandbox to `INSTALL_CACHE_DIR` on the worker host, and
+   after the turn it becomes a dependency image in the background. The next turn (or chat) with
+   the same dependency files starts its sandbox from that image, with no network and nothing to
+   copy, or restores the tar if the image isn't ready. See [Install cache](#install-cache).
 
 6. **Agent.** `runAgent` with the LLM from the run's `config` (`provider`, `model`), falling back
    to `.env`, and `maxSteps` (default 30). For later turns it also gets `history`: each earlier
@@ -74,32 +75,46 @@ capped by the agent. A failed trace write is logged and never fails the run.
 
 ### Install cache
 
+Two tiers, looked up in order: a **dependency image** (`weft-deps:<key>`), then a **tar** of
+every `node_modules` directory, then a fresh install. Why images, and what it costs: see
+[ADR 0001](../../docs/decisions/0001-dependency-images.md).
+
+```
+fresh:   install online → tar node_modules → cut network → agent      (tar is the snapshot)
+         after the turn, in the background: tar → image weft-deps:<key>, then delete the tar
+cached:  image exists → sandbox starts from it, copy-on-write, nothing copied
+         only the tar → restore it offline (the image is still building, or failed)
+```
+
 The key is a SHA-256 of the repo URL, the sandbox image id, the install command, and every
 dependency file in the repo (each `package.json`, the lockfile, `pnpm-workspace.yaml`, `.npmrc`,
 `.yarnrc.yml`, `bunfig.toml`), with `.git` and `node_modules` skipped.
 
 - **Only reproducible installs are cached.** Without a lockfile there is no key, so it installs
   every time.
-- **Saved before the agent runs**, so a cached copy is exactly what the install produced; the
-  agent can't plant something in it for a later turn.
+- **Snapshotted before the agent runs**, so a cached copy is exactly what the install produced;
+  the agent can't plant something in it for a later turn. Its own writes to `node_modules` stay
+  in its container's writable layer and disappear with it.
 - **Per repo.** Two repos with identical dependency files still get separate entries, since
   install scripts can read the rest of the repo.
 - **Skipped when an earlier turn changed dependency files.** The key is computed from the clone,
   before the previous turn's diff is applied; if that diff touches a dependency file, the turn
   installs fresh and is not cached.
-- **Bounded.** Writes go to a temporary file and are renamed into place, so concurrent workers
-  never read half an entry. A hit refreshes the entry's mtime; after each save the oldest
-  entries are deleted until the total fits `INSTALL_CACHE_MAX_MB`.
-- **A broken entry is dropped.** If restoring fails, the entry is deleted and the turn fails as
+- **One cache per worker process.** `main.ts` creates it once, because the background builder
+  outlives a run: builds run one at a time, a key is never queued twice, and a failed build is
+  logged and leaves the tar in place, so the next turn still has a cache. Images are built from
+  the base image by id, matching the id in the key.
+- **Bounded.** Tars and images share `INSTALL_CACHE_MAX_MB` and are ranked by last use (a tar's
+  mtime, an image's `<key>.used` marker). Tar writes go to a temporary file renamed into place.
+  An image a running sandbox uses can't be removed, so it is skipped until the next eviction.
+- **A broken tar is dropped.** If restoring fails, the entry is deleted and the turn fails as
   `setup_failed`; the next message installs fresh.
 - A failed save is logged and never fails the turn. Yarn Plug'n'Play repos have no
   `node_modules` and are not cached.
 
-On `Ayushmishra6267/ide`: `npm ci` takes 260 s and the save 33 s (639 MB); the next turn
-restores in 35 s, so the turn takes 63 s instead of 313 s. The restore is limited by streaming
-through Docker's exec connection (about 18 MB/s); a read-only volume per entry would be faster.
-One host directory is the single-machine version; across machines the same tarballs would live
-in object storage.
+On a repo with 639 MB of `node_modules`: `npm ci` takes 275 s and the tar 33 s; restoring the
+tar took 35–47 s; starting a sandbox from the image takes about 4 s; building the image takes
+about 3 minutes in the background.
 
 ### Phase timings
 
@@ -189,6 +204,8 @@ the worker stops taking jobs, lets active runs finish, then closes Redis and Pos
 - **Every turn sets up dependencies, even a question.** "Summarise this repo" needs no `node_modules`, but
   still waits for the install (or the restore), and a large monorepo can fail setup before the
   agent reads a file.
+- **Workspace writes are not size-capped yet.** `/workspace` is on the container's writable
+  layer (on disk, see ADR 0001), which Docker can't cap on ext4; a watchdog is next.
 - **Install scripts have network.** They run sandboxed, but online; egress is not yet limited
   to the package registries.
 - **Verification runs in the agent's sandbox.** M2 moves it to a fresh sandbox with the test

@@ -7,7 +7,7 @@ import Docker from 'dockerode';
 import { pack } from 'tar-fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createSandbox } from '../src/docker.ts';
-import { buildImage } from '../src/image.ts';
+import { buildImage, hasImage, listImages, removeImage } from '../src/image.ts';
 
 const docker = new Docker();
 const image = process.env.SANDBOX_IMAGE ?? 'weft-sandbox:dev';
@@ -86,5 +86,33 @@ describe('buildImage', () => {
     });
     const left = await docker.listContainers({ all: true, filters: { label: ['weft.deps=bad'] } });
     expect(left).toHaveLength(0);
+  });
+
+  it('finds images by label, refuses to remove one in use, and treats missing as removed', async () => {
+    await buildImage(
+      {
+        base: image,
+        repo,
+        tag: 'use',
+        tar,
+        dest: '/workspace/repo',
+        labels: { 'weft.deps': 'k2' },
+      },
+      docker,
+    );
+    expect(await hasImage(`${repo}:use`, docker)).toBe(true);
+    expect((await listImages('weft.deps=k2', docker)).map((i) => i.tags)).toEqual([
+      [`${repo}:use`],
+    ]);
+
+    const sandbox = await createSandbox({ image: `${repo}:use` }, docker);
+    try {
+      expect(await removeImage(`${repo}:use`, docker)).toBe(false);
+    } finally {
+      await sandbox.destroy();
+    }
+    expect(await removeImage(`${repo}:use`, docker)).toBe(true);
+    expect(await hasImage(`${repo}:use`, docker)).toBe(false);
+    expect(await removeImage(`${repo}:use`, docker)).toBe(true);
   });
 });

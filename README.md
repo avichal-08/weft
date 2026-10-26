@@ -33,6 +33,8 @@ apps/
   api/           http api: sessions, messages, runs, cancel, live sse stream
   web/           chat ui: conversations, live work log, changes panel (next.js)
   worker/        runs turns: clone → sandbox → install → agent → verify → diff
+docs/
+  decisions/     architecture decision records: what was chosen, and why
 infra/
   compose.yml    redis (queue + live streams)
   sandbox/       image every agent run executes in

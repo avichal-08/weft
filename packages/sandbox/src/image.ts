@@ -39,3 +39,37 @@ export async function buildImage(
     await helper.destroy().catch(() => {});
   }
 }
+
+export type ImageInfo = { id: string; tags: string[]; labels: Record<string, string> };
+
+const isStatus = (err: unknown, code: number) =>
+  typeof err === 'object' && err !== null && (err as { statusCode?: number }).statusCode === code;
+
+export async function hasImage(ref: string, docker: Docker = new Docker()): Promise<boolean> {
+  try {
+    await docker.getImage(ref).inspect();
+    return true;
+  } catch (err) {
+    if (isStatus(err, 404)) return false;
+    throw err;
+  }
+}
+
+export async function removeImage(ref: string, docker: Docker = new Docker()): Promise<boolean> {
+  try {
+    await docker.getImage(ref).remove();
+    return true;
+  } catch (err) {
+    if (isStatus(err, 404)) return true;
+    if (isStatus(err, 409)) return false;
+    throw err;
+  }
+}
+
+export async function listImages(
+  label: string,
+  docker: Docker = new Docker(),
+): Promise<ImageInfo[]> {
+  const images = await docker.listImages({ filters: { label: [label] } });
+  return images.map((i) => ({ id: i.Id, tags: i.RepoTags ?? [], labels: i.Labels ?? {} }));
+}
