@@ -132,6 +132,19 @@ describe('setup phase', () => {
     expect(lines.some((l) => l.endsWith('setup: bun install --frozen-lockfile'))).toBe(true);
   }, 180_000);
 
+  it('records edits in a repo that ignores its installed node_modules', async () => {
+    const id = await run(await origin(), [
+      call('run_command', { command: 'echo "// edited" >> test/ms.test.js', timeout_sec: 10 }),
+      call('finish', { summary: 'edited' }),
+    ]);
+
+    const done = await getRun(db, id);
+    expect(done).toMatchObject({ status: 'succeeded' });
+    expect(done?.diff).toContain('+// edited');
+    expect(done?.diff).not.toContain('node_modules');
+    expect(done?.diff).not.toContain('.gitignore');
+  }, 180_000);
+
   it('caches the install, then restores it offline on the next run', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'weft-install-cache-'));
     dirs.push(dir);

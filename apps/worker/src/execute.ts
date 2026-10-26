@@ -31,6 +31,14 @@ export class ApplyError extends Error {
 }
 const DEFAULT_MAX_STEPS = 30;
 
+export const DIFF_COMMAND = [
+  'exclude=$(git rev-parse --git-path info/exclude)',
+  'mkdir -p "$(dirname "$exclude")"',
+  '{ grep -qx node_modules "$exclude" 2>/dev/null || echo node_modules >> "$exclude"; }',
+  'git add -A',
+  'git diff --cached --binary --no-color',
+].join(' && ');
+
 export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOutcome> {
   const { db, workerId } = deps;
   const run = await getRun(db, runId);
@@ -283,12 +291,10 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     if (result.status === 'aborted')
       return await finish({ status: 'error', failureKind: 'aborted' });
 
-    const diff = await timed('diff', () =>
-      box.exec(
-        "git add -A -- . ':!node_modules' && git diff --cached --binary --no-color -- . ':!node_modules'",
-        { cwd: REPO_ROOT },
-      ),
-    );
+    const diff = await timed('diff', () => box.exec(DIFF_COMMAND, { cwd: REPO_ROOT }));
+    if (diff.exitCode !== 0) {
+      throw new Error(`collecting the diff failed: ${diff.stderr.trim() || diff.exitCode}`);
+    }
 
     let verify: ExecResult | null = null;
     if (run.testCommand) {

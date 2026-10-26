@@ -63,7 +63,11 @@ pnpm --filter @weft/worker dev
    After every step the worker saves steps and tokens with `recordProgress`.
 7. **Diff.** `git add -A && git diff --cached --binary`, so new files and binary changes are
    included and the patch can be applied by the next turn. `node_modules` is always left out,
-   even when the repo doesn't ignore it.
+   even when the repo doesn't ignore it: it is added to the sandbox's `.git/info/exclude` (local
+   to the clone, never part of a diff). An earlier version excluded it with a `':!node_modules'`
+   pathspec instead, which makes `git add` fail when the repo already ignores `node_modules` and
+   the folder exists; the failure went unchecked and turns on most real repos recorded an empty
+   diff. A failed diff now fails the turn.
 8. **Verify**, when the run has a `testCommand`: the worker reruns it itself instead of trusting
    the agent, and in a **fresh sandbox**: the dependency image (or the base image for a repo
    without dependencies), the clean checkout and the diff from step 7. Nothing the agent left
