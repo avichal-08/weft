@@ -115,8 +115,9 @@ dependency file in the repo (each `package.json`, the lockfile, `pnpm-workspace.
   `node_modules` and are not cached.
 
 On a repo with 639 MB of `node_modules`: `npm ci` takes 275 s and the tar 33 s; restoring the
-tar took 35–47 s; starting a sandbox from the image takes about 4 s; building the image takes
-about 3 minutes in the background.
+tar takes 67 s (it was 35–47 s when `/workspace` was tmpfs); building the image takes 171 s in
+the background; and a turn that starts from the image reaches the agent in 6.9 s, against 55 s
+before. Numbers and trade-offs: [ADR 0001](../../docs/decisions/0001-dependency-images.md).
 
 ### Phase timings
 

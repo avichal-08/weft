@@ -88,8 +88,29 @@ worker, and needs a cold path to fall back on. This decision is that cold path.
 
 ## Consequences
 
-- A cached turn no longer copies dependencies. The expected time before the agent starts is the
-  fixed part of the table above (about 8 s); the measured result is recorded below once taken.
+- A cached turn no longer copies dependencies. Measured on the same repo, three turns of one
+  chat (the first two restored the tar; the image was built in the background after the second):
+
+  | Before the agent starts | Tar, `/workspace` on tmpfs (before) | Tar, on disk (fallback) | Image |
+  | ----------------------- | ----------------------------------- | ----------------------- | ----- |
+  | clone                   | 2.8 s                               | 4.9 s                   | 2.9 s |
+  | start sandbox           | 3.2 s                               | 3.0 s                   | 3.1 s |
+  | copy repo               | 1.6 s                               | 1.4 s                   | 0.9 s |
+  | restore dependencies    | 46.9 s                              | 67.1 s                  |       |
+  | total                   | 55 s                                | 76 s                    | 6.9 s |
+
+  The image build took 171 s in the background. What is left is fixed cost per turn (clone,
+  container start, copy), which keeping sandboxes alive between turns is meant to remove.
+
+- **The tar fallback got slower** (47 s to 67 s), because it now unpacks onto disk instead of
+  RAM. It only applies in the few minutes after a fresh install, before its image exists.
+- **Removing a sandbox that restored the tar is slower**, since its writable layer holds every
+  dependency file and deleting them takes time. This happens after the result is recorded, so
+  nobody waits for it, but the janitor can find the container mid-removal.
+- The first build failed in practice: `docker commit` pauses the container for the whole
+  commit, and the janitor reaped the paused helper as `not-running`. The commit now runs
+  without pausing (nothing runs in the helper after the unpack) and the janitor treats paused
+  containers as alive until the max age.
 - Fresh turns are not faster. Install time is network-bound and is a separate problem.
 - A follow-up sent within about three minutes of a fresh install still restores from the tar,
   because the image is not ready yet.
