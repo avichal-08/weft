@@ -8,6 +8,7 @@ const LABELS: Record<string, string> = {
   install: 'Install deps',
   cacheSave: 'Save deps to cache',
   agent: 'Agent',
+  verifySandbox: 'Prepare clean sandbox',
   verify: 'Run tests',
   diff: 'Collect diff',
 };

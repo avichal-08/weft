@@ -116,8 +116,9 @@ describe('executeRun', () => {
       'sandbox',
       'copy',
       'agent',
-      'verify',
       'diff',
+      'verifySandbox',
+      'verify',
     ]);
     expect(await leftovers(run.id)).toBe(0);
 
@@ -132,7 +133,7 @@ describe('executeRun', () => {
       '   ✓ run_tests T',
       '#4 llm T in=0 out=0',
       '   ✓ finish T',
-      'timings: clone T, sandbox T, copy T, agent T, verify T, diff T',
+      'timings: clone T, sandbox T, copy T, agent T, diff T, verifySandbox T, verify T',
     ]);
 
     const events = await listRunEvents(db, run.id, { attempt: 1 });
@@ -166,6 +167,27 @@ describe('executeRun', () => {
     expect(streamed.map(({ seq, type, step, data }) => ({ seq, type, step, data }))).toEqual(
       events.map(({ seq, type, step, data }) => ({ seq, type, step, data })),
     );
+  });
+
+  it('verifies in a fresh sandbox, so nothing outside the diff can make the tests pass', async () => {
+    const run = await createRun(db, {
+      repoUrl,
+      task: 'Make the tests pass.',
+      testCommand: 'test ! -e /home/node/marker && node --test',
+    });
+    const llm = createMockProvider([
+      call('run_command', { command: 'touch /home/node/marker', timeout_sec: 10 }),
+      ...fixScript,
+    ]);
+
+    await executeRun(deps(llm), run.id);
+    const done = await getRun(db, run.id);
+    expect(done).toMatchObject({ status: 'succeeded' });
+    expect(done?.diff).toContain('+  return a + b;');
+    const events = await listRunEvents(db, run.id, { attempt: 1 });
+    const inAgentSandbox = events.find((e) => e.type === 'tool' && e.data.name === 'run_tests');
+    expect(inAgentSandbox?.data.isError).toBe(true);
+    expect(await leftovers(run.id)).toBe(0);
   });
 
   it('logs model retries and still finishes the run', async () => {

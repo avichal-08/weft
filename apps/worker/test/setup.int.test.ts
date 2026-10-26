@@ -96,6 +96,11 @@ describe('setup phase', () => {
       lines.some((l) => l.endsWith('setup: npm ci --no-audit --no-fund --loglevel=error')),
     ).toBe(true);
     expect(lines.some((l) => /setup: done in [\d.]+s, network disconnected/.test(l))).toBe(true);
+    expect(
+      lines.some((l) =>
+        l.endsWith("verify: no clean dependencies yet, running the tests in the agent's sandbox"),
+      ),
+    ).toBe(true);
     expect(published.filter((m) => m.kind === 'phase').map((m) => m.phase)).toEqual([
       'clone',
       'sandbox',
@@ -192,6 +197,7 @@ describe('setup phase', () => {
       const done = await getRun(db, id);
       expect(done).toMatchObject({ status: 'succeeded', diff: '' });
       expect(done?.timings?.map((t) => t.phase)).not.toContain('cacheRestore');
+      expect(done?.timings?.map((t) => t.phase)).toContain('verifySandbox');
       const [, tests, , probe] = await listRunEvents(db, id, { attempt: 1 });
       expect(tests?.data.output).toMatch(/^Tests passed/);
       expect(probe?.data.output).toContain('offline');

@@ -12,7 +12,7 @@ import {
 } from '@weft/db';
 import { emptyUsage, LLMError, withRetry } from '@weft/llm';
 import type { LiveMessage, LivePhase } from '@weft/queue';
-import { createSandbox, imageId, type Sandbox } from '@weft/sandbox';
+import { createSandbox, imageId, type ExecResult, type Sandbox } from '@weft/sandbox';
 import { CloneError, cloneRepo } from './clone.ts';
 import { buildHistory, latestDiff } from './history.ts';
 import { installKey, touchesManifests, type CacheHit } from './install-cache.ts';
@@ -44,6 +44,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
   let progress = Promise.resolve();
   let checkout: Awaited<ReturnType<typeof cloneRepo>> | undefined;
   let sandbox: Sandbox | undefined;
+  let checker: Sandbox | undefined;
   let build: { key: string; base: string } | undefined;
   let killed: string | undefined;
   const timings: PhaseTiming[] = [];
@@ -61,6 +62,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     fenced = true;
     abort.abort();
     void sandbox?.destroy().catch(() => {});
+    void checker?.destroy().catch(() => {});
   };
   const stopWatching = watchRun(
     db,
@@ -156,10 +158,9 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
         : null;
     const hit: CacheHit | null = cache && key ? await cache.lookup(key) : null;
 
-    phase('sandbox');
-    sandbox = await timed('sandbox', () =>
+    const boxFrom = (image: string, network = false) =>
       createSandbox({
-        image: hit?.kind === 'image' ? hit.image : deps.sandboxImage,
+        image,
         owner: workerId,
         labels: { 'weft.run': runId },
         onKilled: (reason) => {
@@ -167,13 +168,17 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
           log(`sandbox killed: ${reason}`);
           abort.abort();
         },
-        ...(plan && !hit ? { network: 'bridge' as const } : {}),
+        ...(network ? { network: 'bridge' as const } : {}),
         limits: {
           ...(plan ? { memoryMb: 2048, workspaceMb: 2048, tmpMb: 512 } : {}),
           ...(deps.diskLimitMb ? { workspaceMb: deps.diskLimitMb } : {}),
         },
         ...(deps.diskCheckMs ? { diskCheckMs: deps.diskCheckMs } : {}),
-      }),
+      });
+
+    phase('sandbox');
+    sandbox = await timed('sandbox', () =>
+      boxFrom(hit?.kind === 'image' ? hit.image : deps.sandboxImage, Boolean(plan && !hit)),
     );
     abort.signal.throwIfAborted();
     const box = sandbox;
@@ -235,18 +240,44 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     if (result.status === 'aborted')
       return await finish({ status: 'error', failureKind: 'aborted' });
 
-    if (run.testCommand) phase('verify');
-    const verify = run.testCommand
-      ? await timed('verify', () =>
-          box.exec(run.testCommand!, { cwd: REPO_ROOT, timeoutMs: ctx.testTimeoutMs }),
-        )
-      : null;
     const diff = await timed('diff', () =>
       box.exec(
         "git add -A -- . ':!node_modules' && git diff --cached --binary --no-color -- . ':!node_modules'",
         { cwd: REPO_ROOT },
       ),
     );
+
+    let verify: ExecResult | null = null;
+    if (run.testCommand) {
+      phase('verify');
+      const clean = !plan
+        ? deps.sandboxImage
+        : cache && key && !touchesManifests(diff.stdout)
+          ? await cache.lookup(key).then((h) => (h?.kind === 'image' ? h.image : null))
+          : null;
+      let target = box;
+      if (clean) {
+        target = await timed('verifySandbox', async () => {
+          checker = await boxFrom(clean);
+          await checker.putFiles(dir, REPO_ROOT);
+          if (diff.stdout) {
+            const applied = await checker.exec(['git', 'apply', '--whitespace=nowarn', '-'], {
+              cwd: REPO_ROOT,
+              stdin: diff.stdout,
+            });
+            if (applied.exitCode !== 0) {
+              throw new Error(`this turn's diff did not apply for verification: ${applied.stderr}`);
+            }
+          }
+          return checker;
+        });
+      } else {
+        log("verify: no clean dependencies yet, running the tests in the agent's sandbox");
+      }
+      verify = await timed('verify', () =>
+        target.exec(run.testCommand!, { cwd: REPO_ROOT, timeoutMs: ctx.testTimeoutMs }),
+      );
+    }
     const passed = verify ? verify.exitCode === 0 : true;
 
     if (result.status === 'finished' && passed) {
@@ -266,7 +297,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     return await finish({ status: 'error', ...describeError(err) });
   } finally {
     stopWatching();
-    await sandbox?.destroy().catch(() => {});
+    await Promise.all([sandbox?.destroy(), checker?.destroy()]).catch(() => {});
     await checkout?.cleanup();
     if (build) deps.installCache?.scheduleBuild(build.key, build.base);
   }

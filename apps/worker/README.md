@@ -59,11 +59,19 @@ pnpm --filter @weft/worker dev
    to `.env`, and `maxSteps` (default 30). For later turns it also gets `history`: each earlier
    message with the agent's reply, or a note like "(this turn ended without a reply: cancelled)".
    After every step the worker saves steps and tokens with `recordProgress`.
-7. **Verify**, when the run has a `testCommand`: the worker reruns it itself instead of trusting
-   the agent. Without one (questions, repos without tests) there is nothing to rerun.
-8. **Diff.** `git add -A && git diff --cached --binary`, so new files and binary changes are
+7. **Diff.** `git add -A && git diff --cached --binary`, so new files and binary changes are
    included and the patch can be applied by the next turn. `node_modules` is always left out,
    even when the repo doesn't ignore it.
+8. **Verify**, when the run has a `testCommand`: the worker reruns it itself instead of trusting
+   the agent, and in a **fresh sandbox**: the dependency image (or the base image for a repo
+   without dependencies), the clean checkout and the diff from step 7. Nothing the agent left
+   outside the diff (a patched `node_modules`, files in its home directory, gitignored files,
+   background processes) can affect the verdict
+   ([ADR 0002](../../docs/decisions/0002-session-sandboxes-and-clean-verification.md)). Without
+   clean dependencies (right after a fresh install, before its image exists, or when the diff
+   changes dependency files) it runs in the agent's sandbox and logs that. It runs even when the
+   turn changed nothing, so "make the tests pass" with no change still fails as `tests_failed`.
+   Without a test command (questions, repos without tests) there is nothing to rerun.
 9. **Record** with `completeRun` (fenced), then always remove the sandbox and the checkout.
 
 ### Trace
@@ -122,15 +130,16 @@ before. Numbers and trade-offs: [ADR 0001](../../docs/decisions/0001-dependency-
 ### Phase timings
 
 Each phase is timed and stored on the run as `timings`, in the order it ran, and logged as one
-line when the run ends:
+line when the run ends (here a small repo without dependencies, from the integration tests):
 
 ```
-run 3f2a9c1e timings: clone 1.2s, cacheKey 0.1s, sandbox 0.9s, copy 0.4s, cacheRestore 35.1s, agent 21.7s, verify 3.2s, diff 0.2s
+run 4aa22721 timings: clone 0.1s, sandbox 0.9s, copy 0.3s, agent 1.6s, diff 0.2s, verifySandbox 1.3s, verify 0.6s
 ```
 
 Phases: `clone`, `cacheKey` (hashing dependency files), `sandbox` (create and start), `copy`
 (repo into the sandbox), `apply` (previous turn's diff), then `cacheRestore` or `install` and
-`cacheSave`, `agent`, `verify`, `diff`. A phase that didn't run is absent; a run that failed
+`cacheSave`, `agent`, `diff`, `verifySandbox` (start the clean sandbox, copy, apply the diff)
+and `verify`. A phase that didn't run is absent; a run that failed
 keeps the phases it got through, so a slow failure still shows where the time went. This is what
 every sandbox speed change is measured against.
 
@@ -209,8 +218,9 @@ the worker stops taking jobs, lets active runs finish, then closes Redis and Pos
   agent reads a file.
 - **Install scripts have network.** They run sandboxed, but online; egress is not yet limited
   to the package registries.
-- **Verification runs in the agent's sandbox.** M2 moves it to a fresh sandbox with the test
-  files restored, so the agent can't game it.
+- **The agent can change the tests.** Verification runs in a fresh sandbox, but with the diff's
+  version of the test files; restoring them from the base commit is still to do. The run also
+  doesn't record whether verification ran fresh or fell back to the agent's sandbox.
 
 ## Testing
 
