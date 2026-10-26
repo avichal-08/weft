@@ -70,6 +70,20 @@ sandbox lives for the whole session.
 
 ## Consequences
 
+- Measured on the repo from [0001](0001-dependency-images.md) (639 MB of `node_modules`), two
+  turns of one chat, time before the agent starts:
+
+  | Turn                               | Phases                                           | Total |
+  | ---------------------------------- | ------------------------------------------------ | ----- |
+  | first (cold, dependency image)     | clone 3.1 s, sandbox 3.0 s, copy 1.2 s           | 7.3 s |
+  | follow-up (kept sandbox)           | resume 1.6 s                                     | 1.6 s |
+  | follow-up before 0001 (tar, tmpfs) | clone, hash, sandbox, copy 8.4 s; restore 46.9 s | 55 s  |
+
+  Most of `resume` is `git ls-remote` to GitHub (0.7–1.0 s measured from the same machine); the
+  rest is checking the sandbox still answers.
+
+- A turn that ends in an error leaves nothing to resume, so the message after it starts cold.
+  Seen in practice when the model provider returned 503s.
 - "Tests pass" now means the tests pass on base commit + diff with the cached dependencies,
   which is what a pull request's CI will see.
 - Turns with a test command pay for a second sandbox at the end: start from the image, copy the

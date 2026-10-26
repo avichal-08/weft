@@ -153,6 +153,9 @@ the diff again. Why, and what it gives up:
 - The pool lives in one worker's memory: with several workers, a follow-up picked up by another
   worker starts cold.
 
+On the 639 MB repo, a follow-up that resumes reaches the agent in 1.6 s, most of it the
+`git ls-remote` round trip; a cold turn from the dependency image takes about 7 s.
+
 ### Phase timings
 
 Each phase is timed and stored on the run as `timings`, in the order it ran, and logged as one
