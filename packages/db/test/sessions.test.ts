@@ -174,17 +174,20 @@ describe('recordPush / recordPublishError', () => {
 });
 
 describe('publish state', () => {
-  it('moves queued → pushing → pushed or failed, and keeps the pull request', async () => {
+  it('moves queued → pushing → pushed or failed; a push alone does not finish it', async () => {
     const { session } = await createSession(db, input);
     await setPublishState(db, session.id, 'queued');
     expect((await getSession(db, session.id))?.publishState).toBe('queued');
     await recordPublishError(db, session.id, 'nope');
     expect((await getSession(db, session.id))?.publishState).toBe('failed');
+    await setPublishState(db, session.id, 'pushing');
     await recordPush(db, session.id, { branch: 'weft/x-1', pushedTurn: 1, pushedSha: 'a' });
+    expect((await getSession(db, session.id))?.publishState).toBe('pushing');
     await recordPullRequest(db, session.id, {
       prNumber: 3,
       prUrl: 'https://github.com/a/b/pull/3',
     });
+    await setPublishState(db, session.id, 'pushed');
     expect(await getSession(db, session.id)).toMatchObject({
       publishState: 'pushed',
       prNumber: 3,

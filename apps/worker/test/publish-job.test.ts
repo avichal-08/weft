@@ -48,12 +48,14 @@ function fakeGitHub(existing: number | null = null) {
 }
 
 const asked: (string | undefined)[] = [];
+const statesAfterPush: (string | null | undefined)[] = [];
 const pushes =
   (fallback: string) =>
   async (_deps: unknown, sessionId: string, opts: { branch?: string } = {}) => {
     asked.push(opts.branch);
     const branch = opts.branch ?? fallback;
     await recordPush(db, sessionId, { branch, pushedTurn: 1, pushedSha: 'abc' });
+    statesAfterPush.push((await getSession(db, sessionId))?.publishState);
     return { sha: 'abc', pushedTurn: 1 };
   };
 
@@ -76,6 +78,7 @@ describe('handlePublish', () => {
       expect.objectContaining({ head: branch, base: 'main', title: 'Refresh LRU recency on get' }),
     ]);
     expect(llm.calls).toHaveLength(1);
+    expect(statesAfterPush.at(-1)).toBe('pushing');
     expect(await getSession(db, session.id)).toMatchObject({
       publishState: 'pushed',
       prNumber: 12,

@@ -49,20 +49,21 @@ export async function handlePublish(deps: PublishJobDeps, job: PublishJobData): 
     );
     log(pushed ? `pushed turn ${pushed.pushedTurn} (${pushed.sha.slice(0, 7)})` : 'nothing new');
     const session = (await getSession(db, sessionId))!;
-    if (!pushed) await setPublishState(db, sessionId, 'pushed');
 
-    if (!opening || !text || !session.branch) return;
-    const github = deps.github!;
-    const existing = await github.findPullRequest(ref, session.branch);
-    const pr =
-      existing ??
-      (await github.openPullRequest(ref, {
-        head: session.branch,
-        base: session.baseRef ?? (await github.defaultBranch(ref)),
-        ...text,
-      }));
-    await recordPullRequest(db, sessionId, { prNumber: pr.number, prUrl: pr.url });
-    log(`${existing ? 'found' : 'opened'} pull request #${pr.number}`);
+    if (opening && text && session.branch) {
+      const github = deps.github!;
+      const existing = await github.findPullRequest(ref, session.branch);
+      const pr =
+        existing ??
+        (await github.openPullRequest(ref, {
+          head: session.branch,
+          base: session.baseRef ?? (await github.defaultBranch(ref)),
+          ...text,
+        }));
+      await recordPullRequest(db, sessionId, { prNumber: pr.number, prUrl: pr.url });
+      log(`${existing ? 'found' : 'opened'} pull request #${pr.number}`);
+    }
+    await setPublishState(db, sessionId, 'pushed');
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await recordPublishError(db, sessionId, message);

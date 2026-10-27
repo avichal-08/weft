@@ -131,7 +131,7 @@ export async function recordPush(
 ): Promise<void> {
   await db
     .update(sessions)
-    .set({ ...push, publishError: null, publishState: 'pushed' })
+    .set({ ...push, publishError: null })
     .where(eq(sessions.id, id));
 }
 
