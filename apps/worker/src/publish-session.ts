@@ -13,7 +13,11 @@ const LOCAL_AUTHOR = { name: 'weft', email: 'weft@localhost' };
 
 const firstLine = (text: string) => text.trim().split('\n')[0]!.slice(0, 72);
 
-export async function publishSession(deps: PublishDeps, sessionId: string): Promise<PublishResult> {
+export async function publishSession(
+  deps: PublishDeps,
+  sessionId: string,
+  opts: { branch?: string } = {},
+): Promise<PublishResult> {
   const session = await getSession(deps.db, sessionId);
   if (!session) throw new PublishError(`session ${sessionId} not found`);
 
@@ -31,7 +35,7 @@ export async function publishSession(deps: PublishDeps, sessionId: string): Prom
     const turns = session.turns
       .filter((t) => t.turn! > pushedTurn && t.status === 'succeeded' && t.diff !== null)
       .map((t) => ({ turn: t.turn!, diff: t.diff!, message: firstLine(t.summary ?? t.task) }));
-    const branch = session.branch ?? branchName(session.title, session.id);
+    const branch = session.branch ?? opts.branch ?? branchName(session.title, session.id);
 
     const result = await publishTurns({
       repoUrl: session.repoUrl,

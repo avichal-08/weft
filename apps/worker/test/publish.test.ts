@@ -201,5 +201,14 @@ describe('branchName', () => {
     );
     expect(branchName('???', 'abcdef12-0000')).toBe('weft/abcdef12');
     expect(branchName('a'.repeat(80), '1a2b3c4d-0000')).toBe(`weft/${'a'.repeat(40)}-1a2b3c4d`);
+    expect(
+      branchName(
+        'Add a new function capitalize(text) to src/strings.js that upper-cases',
+        '2510dee0-0',
+      ),
+    ).toBe('weft/add-a-new-function-capitalize-text-to-2510dee0');
+    expect(branchName('Add capitalize string utility function', '2510dee0-0')).toBe(
+      'weft/add-capitalize-string-utility-function-2510dee0',
+    );
   });
 });

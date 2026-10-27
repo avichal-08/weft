@@ -47,17 +47,22 @@ function fakeGitHub(existing: number | null = null) {
   return { github, opened };
 }
 
-const pushes = (branch: string) => async (_deps: unknown, sessionId: string) => {
-  await recordPush(db, sessionId, { branch, pushedTurn: 1, pushedSha: 'abc' });
-  return { sha: 'abc', pushedTurn: 1 };
-};
+const asked: (string | undefined)[] = [];
+const pushes =
+  (fallback: string) =>
+  async (_deps: unknown, sessionId: string, opts: { branch?: string } = {}) => {
+    asked.push(opts.branch);
+    const branch = opts.branch ?? fallback;
+    await recordPush(db, sessionId, { branch, pushedTurn: 1, pushedSha: 'abc' });
+    return { sha: 'abc', pushedTurn: 1 };
+  };
 
 describe('handlePublish', () => {
   it('pushes, then opens a pull request against the default branch and remembers it', async () => {
     const { session } = await chat();
     const { github, opened } = fakeGitHub();
     const llm = createMockProvider([
-      { content: [{ type: 'text', text: 'Fix the cache\n\n- Refresh on get' }] },
+      { content: [{ type: 'text', text: 'Refresh LRU recency on get\n\n- Refresh on get' }] },
     ]);
 
     await handlePublish(
@@ -65,13 +70,12 @@ describe('handlePublish', () => {
       { sessionId: session.id, turn: 1, openPullRequest: true },
     );
 
+    const branch = `weft/refresh-lru-recency-on-get-${session.id.slice(0, 8)}`;
+    expect(asked.at(-1)).toBe(branch);
     expect(opened).toEqual([
-      expect.objectContaining({
-        head: 'weft/fix-the-cache-1',
-        base: 'main',
-        title: 'Fix the cache',
-      }),
+      expect.objectContaining({ head: branch, base: 'main', title: 'Refresh LRU recency on get' }),
     ]);
+    expect(llm.calls).toHaveLength(1);
     expect(await getSession(db, session.id)).toMatchObject({
       publishState: 'pushed',
       prNumber: 12,

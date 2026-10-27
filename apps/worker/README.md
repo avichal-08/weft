@@ -184,8 +184,12 @@ On the 639 MB repo, a follow-up that resumes reaches the agent in 1.6 s, most of
 ([ADR 0005](../../docs/decisions/0005-publishing-chats-as-branches.md)). It runs on the host,
 never in a sandbox, with an installation token from `@weft/github`.
 
-- **One branch per chat**, `weft/<title slug>-<session id>`, created from the base branch on the
-  first push.
+- **One branch per chat**, created from the base branch on the first push and named after the
+  pull request's title, `weft/<title slug>-<session id>`, e.g.
+  `weft/add-capitalize-string-utility-function-2510dee0`: the title is written before the first
+  push, so the branch and the pull request say the same thing. The slug is cut at the last whole
+  word within 40 characters; a chat pushed without a pull request is named after its first
+  message.
 - **One commit per succeeded turn**, holding only that turn's changes, with the first line of
   the turn's summary as the message and the app's bot as author. Turns that changed nothing are
   skipped; a failed turn in between gets no commit of its own (its changes land in the next

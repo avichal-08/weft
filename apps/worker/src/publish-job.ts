@@ -9,6 +9,7 @@ import {
 import { parseRepo, type NewPullRequest, type PullRequest, type RepoRef } from '@weft/github';
 import type { LLMProvider } from '@weft/llm';
 import type { PublishJobData } from '@weft/queue';
+import { branchName } from './publish.ts';
 import { publishSession, type Publisher } from './publish-session.ts';
 import { describePullRequest } from './pull-request.ts';
 import type { RunConfig } from './types.ts';
@@ -34,24 +35,31 @@ export async function handlePublish(deps: PublishJobDeps, job: PublishJobData): 
   const log = (line: string) => deps.log?.(`publish ${sessionId.slice(0, 8)} ${line}`);
   await setPublishState(db, sessionId, 'pushing');
   try {
-    const pushed = await (deps.publish ?? publishSession)(deps, sessionId);
+    const before = (await getSession(db, sessionId))!;
+    const ref = parseRepo(before.repoUrl);
+    const opening = job.openPullRequest && !before.prNumber && ref && deps.github;
+    const text = opening
+      ? await describePullRequest(before, deps.createLLM ? deps.createLLM(before.config) : null)
+      : null;
+
+    const pushed = await (deps.publish ?? publishSession)(
+      deps,
+      sessionId,
+      text && !before.branch ? { branch: branchName(text.title, sessionId) } : {},
+    );
     log(pushed ? `pushed turn ${pushed.pushedTurn} (${pushed.sha.slice(0, 7)})` : 'nothing new');
     const session = (await getSession(db, sessionId))!;
     if (!pushed) await setPublishState(db, sessionId, 'pushed');
 
-    const ref = parseRepo(session.repoUrl);
-    if (!job.openPullRequest || session.prNumber || !session.branch || !ref || !deps.github) return;
-    const github = deps.github;
+    if (!opening || !text || !session.branch) return;
+    const github = deps.github!;
     const existing = await github.findPullRequest(ref, session.branch);
     const pr =
       existing ??
       (await github.openPullRequest(ref, {
         head: session.branch,
         base: session.baseRef ?? (await github.defaultBranch(ref)),
-        ...(await describePullRequest(
-          session,
-          deps.createLLM ? deps.createLLM(session.config) : null,
-        )),
+        ...text,
       }));
     await recordPullRequest(db, sessionId, { prNumber: pr.number, prUrl: pr.url });
     log(`${existing ? 'found' : 'opened'} pull request #${pr.number}`);

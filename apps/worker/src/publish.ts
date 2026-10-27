@@ -58,12 +58,17 @@ function git(
 }
 
 export function branchName(title: string, sessionId: string): string {
-  const slug = title
+  const words = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40)
-    .replace(/-+$/, '');
+    .replace(/^-+|-+$/g, '');
+  const head = words.slice(0, 41);
+  const slug =
+    words.length <= 40
+      ? words
+      : head.includes('-')
+        ? head.replace(/-[^-]*$/, '')
+        : head.slice(0, 40);
   return `weft/${slug ? `${slug}-` : ''}${sessionId.slice(0, 8)}`;
 }
 
