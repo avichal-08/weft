@@ -25,9 +25,8 @@ Jobs stay small on purpose: Postgres is the source of truth for a run, and Redis
 
 ## Publish queue
 
-`publish` carries `{ sessionId, turn, openPullRequest }` jobs from the API (the "Create PR"
-button) and from the worker itself (a turn finished in a chat that already has a pull request).
-The job id is `<session>-<turn>-<pr|push>`, so asking twice for the same turn queues one job.
+`publish` carries `{ sessionId, turn, openPullRequest }` jobs from the API: the "Create PR"
+button, and a commit saved in a chat that already has a pull request. The job id is `<session>-<turn>-<pr|push>`, so asking twice for the same turn queues one job.
 Finished jobs are removed whether they succeeded or failed: BullMQ ignores a new job whose id
 matches one it still keeps, which would make a retry after a failure silently do nothing. The
 outcome lives on the session (`publish_state`, `publish_error`), not on the job.

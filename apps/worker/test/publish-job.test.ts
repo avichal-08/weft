@@ -1,9 +1,9 @@
-import { addTurn, claimRun, completeRun, createSession, getSession, recordPush } from '@weft/db';
+import { claimRun, completeRun, createSession, getSession, recordPush } from '@weft/db';
 import { reset, testDb, type TestDb } from '@weft/db/testing';
 import type { NewPullRequest } from '@weft/github';
 import { createMockProvider } from '@weft/llm';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { followUpPublish, handlePublish, type GitHub } from '../src/publish-job.ts';
+import { handlePublish, type GitHub } from '../src/publish-job.ts';
 
 let db: TestDb;
 const repoUrl = 'https://github.com/avichal-08/weft-playground';
@@ -56,7 +56,7 @@ const pushes =
     const branch = opts.branch ?? fallback;
     await recordPush(db, sessionId, { branch, pushedTurn: 1, pushedSha: 'abc' });
     statesAfterPush.push((await getSession(db, sessionId))?.publishState);
-    return { sha: 'abc', pushedTurn: 1 };
+    return { sha: 'abc', commits: [] };
   };
 
 describe('handlePublish', () => {
@@ -98,39 +98,19 @@ describe('handlePublish', () => {
   });
 
   it('records why it failed instead of throwing', async () => {
-    const { session } = await chat('diff --git a/a b/a\n', 'failed');
+    const { session } = await chat();
     await handlePublish(
-      { db, github: fakeGitHub().github },
+      {
+        db,
+        github: fakeGitHub().github,
+        publish: () => Promise.reject(new Error('git push failed: rejected')),
+      },
       { sessionId: session.id, turn: 1, openPullRequest: true },
     );
     expect(await getSession(db, session.id)).toMatchObject({
       publishState: 'failed',
+      publishError: 'git push failed: rejected',
       prNumber: null,
-    });
-  });
-});
-
-describe('followUpPublish', () => {
-  it('pushes later succeeded turns only once the chat has a pull request', async () => {
-    const { session, run } = await chat();
-    expect(await followUpPublish(db, run.id)).toBeNull();
-
-    await handlePublish(
-      { db, github: fakeGitHub().github, publish: pushes('weft/x-1') },
-      { sessionId: session.id, turn: 1, openPullRequest: true },
-    );
-    const next = await addTurn(db, session.id, 'More');
-    if (!next.ok) throw new Error('refused');
-    const attempt = (await claimRun(db, next.run.id, 'w'))!;
-    await completeRun(db, next.run.id, attempt, {
-      status: 'succeeded',
-      diff: 'diff --git a/b b/b\n',
-    });
-
-    expect(await followUpPublish(db, next.run.id)).toEqual({
-      sessionId: session.id,
-      turn: 2,
-      openPullRequest: false,
     });
   });
 });

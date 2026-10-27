@@ -3,9 +3,7 @@ import { createProvider, loadLLMConfig } from '@weft/llm';
 import { readFileSync } from 'node:fs';
 import { githubApp } from '@weft/github';
 import {
-  createPublishQueue,
   createRedis,
-  enqueuePublish,
   PUBLISH_QUEUE,
   publishLive,
   RUNS_QUEUE,
@@ -19,7 +17,7 @@ import { executeRun, REPO_ROOT } from './execute.ts';
 import { dockerDepsImages, installCache } from './install-cache.ts';
 import { sessionSandboxes } from './session-sandboxes.ts';
 import { describeOutcome, shortId } from './log.ts';
-import { followUpPublish, handlePublish } from './publish-job.ts';
+import { handlePublish } from './publish-job.ts';
 import type { RunConfig } from './types.ts';
 
 const env = loadEnv();
@@ -43,7 +41,6 @@ const github =
         privateKey: readFileSync(env.GITHUB_APP_PRIVATE_KEY_PATH, 'utf8'),
       })
     : undefined;
-const publishQueue = createPublishQueue(connection);
 
 const sessions = sessionSandboxes({
   max: env.SESSION_SANDBOXES_MAX,
@@ -103,8 +100,6 @@ const worker = new Worker<RunJobData>(
     );
     const secs = ((performance.now() - started) / 1000).toFixed(1);
     console.log(`run ${id} ${describeOutcome(outcome)} in ${secs}s`);
-    const followUp = await followUpPublish(db, job.data.runId).catch(() => null);
-    if (followUp) await enqueuePublish(publishQueue, followUp);
     return outcome;
   },
   { connection, concurrency: env.WORKER_CONCURRENCY },
@@ -139,7 +134,6 @@ async function shutdown(signal: string) {
   clearInterval(janitorTimer);
   await worker.close();
   await publishWorker.close();
-  await publishQueue.close();
   await sessions.clear();
   await connection.quit();
   await publisher.quit();

@@ -1,5 +1,4 @@
 import {
-  getRun,
   getSession,
   recordPublishError,
   recordPullRequest,
@@ -47,7 +46,11 @@ export async function handlePublish(deps: PublishJobDeps, job: PublishJobData): 
       sessionId,
       text && !before.branch ? { branch: branchName(text.title, sessionId) } : {},
     );
-    log(pushed ? `pushed turn ${pushed.pushedTurn} (${pushed.sha.slice(0, 7)})` : 'nothing new');
+    log(
+      pushed
+        ? `pushed ${pushed.commits.length} commit(s), head ${pushed.sha.slice(0, 7)}`
+        : 'nothing new',
+    );
     const session = (await getSession(db, sessionId))!;
 
     if (opening && text && session.branch) {
@@ -69,12 +72,4 @@ export async function handlePublish(deps: PublishJobDeps, job: PublishJobData): 
     await recordPublishError(db, sessionId, message);
     log(`failed: ${message}`);
   }
-}
-
-export async function followUpPublish(db: Db, runId: string): Promise<PublishJobData | null> {
-  const run = await getRun(db, runId);
-  if (!run?.sessionId || run.status !== 'succeeded' || !run.turn) return null;
-  const session = await getSession(db, run.sessionId);
-  if (!session?.prNumber) return null;
-  return { sessionId: session.id, turn: run.turn, openPullRequest: false };
 }

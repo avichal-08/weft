@@ -10,6 +10,7 @@ import {
   getSession,
   listSessions,
   publishRefusal,
+  pullRequestRefusal,
   recordCommitSha,
   recordPublishError,
   recordPullRequest,
@@ -274,5 +275,26 @@ describe('commits', () => {
       diff: 'd',
     });
     expect(commitRefusal((await getSession(db, session.id))!)).toMatch(/tests fail/);
+  });
+
+  it('only opens a pull request once every change is committed', async () => {
+    const id = await chat('diff --git a/a b/a\n');
+    const refusal = async () => pullRequestRefusal((await getSession(db, id))!);
+    expect(await refusal()).toEqual({
+      error: 'uncommitted',
+      message: 'commit your changes before opening a pull request',
+    });
+    await createCommit(db, { sessionId: id, turn: 1, message: 'Add a' });
+    expect(await refusal()).toBeNull();
+
+    const next = await addTurn(db, id, 'more');
+    if (!next.ok) throw new Error('refused');
+    expect(await refusal()).toMatchObject({ error: 'not_publishable' });
+    const attempt = (await claimRun(db, next.run.id, 'w'))!;
+    await completeRun(db, next.run.id, attempt, {
+      status: 'succeeded',
+      diff: 'diff --git a/b b/b\n',
+    });
+    expect(await refusal()).toMatchObject({ error: 'uncommitted' });
   });
 });

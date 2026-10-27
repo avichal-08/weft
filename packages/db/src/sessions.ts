@@ -201,3 +201,14 @@ export function publishRefusal(turns: Run[]): string | null {
   }
   return null;
 }
+
+export type Refusal = { error: 'not_publishable' | 'uncommitted'; message: string };
+
+export function pullRequestRefusal(session: SessionWithTurns): Refusal | null {
+  const why = publishRefusal(session.turns);
+  if (why) return { error: 'not_publishable', message: why };
+  if (session.commits.length === 0 || session.turns.at(-1)!.diff !== lastCommittedDiff(session)) {
+    return { error: 'uncommitted', message: 'commit your changes before opening a pull request' };
+  }
+  return null;
+}

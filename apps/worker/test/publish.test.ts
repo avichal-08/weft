@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { authEnv, branchName, publishTurns, type PublishInput } from '../src/publish.ts';
+import { authEnv, branchName, publishCommits, type PublishInput } from '../src/publish.ts';
 
 const dirs: string[] = [];
 const git = (cwd: string, ...args: string[]) =>
@@ -42,7 +42,7 @@ async function setup() {
     return diff;
   };
 
-  const base: Omit<PublishInput, 'turns' | 'pushedDiff'> = {
+  const base: Omit<PublishInput, 'commits' | 'pushedDiff'> = {
     repoUrl: pathToFileURL(bare).href,
     baseRef: 'main',
     branch: 'weft/fix-a-1a2b3c4d',
@@ -55,8 +55,8 @@ async function setup() {
 const log = (bare: string, ref: string) => git(bare, 'log', '--format=%s|%an|%ae', ref).split('\n');
 const changed = (bare: string, ref: string) => git(bare, 'show', '--name-only', '--format=', ref);
 
-describe('publishTurns', () => {
-  it('pushes a new branch with one commit per turn, each holding only its own changes', async () => {
+describe('publishCommits', () => {
+  it('pushes a new branch with one git commit per saved commit, each holding only its own changes', async () => {
     const { bare, base, diffAfter } = await setup();
     const one = await diffAfter({ 'a.js': 'export const a = 2;\n' });
     const two = await diffAfter({
@@ -64,16 +64,23 @@ describe('publishTurns', () => {
       'b.js': 'export const b = 1;\n',
     });
 
-    const result = await publishTurns({
+    const result = await publishCommits({
       ...base,
       pushedDiff: null,
-      turns: [
-        { turn: 1, diff: one, message: 'Set a to 2' },
-        { turn: 2, diff: two, message: 'Add b' },
+      commits: [
+        { id: 'c1', diff: one, message: 'Set a to 2' },
+        { id: 'c2', diff: two, message: 'Add b' },
       ],
     });
 
-    expect(result).toEqual({ sha: git(bare, 'rev-parse', base.branch), pushedTurn: 2 });
+    const head = git(bare, 'rev-parse', base.branch);
+    expect(result).toEqual({
+      sha: head,
+      commits: [
+        { id: 'c1', sha: git(bare, 'rev-parse', `${base.branch}~1`) },
+        { id: 'c2', sha: head },
+      ],
+    });
     expect(log(bare, base.branch)).toEqual([
       'Add b|weft-test[bot]|1+weft-test[bot]@users.noreply.github.com',
       'Set a to 2|weft-test[bot]|1+weft-test[bot]@users.noreply.github.com',
@@ -84,59 +91,60 @@ describe('publishTurns', () => {
     expect(git(bare, 'rev-parse', `${base.branch}~2`)).toBe(git(bare, 'rev-parse', 'main'));
   });
 
-  it('adds later turns on top of what was pushed, without rewriting history', async () => {
+  it('adds later commits on top of what was pushed, without rewriting history', async () => {
     const { bare, base, diffAfter } = await setup();
     const one = await diffAfter({ 'a.js': 'export const a = 2;\n' });
     const two = await diffAfter({ 'a.js': 'export const a = 3;\n' });
-    const first = await publishTurns({
+    const first = await publishCommits({
       ...base,
       pushedDiff: null,
-      turns: [{ turn: 1, diff: one, message: 'Set a to 2' }],
+      commits: [{ id: 'c1', diff: one, message: 'Set a to 2' }],
     });
 
-    const second = await publishTurns({
+    const second = await publishCommits({
       ...base,
       pushedDiff: one,
-      turns: [{ turn: 2, diff: two, message: 'Set a to 3' }],
+      commits: [{ id: 'c2', diff: two, message: 'Set a to 3' }],
     });
 
-    expect(second?.pushedTurn).toBe(2);
+    expect(second?.commits.map((c) => c.id)).toEqual(['c2']);
     expect(git(bare, 'rev-parse', `${base.branch}~1`)).toBe(first!.sha);
     expect(git(bare, 'show', `${base.branch}:a.js`)).toBe('export const a = 3;');
   });
 
-  it('skips turns that changed nothing and pushes nothing when no turn did', async () => {
+  it('makes no empty git commit for a commit that changed nothing, and pushes nothing without changes', async () => {
     const { bare, base, diffAfter } = await setup();
     const one = await diffAfter({ 'a.js': 'export const a = 2;\n' });
 
-    const result = await publishTurns({
+    const result = await publishCommits({
       ...base,
       pushedDiff: null,
-      turns: [
-        { turn: 1, diff: one, message: 'Set a to 2' },
-        { turn: 2, diff: one, message: 'Just a question' },
+      commits: [
+        { id: 'c1', diff: one, message: 'Set a to 2' },
+        { id: 'c2', diff: one, message: 'Same again' },
       ],
     });
-    expect(result?.pushedTurn).toBe(1);
+    expect(result?.commits.map((c) => c.sha)).toEqual([result!.sha, result!.sha]);
     expect(log(bare, base.branch)).toHaveLength(2);
 
-    expect(
-      await publishTurns({
-        ...base,
-        pushedDiff: one,
-        turns: [{ turn: 3, diff: one, message: 'Another question' }],
-      }),
-    ).toBeNull();
+    expect(await publishCommits({ ...base, pushedDiff: one, commits: [] })).toBeNull();
+    const before = git(bare, 'rev-parse', base.branch);
+    await publishCommits({
+      ...base,
+      pushedDiff: one,
+      commits: [{ id: 'c3', diff: one, message: 'x' }],
+    });
+    expect(git(bare, 'rev-parse', base.branch)).toBe(before);
   });
 
   it('builds on top of commits someone else pushed to the branch, never over them', async () => {
     const { bare, base, diffAfter } = await setup();
     const one = await diffAfter({ 'a.js': 'export const a = 2;\n' });
     const two = await diffAfter({ 'a.js': 'export const a = 3;\n' });
-    await publishTurns({
+    await publishCommits({
       ...base,
       pushedDiff: null,
-      turns: [{ turn: 1, diff: one, message: 'one' }],
+      commits: [{ id: 'c1', diff: one, message: 'one' }],
     });
 
     const other = await temp();
@@ -147,10 +155,10 @@ describe('publishTurns', () => {
     git(other, 'push', '-q', 'origin', base.branch);
     const theirs = git(bare, 'rev-parse', base.branch);
 
-    await publishTurns({
+    await publishCommits({
       ...base,
       pushedDiff: one,
-      turns: [{ turn: 2, diff: two, message: 'two' }],
+      commits: [{ id: 'c2', diff: two, message: 'two' }],
     });
 
     expect(git(bare, 'rev-parse', `${base.branch}~1`)).toBe(theirs);
@@ -162,10 +170,10 @@ describe('publishTurns', () => {
     const { bare, base, diffAfter } = await setup();
     const one = await diffAfter({ 'a.js': 'export const a = 2;\n' });
     const two = await diffAfter({ 'a.js': 'export const a = 3;\n' });
-    await publishTurns({
+    await publishCommits({
       ...base,
       pushedDiff: null,
-      turns: [{ turn: 1, diff: one, message: 'one' }],
+      commits: [{ id: 'c1', diff: one, message: 'one' }],
     });
 
     const other = await temp();
@@ -176,7 +184,11 @@ describe('publishTurns', () => {
     const theirs = git(bare, 'rev-parse', base.branch);
 
     await expect(
-      publishTurns({ ...base, pushedDiff: one, turns: [{ turn: 2, diff: two, message: 'two' }] }),
+      publishCommits({
+        ...base,
+        pushedDiff: one,
+        commits: [{ id: 'c2', diff: two, message: 'two' }],
+      }),
     ).rejects.toThrow(/^git apply failed/);
     expect(git(bare, 'rev-parse', base.branch)).toBe(theirs);
   });

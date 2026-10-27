@@ -7,7 +7,7 @@ import {
   commitRefusal,
   createCommit,
   getSession,
-  publishRefusal,
+  pullRequestRefusal,
   setPublishState,
   listRunEvents,
   listRuns,
@@ -245,9 +245,9 @@ export function createApp(deps: AppDeps): Express {
       res.status(404).json({ error: 'not_found' });
       return;
     }
-    const why = publishRefusal(session.turns);
-    if (why) {
-      res.status(409).json({ error: 'not_publishable', message: why });
+    const refusal = pullRequestRefusal(session);
+    if (refusal) {
+      res.status(409).json(refusal);
       return;
     }
     const turn = session.turns.at(-1)!.turn!;

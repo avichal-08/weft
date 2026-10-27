@@ -190,16 +190,19 @@ never in a sandbox, with an installation token from `@weft/github`.
   push, so the branch and the pull request say the same thing. The slug is cut at the last whole
   word within 40 characters; a chat pushed without a pull request is named after its first
   message.
-- **One commit per succeeded turn**, holding only that turn's changes, with the first line of
-  the turn's summary as the message and the app's bot as author. Turns that changed nothing are
-  skipped; a failed turn in between gets no commit of its own (its changes land in the next
-  succeeded one).
+- **One git commit per saved commit**
+  ([ADR 0006](../../docs/decisions/0006-user-commits-with-generated-messages.md)): the user commits
+  in the chat with a message they edited, and publishing pushes the commits that have no sha yet,
+  in order, with the app's bot as author, then records each sha. A commit that turns out to
+  change nothing gets no empty git commit.
 - **How a commit is built**: clone the branch, undo the last pushed diff (`git apply -R`), apply
-  the turn's diff (both are cumulative against the base), commit. The branch only ever moves
+  the commit's diff (both are cumulative against the base), commit. The branch only ever moves
   forward; nothing is force-pushed. Commits someone else pushed to the branch are kept and built
   on; if they touched the same lines, publishing fails with git's error instead.
-- **Refused while the latest turn's tests fail**, while it is still running, or when it didn't
-  finish; the reason is saved on the session (`publish_error`).
+- **Checked before, not during.** Commits are refused while the latest turn is running, failed
+  its tests or changed nothing, and Create PR is refused until every change is committed; the
+  push itself doesn't recheck the latest turn, so sending a new message right after committing
+  can't block it.
 - **The publish job** (`handlePublish`, queue `publish`): marks the chat `pushing`, pushes, and
   when the job asks for it and the chat has no pull request yet, reuses an open one for the
   branch or opens one against the base branch (the repo's default branch when the chat has
@@ -209,8 +212,8 @@ never in a sandbox, with an installation token from `@weft/github`.
   the chat title and the turns' summaries. The description reads like one a person wrote: it
   never mentions weft, the chat or sandboxes. When the repo has a test command, weft adds a
   `## Testing` section saying it passes; without one there is no testing section.
-- **After the pull request exists**, every later turn that succeeds queues a push
-  (`followUpPublish`), so the pull request follows the conversation.
+- **After the pull request exists**, a new commit is pushed as soon as it is saved. Turns are
+  never pushed on their own.
 - **The token never leaves the worker process**: git gets it as an extra header through
   `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0`, scoped to `https://github.com/`, so
   it is not in the command line, the remote URL, git config or any file.

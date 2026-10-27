@@ -7,19 +7,19 @@ export class PublishError extends Error {
   override name = 'PublishError';
 }
 
-export type PublishTurn = { turn: number; diff: string; message: string };
+export type PublishCommit = { id: string; diff: string; message: string };
 
 export type PublishInput = {
   repoUrl: string;
   baseRef: string | null;
   branch: string;
   pushedDiff: string | null;
-  turns: PublishTurn[];
+  commits: PublishCommit[];
   token: string | null;
   author: { name: string; email: string };
 };
 
-export type PublishResult = { sha: string; pushedTurn: number } | null;
+export type PublishResult = { sha: string; commits: { id: string; sha: string }[] } | null;
 
 const GIT_TIMEOUT_MS = 120_000;
 
@@ -72,14 +72,8 @@ export function branchName(title: string, sessionId: string): string {
   return `weft/${slug ? `${slug}-` : ''}${sessionId.slice(0, 8)}`;
 }
 
-export async function publishTurns(input: PublishInput): Promise<PublishResult> {
-  let previous = input.pushedDiff ?? '';
-  const pending = input.turns.filter((t) => {
-    if (t.diff === previous) return false;
-    previous = t.diff;
-    return true;
-  });
-  if (pending.length === 0) return null;
+export async function publishCommits(input: PublishInput): Promise<PublishResult> {
+  if (input.commits.length === 0) return null;
 
   const dir = await mkdtemp(join(tmpdir(), 'weft-publish-'));
   const env = authEnv(input.token);
@@ -105,21 +99,28 @@ export async function publishTurns(input: PublishInput): Promise<PublishResult> 
       `user.email=${input.author.email}`,
     ];
     let applied = input.pushedDiff ?? '';
-    let committed: number | undefined;
-    for (const turn of pending) {
+    let made = 0;
+    const shas: { id: string; sha: string }[] = [];
+    for (const commit of input.commits) {
       if (applied)
         await git(['apply', '-R', '--whitespace=nowarn', '-'], { cwd: dir, input: applied });
-      if (turn.diff)
-        await git(['apply', '--whitespace=nowarn', '-'], { cwd: dir, input: turn.diff });
-      applied = turn.diff;
+      if (commit.diff)
+        await git(['apply', '--whitespace=nowarn', '-'], { cwd: dir, input: commit.diff });
+      applied = commit.diff;
       await git(['add', '-A'], { cwd: dir });
-      if (!(await git(['status', '--porcelain'], { cwd: dir }))) continue;
-      await git([...identity, 'commit', '--quiet', '-m', turn.message], { cwd: dir });
-      committed = turn.turn;
+      if (await git(['status', '--porcelain'], { cwd: dir })) {
+        await git([...identity, 'commit', '--quiet', '-m', commit.message], { cwd: dir });
+        made++;
+      }
+      shas.push({ id: commit.id, sha: await git(['rev-parse', 'HEAD'], { cwd: dir }) });
     }
-    if (committed === undefined) return null;
-    await git(['push', '--quiet', 'origin', `HEAD:refs/heads/${input.branch}`], { cwd: dir, env });
-    return { sha: await git(['rev-parse', 'HEAD'], { cwd: dir }), pushedTurn: committed };
+    if (made > 0) {
+      await git(['push', '--quiet', 'origin', `HEAD:refs/heads/${input.branch}`], {
+        cwd: dir,
+        env,
+      });
+    }
+    return { sha: shas.at(-1)!.sha, commits: shas };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

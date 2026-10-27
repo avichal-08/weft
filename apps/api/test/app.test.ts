@@ -282,8 +282,13 @@ describe('POST /sessions/:id/publish', () => {
     return session!.id;
   }
 
-  it('queues a publish that opens a pull request', async () => {
+  it('asks for a commit first, then queues a publish that opens a pull request', async () => {
     const id = await chatWith({ status: 'succeeded', diff: 'diff --git a/a b/a\n' });
+    expect(await post(`/sessions/${id}/publish`, {})).toMatchObject({
+      status: 409,
+      body: { error: 'uncommitted', message: 'commit your changes before opening a pull request' },
+    });
+    await post(`/sessions/${id}/commits`, { message: 'Change a' });
     const res = await post(`/sessions/${id}/publish`, {});
     expect(res.status).toBe(202);
     expect(res.body.session).toMatchObject({ publishState: 'queued' });

@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import {
   addTurn,
   claimRun,
+  createCommit,
   completeRun,
   createSession,
   getSession,
@@ -69,14 +70,11 @@ async function turn(sessionId: string, message: string) {
 const deps = () => ({ db, allowFileRepos: true });
 
 describe('publishSession', () => {
-  it('pushes each succeeded turn as a commit and remembers what it pushed', async () => {
+  it('pushes the saved commits with their messages, and remembers each sha', async () => {
     const { bare, url, diff } = await repo();
     const { session, run } = await createSession(db, { repoUrl: url, message: 'Make a two' });
-    await finish(run.id, {
-      status: 'succeeded',
-      diff: await diff('export const a = 2;\n'),
-      summary: 'Set a to 2\n\nmore',
-    });
+    await finish(run.id, { status: 'succeeded', diff: await diff('export const a = 2;\n') });
+    await createCommit(db, { sessionId: session.id, turn: 1, message: 'Set a to 2' });
 
     const first = await publishSession(deps(), session.id);
     const saved = await getSession(db, session.id);
@@ -85,37 +83,30 @@ describe('publishSession', () => {
       pushedTurn: 1,
       publishError: null,
     });
-    expect(saved?.pushedSha).toBe(first?.sha);
+    expect(saved?.commits.map((c) => c.sha)).toEqual([first?.sha]);
     expect(git(bare, 'log', '--format=%s|%an', saved!.branch!)).toBe('Set a to 2|weft\nbase|t');
 
     const second = await turn(session.id, 'Now three');
-    await finish(second.id, {
-      status: 'succeeded',
-      diff: await diff('export const a = 3;\n'),
-      summary: 'Set a to 3',
-    });
+    await finish(second.id, { status: 'succeeded', diff: await diff('export const a = 3;\n') });
+    const third = await turn(session.id, 'And a question');
+    await finish(third.id, { status: 'succeeded', diff: await diff('export const a = 3;\n') });
+    await createCommit(db, { sessionId: session.id, turn: 3, message: 'Set a to 3' });
     await publishSession(deps(), session.id);
+
     expect(git(bare, 'log', '--format=%s', saved!.branch!).split('\n')).toEqual([
       'Set a to 3',
       'Set a to 2',
       'base',
     ]);
-    expect((await getSession(db, session.id))?.pushedTurn).toBe(2);
+    expect((await getSession(db, session.id))?.commits.every((c) => c.sha)).toBe(true);
   });
 
-  it("refuses while the latest turn's tests fail, and says why", async () => {
+  it('pushes nothing while no commit is waiting, even if turns changed files', async () => {
     const { bare, url, diff } = await repo();
-    const { session, run } = await createSession(db, { repoUrl: url, message: 'Break it' });
-    await finish(run.id, {
-      status: 'failed',
-      failureKind: 'tests_failed',
-      diff: await diff('export const a = 0;\n'),
-    });
+    const { session, run } = await createSession(db, { repoUrl: url, message: 'Not yet' });
+    await finish(run.id, { status: 'succeeded', diff: await diff('export const a = 2;\n') });
 
-    await expect(publishSession(deps(), session.id)).rejects.toThrow(
-      "the latest turn's tests fail, so there is nothing to publish yet",
-    );
-    expect((await getSession(db, session.id))?.publishError).toMatch(/tests fail/);
+    expect(await publishSession(deps(), session.id)).toBeNull();
     expect(git(bare, 'branch', '--list')).toBe('* main');
   });
 
@@ -123,6 +114,7 @@ describe('publishSession', () => {
     const { url, diff } = await repo();
     const { session, run } = await createSession(db, { repoUrl: url, message: 'x' });
     await finish(run.id, { status: 'succeeded', diff: await diff('export const a = 2;\n') });
+    await createCommit(db, { sessionId: session.id, turn: 1, message: 'x' });
 
     await expect(publishSession({ db }, session.id)).rejects.toThrow(
       'only GitHub repositories can be published',

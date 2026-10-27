@@ -1,6 +1,7 @@
 # 0005. Publishing a chat as a branch with one commit per turn
 
-- Status: Accepted
+- Status: Accepted; superseded in part by [0006](0006-user-commits-with-generated-messages.md)
+  (commits are made by the user, and turns are no longer pushed automatically)
 - Date: 2026-10-27
 
 ## Context
