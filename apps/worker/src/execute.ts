@@ -15,7 +15,7 @@ import type { LiveMessage, LivePhase } from '@weft/queue';
 import { createSandbox, imageId, type ExecResult, type Sandbox } from '@weft/sandbox';
 import { CloneError, cloneRepo, type Checkout } from './clone.ts';
 import { buildHistory, latestDiff } from './history.ts';
-import { installKey, manifestPrint, touchesManifests, type CacheHit } from './install-cache.ts';
+import { installKey, manifestPrint, manifestsAfter, type CacheHit } from './install-cache.ts';
 import { diffHash, release, stillUsable, type KillHandler } from './session-sandboxes.ts';
 import type { SetupPlan } from './setup.ts';
 import { detectSetup, runSetup, SetupError } from './setup.ts';
@@ -208,15 +208,10 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
         cloneRepo(run.repoUrl, run.baseRef, { allowFileRepos }),
       );
       const { dir } = checkout;
-      const plan = await detectSetup(dir);
-      const cache = plan && deps.installCache && !touchesManifests(base) ? deps.installCache : null;
-      const baseId = cache ? await imageId(deps.sandboxImage) : null;
-      const key =
-        plan && cache && baseId
-          ? await timed('cacheKey', () =>
-              installKey(dir, { repoUrl: run.repoUrl, imageId: baseId, command: plan.command }),
-            )
-          : null;
+      const baseId = deps.installCache ? await imageId(deps.sandboxImage) : null;
+      const detect = () => depsAfter(dir, base, baseId ? { repoUrl: run.repoUrl, baseId } : null);
+      const { plan, key } = await (baseId ? timed('cacheKey', detect) : detect());
+      const cache = key ? deps.installCache! : null;
       const hit: CacheHit | null = cache && key ? await cache.lookup(key) : null;
       env = { plan, key, baseId, depsPrint: '', createdAt: Date.now() };
 
@@ -269,7 +264,16 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     }
     const box = sandbox;
     const { dir } = checkout;
-    const { plan, key } = env;
+    const { plan } = env;
+    const cleanImage = async (diff: string) => {
+      const cache = deps.installCache;
+      if (!cache || !env?.baseId) return null;
+      const after = await depsAfter(dir, diff, { repoUrl: run.repoUrl, baseId: env.baseId }).catch(
+        () => null,
+      );
+      const hit = after?.key ? await cache.lookup(after.key) : null;
+      return hit?.kind === 'image' ? hit.image : null;
+    };
 
     phase('agent');
     const ctx = createToolContext({ sandbox: box, root: REPO_ROOT, testCommand: run.testCommand });
@@ -299,11 +303,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     let verify: ExecResult | null = null;
     if (run.testCommand) {
       phase('verify');
-      const clean = !plan
-        ? deps.sandboxImage
-        : deps.installCache && key && !touchesManifests(diff.stdout)
-          ? await deps.installCache.lookup(key).then((h) => (h?.kind === 'image' ? h.image : null))
-          : null;
+      const clean = !plan ? deps.sandboxImage : await cleanImage(diff.stdout);
       let target = box;
       if (clean) {
         target = await timed('verifySandbox', async () => {
@@ -387,6 +387,30 @@ const seconds = (ms: number) => (ms / 1000).toFixed(1);
 
 export const describeTimings = (timings: PhaseTiming[]) =>
   timings.map(({ phase, ms }) => `${phase} ${seconds(ms)}s`).join(', ') || 'none';
+
+async function depsAfter(
+  dir: string,
+  diff: string | null,
+  cache: { repoUrl: string; baseId: string } | null,
+): Promise<{ plan: SetupPlan | null; key: string | null }> {
+  const files = await manifestsAfter(dir, diff).catch((err: unknown) => {
+    throw new ApplyError(err instanceof Error ? err.message : String(err));
+  });
+  try {
+    const plan = await detectSetup(files.dir);
+    const key =
+      plan && cache
+        ? await installKey(files.dir, {
+            repoUrl: cache.repoUrl,
+            imageId: cache.baseId,
+            command: plan.command,
+          })
+        : null;
+    return { plan, key };
+  } finally {
+    await files.cleanup();
+  }
+}
 
 const diskLimit = (reason: string): CompleteRunInput => ({
   status: 'error',

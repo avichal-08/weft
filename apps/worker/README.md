@@ -74,8 +74,8 @@ pnpm --filter @weft/worker dev
    outside the diff (a patched `node_modules`, files in its home directory, gitignored files,
    background processes) can affect the verdict
    ([ADR 0002](../../docs/decisions/0002-session-sandboxes-and-clean-verification.md)). Without
-   clean dependencies (right after a fresh install, before its image exists, or when the diff
-   changes dependency files) it runs in the agent's sandbox and logs that. It runs even when the
+   clean dependencies (no image yet for the dependency files as this turn left them, e.g. right
+   after a fresh install or when this turn changed a lockfile) it runs in the agent's sandbox and logs that. It runs even when the
    turn changed nothing, so "make the tests pass" with no change still fails as `tests_failed`.
    Without a test command (questions, repos without tests) there is nothing to rerun.
 9. **Record** with `completeRun` (fenced), then always remove the sandbox and the checkout.
@@ -102,8 +102,8 @@ cached:  image exists → sandbox starts from it, copy-on-write, nothing copied
          only the tar → restore it offline (the image is still building, or failed)
 ```
 
-The key is a SHA-256 of the repo URL, the sandbox image id, the install command, and every
-dependency file in the repo (each `package.json`, the lockfile, `pnpm-workspace.yaml`, `.npmrc`,
+The key (`weft-install-v2`) is a SHA-256 of the repo URL, the sandbox image id, the install
+command, and every dependency file in the repo (each `package.json`, the lockfile, `pnpm-workspace.yaml`, `.npmrc`,
 `.yarnrc.yml`, `bunfig.toml`), with `.git` and `node_modules` skipped.
 
 - **Only reproducible installs are cached.** Without a lockfile there is no key, so it installs
@@ -113,9 +113,15 @@ dependency file in the repo (each `package.json`, the lockfile, `pnpm-workspace.
   in its container's writable layer and disappear with it.
 - **Per repo.** Two repos with identical dependency files still get separate entries, since
   install scripts can read the rest of the repo.
-- **Skipped when an earlier turn changed dependency files.** The key is computed from the clone,
-  before the previous turn's diff is applied; if that diff touches a dependency file, the turn
-  installs fresh and is not cached.
+- **Keyed on the dependency files the turn will actually have.** When the previous turn's diff
+  changed any of them, the worker copies just the dependency files to a temporary folder,
+  applies only those parts of the diff there (`git apply --include=package.json
+--include=*/package.json ...`), and hashes and detects the install command from the result.
+  So after the agent adds a dependency, the first turn installs and caches under the new key and
+  every later turn hits it. An earlier version keyed on the clone and switched the cache off
+  whenever the diff touched a dependency file; diffs are cumulative, so every later turn in that
+  chat reinstalled from scratch. Verification uses the same function with this turn's diff to
+  find a clean image.
 - **One cache per worker process.** `main.ts` creates it once, because the background builder
   outlives a run: builds run one at a time, a key is never queued twice, and a failed build is
   logged and leaves the tar in place, so the next turn still has a cache. Images are built from

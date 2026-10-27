@@ -1,8 +1,22 @@
+import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, readdir, readFile, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
-import { basename, join, relative } from 'node:path';
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, dirname, join, relative } from 'node:path';
 import { finished } from 'node:stream/promises';
+import { promisify } from 'node:util';
 import { buildImage, hasImage, listImages, removeImage, type Sandbox } from '@weft/sandbox';
 import { SETUP_TIMEOUT_MS, SetupError } from './setup.ts';
 
@@ -86,7 +100,7 @@ export async function installKey(
   const files = (await manifests(root)).sort();
   if (!files.some((f) => LOCKFILES.has(basename(f)))) return null;
   const hash = createHash('sha256').update(
-    `weft-install-v1\n${parts.repoUrl}\n${parts.imageId}\n${parts.command}\n`,
+    `weft-install-v2\n${parts.repoUrl}\n${parts.imageId}\n${parts.command}\n`,
   );
   for (const file of files) {
     const digest = createHash('sha256')
@@ -112,6 +126,32 @@ export async function manifestPrint(sandbox: Sandbox, root: string): Promise<str
   );
   if (res.exitCode !== 0) throw new Error(`hashing dependency files failed: ${res.stderr.trim()}`);
   return createHash('sha256').update(res.stdout).digest('hex');
+}
+
+export type Manifests = { dir: string; cleanup: () => Promise<void> };
+
+export async function manifestsAfter(root: string, diff: string | null): Promise<Manifests> {
+  if (!diff || !touchesManifests(diff)) return { dir: root, cleanup: () => Promise.resolve() };
+  const dir = await mkdtemp(join(tmpdir(), 'weft-manifests-'));
+  const cleanup = () => rm(dir, { recursive: true, force: true });
+  try {
+    for (const file of await manifests(root)) {
+      await mkdir(dirname(join(dir, file)), { recursive: true });
+      await copyFile(join(root, file), join(dir, file));
+    }
+    const patch = join(dir, '.weft.patch');
+    await writeFile(patch, diff);
+    const include = [...MANIFESTS].flatMap((name) => [`--include=${name}`, `--include=*/${name}`]);
+    await promisify(execFile)('git', ['apply', '--whitespace=nowarn', ...include, patch], {
+      cwd: dir,
+    });
+    await rm(patch);
+    return { dir, cleanup };
+  } catch (err) {
+    await cleanup();
+    const stderr = (err as { stderr?: string }).stderr?.trim();
+    throw new Error(stderr || (err as Error).message, { cause: err });
+  }
 }
 
 export function touchesManifests(diff: string | null): boolean {

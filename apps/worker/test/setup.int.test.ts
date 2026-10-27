@@ -3,7 +3,7 @@ import { cp, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { createRun, getRun, listRunEvents } from '@weft/db';
+import { addTurn, createRun, createSession, getRun, listRunEvents } from '@weft/db';
 import { reset, testDb, type TestDb } from '@weft/db/testing';
 import { createMockProvider, type ContentBlock } from '@weft/llm';
 import type { LiveMessage } from '@weft/queue';
@@ -217,6 +217,53 @@ describe('setup phase', () => {
     } finally {
       if (key) await images.remove(key);
     }
+  }, 600_000);
+
+  it('keeps caching after the agent changes dependency files', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'weft-install-cache-'));
+    dirs.push(dir);
+    const installCache = createCache({ dir, maxBytes: 1e9 });
+    const edit =
+      "node -e \"const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.description='edited';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\\n')\"";
+    const turn = async (runId: string, script: { content: ContentBlock[] }[]) => {
+      const lines: string[] = [];
+      await executeRun(
+        {
+          db,
+          workerId: 'setup-test',
+          sandboxImage: image,
+          createLLM: () => createMockProvider(script),
+          allowFileRepos: true,
+          watchIntervalMs: 200,
+          log: (l) => lines.push(l),
+          installCache,
+        },
+        runId,
+      );
+      expect((await getRun(db, runId))?.status).toBe('succeeded');
+      return lines;
+    };
+
+    const { session, run } = await createSession(db, { repoUrl: await origin(), message: 'edit' });
+    await turn(run.id, [
+      call('run_command', { command: edit, timeout_sec: 20 }),
+      call('finish', { summary: 'edited' }),
+    ]);
+    expect((await getRun(db, run.id))?.diff).toContain('"description": "edited"');
+
+    const next = async () => {
+      const added = await addTurn(db, session.id, 'again');
+      if (!added.ok) throw new Error('turn refused');
+      return turn(added.run.id, [call('finish', { summary: 'ok' })]);
+    };
+    const second = await next();
+    expect(second.some((l) => l.includes('setup: npm ci'))).toBe(true);
+    expect(second.some((l) => /setup: cached \d+ MB/.test(l))).toBe(true);
+
+    const third = await next();
+    expect(third.some((l) => l.endsWith('setup: restoring dependencies from cache'))).toBe(true);
+    expect(third.some((l) => l.includes('setup: npm ci'))).toBe(false);
+    expect((await readdir(dir)).filter((n) => n.endsWith('.tar'))).toHaveLength(2);
   }, 600_000);
 
   it('runs the agent offline even though setup had network', async () => {

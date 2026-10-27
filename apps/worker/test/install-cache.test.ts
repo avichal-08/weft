@@ -6,6 +6,7 @@ import {
   evict,
   installCache,
   installKey,
+  manifestsAfter,
   touchesManifests,
   type DepsImages,
 } from '../src/install-cache.ts';
@@ -65,6 +66,56 @@ describe('installKey', () => {
 
   it('refuses to cache an install without a lockfile', async () => {
     expect(await installKey(await tree({ 'package.json': '{}' }), parts)).toBeNull();
+  });
+});
+
+describe('manifestsAfter', () => {
+  const lines = (files: Record<string, string>) =>
+    Object.fromEntries(Object.entries(files).map(([path, text]) => [path, `${text}\n`]));
+  const change = (path: string, from: string, to: string) =>
+    `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1 +1 @@\n-${from}\n+${to}\n`;
+  const added = (path: string, content: string) =>
+    `diff --git a/${path} b/${path}\nnew file mode 100644\n--- /dev/null\n+++ b/${path}\n@@ -0,0 +1 @@\n+${content}\n`;
+
+  it('keys the dependency files as they are after the diff', async () => {
+    const diff =
+      change(
+        'apps/web/package.json',
+        '{"dependencies":{"ms":"2.1.3"}}',
+        '{"dependencies":{"ms":"2.1.2"}}',
+      ) +
+      change('src/index.js', 'console.log(1)', 'console.log(2)') +
+      added('apps/api/package.json', '{}');
+    const after = await manifestsAfter(await tree(lines(monorepo)), diff);
+    try {
+      const expected = await tree(
+        lines({
+          ...monorepo,
+          'apps/web/package.json': '{"dependencies":{"ms":"2.1.2"}}',
+          'apps/api/package.json': '{}',
+        }),
+      );
+      expect(await installKey(after.dir, parts)).toBe(await installKey(expected, parts));
+      expect(await installKey(after.dir, parts)).not.toBe(
+        await installKey(await tree(lines(monorepo)), parts),
+      );
+    } finally {
+      await after.cleanup();
+    }
+  });
+
+  it('uses the clone itself when the diff leaves dependency files alone', async () => {
+    const root = await tree(monorepo);
+    expect((await manifestsAfter(root, null)).dir).toBe(root);
+    expect((await manifestsAfter(root, change('src/index.js', 'console.log(1)', 'x'))).dir).toBe(
+      root,
+    );
+  });
+
+  it('throws when the dependency changes no longer apply', async () => {
+    await expect(
+      manifestsAfter(await tree(monorepo), change('package-lock.json', '{"v":9}', '{"v":10}')),
+    ).rejects.toThrow(/package-lock.json/);
   });
 });
 
