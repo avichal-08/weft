@@ -78,4 +78,13 @@ export type Session = {
 
 export type SessionSummary = Session & { turns: number; lastStatus: RunStatus | null };
 
-export type SessionWithTurns = Session & { turns: Run[] };
+export type Commit = {
+  id: string;
+  sessionId: string;
+  turn: number;
+  message: string;
+  sha: string | null;
+  createdAt: string;
+};
+
+export type SessionWithTurns = Session & { turns: Run[]; commits: Commit[] };

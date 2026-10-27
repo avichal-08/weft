@@ -41,11 +41,22 @@ mechanics stay out of the way until you want them.
 
 ### Publishing
 
-The chat header has a **Create PR** button. It asks the API to publish the chat; if the API
-refuses (the latest turn's tests fail, the agent is still working, nothing changed yet), its
-reason is shown under the button. While the push and pull request are in progress the button
-reads "Opening PR…" and the page refreshes itself; afterwards it becomes a **PR #n** link, which
-shows "pushing…" while later turns are pushed to the same pull request.
+The chat header has **Commit** and **Create PR**
+([ADR 0006](../../docs/decisions/0006-user-commits-with-generated-messages.md)).
+
+- **Commit** opens a dialog that drafts a message for what changed since the last commit
+  ("Writing a commit message…"), lets you edit it, and saves it. It is enabled only when the latest
+  turn succeeded and changed something since the last commit.
+- **Create PR** with uncommitted changes opens the same dialog as **Commit & create PR**;
+  with everything committed it publishes directly. If the API refuses, its reason shows under
+  the buttons.
+- While publishing, the button reads "Opening PR…" and the page refreshes itself; afterwards it is
+  a **PR #n** link, and later commits are pushed to it right away ("pushing…").
+- The Changes panel lists the chat's commits: the subject, and the short sha (a GitHub link) once
+  pushed, or "not pushed".
+
+The dialog is a native `<dialog>`, mounted only while open, so every open starts from a fresh
+draft.
 
 ### Live updates
 

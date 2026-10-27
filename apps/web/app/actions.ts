@@ -2,7 +2,15 @@
 
 import { refresh } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { cancelRun, createSession, publishSession, sendMessage, type ApiError } from '@/lib/api';
+import {
+  cancelRun,
+  createCommit,
+  createSession,
+  draftCommit,
+  publishSession,
+  sendMessage,
+  type ApiError,
+} from '@/lib/api';
 import type { FormState } from '@/lib/types';
 
 const text = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
@@ -65,4 +73,31 @@ export async function publishAction(sessionId: string): Promise<FormState> {
   if (!res.ok) return { error: describe(res.status, res.body) };
   refresh();
   return { sent: Date.now() };
+}
+
+export async function draftCommitAction(
+  sessionId: string,
+): Promise<{ message?: string; error?: string }> {
+  const res = await draftCommit(sessionId);
+  return res.ok ? { message: res.data.message } : { error: describe(res.status, res.body) };
+}
+
+export async function saveCommitAction(
+  sessionId: string,
+  message: string,
+  openPullRequest: boolean,
+): Promise<{ error?: string }> {
+  const saved = await createCommit(sessionId, message);
+  if (!saved.ok) return { error: describe(saved.status, saved.body) };
+  if (openPullRequest) {
+    const published = await publishSession(sessionId);
+    if (!published.ok) {
+      refresh();
+      return {
+        error: `Committed, but the pull request wasn't started: ${describe(published.status, published.body)}`,
+      };
+    }
+  }
+  refresh();
+  return {};
 }

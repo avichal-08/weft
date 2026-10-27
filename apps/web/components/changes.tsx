@@ -1,10 +1,51 @@
-import { ChevronRight, FileCode2 } from 'lucide-react';
+import { ChevronRight, FileCode2, GitCommitHorizontal } from 'lucide-react';
 import { parseDiff } from '@/lib/diff';
+import type { Commit } from '@/lib/types';
 import { DiffView } from './diff-view';
 
-export function Changes({ diff }: { diff: string | null }) {
+function Commits({ commits, repoUrl }: { commits: Commit[]; repoUrl: string }) {
+  if (commits.length === 0) return null;
+  const repo = repoUrl.replace(/\.git$/, '');
+  return (
+    <section className="grid gap-1.5">
+      <h3 className="text-xs font-medium text-muted">Commits</h3>
+      <ol className="grid gap-1 rounded-xl border border-line bg-surface p-1.5">
+        {commits.map((c) => (
+          <li key={c.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm">
+            <GitCommitHorizontal className="size-4 shrink-0 text-faint" />
+            <span className="min-w-0 flex-1 truncate">{c.message.split('\n')[0]}</span>
+            {c.sha ? (
+              <a
+                href={
+                  repo.startsWith('https://github.com/') ? `${repo}/commit/${c.sha}` : undefined
+                }
+                target="_blank"
+                rel="noreferrer"
+                className="font-mono text-xs text-muted hover:text-fg"
+              >
+                {c.sha.slice(0, 7)}
+              </a>
+            ) : (
+              <span className="text-xs text-faint">not pushed</span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+export function Changes({
+  diff,
+  commits = [],
+  repoUrl = '',
+}: {
+  diff: string | null;
+  commits?: Commit[];
+  repoUrl?: string;
+}) {
   const files = diff ? parseDiff(diff) : [];
-  if (files.length === 0) {
+  if (files.length === 0 && commits.length === 0) {
     return (
       <div className="grid place-items-center gap-2 rounded-xl border border-dashed border-line-strong px-6 py-12 text-center">
         <FileCode2 className="size-5 text-faint" />
@@ -16,6 +57,7 @@ export function Changes({ diff }: { diff: string | null }) {
 
   return (
     <div className="grid grid-cols-1 gap-3">
+      <Commits commits={commits} repoUrl={repoUrl} />
       {files.map((f) => (
         <details
           key={f.path}

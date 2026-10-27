@@ -10,10 +10,12 @@ import {
   completeRun,
   createSession,
   getSession,
+  recordPush,
   type CompleteRunInput,
 } from '@weft/db';
 import { reset, testDb, type TestDb } from '@weft/db/testing';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { publishCommits } from '../src/publish.ts';
 import { publishSession } from '../src/publish-session.ts';
 
 let db: TestDb;
@@ -108,6 +110,35 @@ describe('publishSession', () => {
 
     expect(await publishSession(deps(), session.id)).toBeNull();
     expect(git(bare, 'branch', '--list')).toBe('* main');
+  });
+
+  it('continues a branch pushed before commits existed, from the turn it last pushed', async () => {
+    const { bare, url, diff } = await repo();
+    const { session, run } = await createSession(db, { repoUrl: url, message: 'Old chat' });
+    const two = await diff('export const a = 2;\n');
+    await finish(run.id, { status: 'succeeded', diff: two });
+    const branch = 'weft/old-chat-1';
+    const pushed = await publishCommits({
+      repoUrl: url,
+      baseRef: null,
+      branch,
+      pushedDiff: null,
+      commits: [{ id: 'old', diff: two, message: 'Set a to 2' }],
+      token: null,
+      author: { name: 'weft', email: 'weft@localhost' },
+    });
+    await recordPush(db, session.id, { branch, pushedTurn: 1, pushedSha: pushed!.sha });
+
+    const next = await turn(session.id, 'Now three');
+    await finish(next.id, { status: 'succeeded', diff: await diff('export const a = 3;\n') });
+    await createCommit(db, { sessionId: session.id, turn: 2, message: 'Set a to 3' });
+    await publishSession(deps(), session.id);
+
+    expect(git(bare, 'log', '--format=%s', branch).split('\n')).toEqual([
+      'Set a to 3',
+      'Set a to 2',
+      'base',
+    ]);
   });
 
   it('refuses repositories that are not on GitHub', async () => {

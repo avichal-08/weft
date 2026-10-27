@@ -35,7 +35,11 @@ export async function publishSession(
       repoUrl: session.repoUrl,
       baseRef: session.baseRef,
       branch,
-      pushedDiff: lastPushed ? diffOf(lastPushed.turn) : null,
+      pushedDiff: lastPushed
+        ? diffOf(lastPushed.turn)
+        : session.pushedTurn
+          ? diffOf(session.pushedTurn)
+          : null,
       commits: unpushed.map((c) => ({ id: c.id, diff: diffOf(c.turn), message: c.message })),
       token: ref ? await deps.github!.token(ref) : null,
       author: ref ? await deps.github!.identity() : LOCAL_AUTHOR,

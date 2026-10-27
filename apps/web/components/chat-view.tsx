@@ -13,7 +13,7 @@ import { CopyButton } from './copy-button';
 import { LiveWorkLog } from './live-work-log';
 import { LogoMark } from './logo';
 import { Prose } from './prose';
-import { PublishButton } from './publish-button';
+import { ShipControls } from './ship-controls';
 import { WorkLog } from './work-log';
 
 function Outcome({ run }: { run: Run }) {
@@ -124,6 +124,11 @@ export async function ChatView({ params }: { params: Promise<{ id: string }> }) 
   const last = session.turns.at(-1);
   const activeRunId = last && ACTIVE.includes(last.status) ? last.id : null;
   const diff = latestDiff(session.turns);
+  const lastCommit = session.commits.at(-1);
+  const committed = lastCommit
+    ? (session.turns.find((t) => t.turn === lastCommit.turn)?.diff ?? '')
+    : '';
+  const uncommitted = last?.status === 'succeeded' && !!last.diff && last.diff !== committed;
   const files = diff ? parseDiff(diff) : [];
 
   return (
@@ -137,8 +142,10 @@ export async function ChatView({ params }: { params: Promise<{ id: string }> }) 
         additions: files.reduce((n, f) => n + f.additions, 0),
         deletions: files.reduce((n, f) => n + f.deletions, 0),
       }}
-      changes={<Changes diff={diff} />}
-      publish={<PublishButton session={session} working={activeRunId !== null} />}
+      changes={<Changes diff={diff} commits={session.commits} repoUrl={session.repoUrl} />}
+      publish={
+        <ShipControls session={session} working={activeRunId !== null} uncommitted={uncommitted} />
+      }
     >
       <AutoRefresh
         active={session.publishState === 'queued' || session.publishState === 'pushing'}
