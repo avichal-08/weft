@@ -18,13 +18,20 @@ start from nothing, and watch it build in an isolated sandbox.
 
 ## Where it is now
 
-- Chat sessions on public GitHub repos; each turn continues from the previous one's changes, and
-  the result is a diff.
-- A locked-down Docker sandbox per turn: dependencies install with network (npm, pnpm, Yarn or
-  Bun), then the network is cut and the agent works offline; installs are cached by lockfile.
-- Claude Code-style agentic search (`grep`, `glob`, reading files), no embedding index.
-- Every step streams live to the browser and is stored as a replayable trace.
-- A queue, fenced writes and fast cancel; works with Anthropic, OpenAI, Gemini or OpenRouter.
+- **Chat with a public GitHub repo**: each message is a turn that continues from the previous
+  one's changes, with Claude Code-style agentic search (`grep`, `glob`, reading files, no
+  embedding index), on Anthropic, OpenAI, Gemini or OpenRouter.
+- **Ship it as a pull request**: commit when the work is ready (weft drafts the message, you edit
+  it), then Create PR; a GitHub App pushes the branch as its own bot with repo-scoped, short-lived
+  tokens that never enter the sandbox. Later commits go to the same pull request.
+- **A locked-down sandbox per chat**: dependencies install with network, then the network is cut
+  and the agent works offline. Tests are rerun in a fresh sandbox before a turn counts as passing,
+  and nothing can be committed or published while they fail.
+- **Fast follow-ups**: installed dependencies become copy-on-write image layers and a chat keeps
+  its sandbox between messages, so on a repo with 639 MB of `node_modules` a follow-up starts in
+  about 1 s instead of 55 s. Why each piece works the way it does is in
+  [`docs/decisions`](docs/decisions).
+- **Live and replayable**: every step streams to the browser and is stored as a trace.
 
 ## Layout
 
