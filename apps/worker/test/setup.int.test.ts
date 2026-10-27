@@ -277,6 +277,69 @@ describe('setup phase', () => {
     expect((await readdir(dir)).filter((n) => n.endsWith('.tar'))).toHaveLength(2);
   }, 600_000);
 
+  it('installs incrementally on top of the newest image after dependency files change', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'weft-install-cache-'));
+    dirs.push(dir);
+    const images = dockerDepsImages(REPO_ROOT);
+    const installCache = createCache({ dir, maxBytes: 1e9, images });
+    const repoUrl = await origin();
+    const edit =
+      "node -e \"const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.description='edited';fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\\n')\"";
+    const turn = async (runId: string, script: { content: ContentBlock[] }[]) => {
+      const lines: string[] = [];
+      await executeRun(
+        {
+          db,
+          workerId: 'setup-test',
+          sandboxImage: image,
+          createLLM: () => createMockProvider(script),
+          allowFileRepos: true,
+          watchIntervalMs: 200,
+          log: (l) => lines.push(l),
+          installCache,
+        },
+        runId,
+      );
+      await installCache.idle();
+      return lines;
+    };
+    const ours = async () =>
+      (await images.list())
+        .filter((i) => i.repo === repoId(repoUrl))
+        .sort((a, b) => a.depth - b.depth);
+
+    try {
+      const { session, run } = await createSession(db, { repoUrl, message: 'edit' });
+      await turn(run.id, [
+        call('run_command', { command: edit, timeout_sec: 20 }),
+        call('finish', { summary: 'edited' }),
+      ]);
+      expect((await ours()).map((i) => i.depth)).toEqual([0]);
+
+      const next = await addTurn(db, session.id, 'check');
+      if (!next.ok) throw new Error('turn refused');
+      const lines = await turn(next.run.id, [
+        call('run_command', { command: 'node --test', timeout_sec: 60 }),
+        call('finish', { summary: 'ok' }),
+      ]);
+
+      expect(
+        lines.some((l) =>
+          /setup: npm install --no-save .* on top of weft-deps:\w+ \(depth 0\)/.test(l),
+        ),
+      ).toBe(true);
+      expect(lines.some((l) => l.includes('installing fresh'))).toBe(false);
+      const done = await getRun(db, next.run.id);
+      expect(done?.status).toBe('succeeded');
+      expect(done?.timings?.map((t) => t.phase)).toContain('incrementalInstall');
+      const [, tests] = await listRunEvents(db, next.run.id, { attempt: 1 });
+      expect(tests?.data.output).toMatch(/exit code: 0/);
+      expect((await ours()).map((i) => i.depth)).toEqual([0, 1]);
+    } finally {
+      for (const built of await ours()) await images.remove(built.key);
+    }
+  }, 600_000);
+
   it('runs the agent offline even though setup had network', async () => {
     const id = await run(await origin(), [
       call('run_command', { command: reach, timeout_sec: 20 }),

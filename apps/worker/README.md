@@ -46,8 +46,9 @@ pnpm --filter @weft/worker dev
 
    It runs inside the sandbox, never on the host, since install scripts are untrusted code. Then
    stray background processes are killed and the network is disconnected, so the agent works
-   offline. A failed or timed-out install (5 min) ends the turn as `setup_failed` with the tail
-   of the output. On `vercel/ms` the pnpm install takes about 80 s. A large monorepo (Expo plus
+   offline. npm gets `fetch-retries=5`, and an install that fails with a network error
+   (`ECONNRESET`, `ETIMEDOUT`, ...) is retried once. A failed or timed-out install (5 min) ends
+   the turn as `setup_failed` with the tail of the output. On `vercel/ms` the pnpm install takes about 80 s. A large monorepo (Expo plus
    Next.js, about 1.5 GB of `node_modules`) does not fit in 5 minutes and 2 GB on a home
    connection; see Known limits.
 
@@ -128,8 +129,15 @@ command, and every dependency file in the repo (each `package.json`, the lockfil
   the base image by id, matching the id in the key.
 - **Every image records where it came from**, as labels: `weft.repo` (a hash of the repo URL),
   `weft.base` (the base image id), `weft.manager` and `weft.depth` (0 for a fresh install). The
-  cache's `nearest({ repoUrl, base, manager })` returns the newest image matching all three,
-  never one from another repo; incremental installs start from it.
+  cache's `nearest({ repoUrl, base, manager })` returns the newest image matching all three and
+  under depth 5, never one from another repo.
+- **Incremental installs** ([ADR 0003](../../docs/decisions/0003-incremental-installs.md)). On a
+  miss, an npm repo's setup sandbox starts from that nearest image and runs
+  `npm install --no-save` on top of its `node_modules` (phase `incrementalInstall`). If that
+  fails, every `node_modules` is removed and `npm ci` runs instead. The resulting image's depth is
+  its base's plus one, or 0 after a fallback; at depth 5 the next miss installs fresh. pnpm, Yarn
+  and Bun always install fresh until measured. On the 639 MB repo, adding one package took 10.3 s
+  instead of about 275 s for `npm ci`.
 - **Bounded.** Tars and images share `INSTALL_CACHE_MAX_MB` and are ranked by last use (a tar's
   mtime, an image's `<key>.used` marker). Tar writes go to a temporary file renamed into place.
   An image a running sandbox uses can't be removed, so it is skipped until the next eviction.

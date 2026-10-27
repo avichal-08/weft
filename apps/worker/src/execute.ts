@@ -23,8 +23,14 @@ import {
   type DepsOrigin,
 } from './install-cache.ts';
 import { diffHash, release, stillUsable, type KillHandler } from './session-sandboxes.ts';
-import type { SetupPlan } from './setup.ts';
-import { detectSetup, runSetup, SetupError } from './setup.ts';
+import {
+  detectSetup,
+  INCREMENTAL,
+  runIncrementalSetup,
+  runSetup,
+  SetupError,
+  type SetupPlan,
+} from './setup.ts';
 import { describeEvent, describeRetry, shortId } from './log.ts';
 import { toRunEvent } from './trace.ts';
 import type { RunConfig, RunOutcome, WorkerDeps } from './types.ts';
@@ -219,12 +225,15 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
       const { plan, key } = await (baseId ? timed('cacheKey', detect) : detect());
       const cache = key ? deps.installCache! : null;
       const hit: CacheHit | null = cache && key ? await cache.lookup(key) : null;
+      const near =
+        plan && cache && baseId && !hit && INCREMENTAL[plan.manager]
+          ? await cache.nearest({ repoUrl: run.repoUrl, base: baseId, manager: plan.manager })
+          : null;
       env = { plan, key, baseId, depsPrint: '', createdAt: Date.now() };
 
       phase('sandbox');
-      sandbox = await timed('sandbox', () =>
-        boxFrom(hit?.kind === 'image' ? hit.image : deps.sandboxImage, Boolean(plan && !hit)),
-      );
+      const start = hit?.kind === 'image' ? hit.image : (near?.image ?? deps.sandboxImage);
+      sandbox = await timed('sandbox', () => boxFrom(start, Boolean(plan && !hit)));
       abort.signal.throwIfAborted();
       const box = sandbox;
       await timed('copy', () => box.putFiles(dir, REPO_ROOT));
@@ -251,9 +260,22 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
           origin: { repoUrl: run.repoUrl, base: baseId, manager: plan.manager, depth: 0 },
         };
       } else if (plan) {
-        log(`setup: ${plan.command}`);
-        phase('setup', plan.command);
-        await timed('install', () => runSetup(box, REPO_ROOT, plan));
+        let depth = 0;
+        if (near) {
+          const command = INCREMENTAL[plan.manager]!;
+          log(`setup: ${command} on top of ${near.image.slice(0, 22)} (depth ${near.depth})`);
+          phase('setup', command);
+          const incremental = await timed('incrementalInstall', () =>
+            runIncrementalSetup(box, REPO_ROOT, plan, (why) =>
+              log(`setup: incremental install failed, installing fresh: ${why}`),
+            ),
+          );
+          depth = incremental ? near.depth + 1 : 0;
+        } else {
+          log(`setup: ${plan.command}`);
+          phase('setup', plan.command);
+          await timed('install', () => runSetup(box, REPO_ROOT, plan));
+        }
         log(`setup: done in ${seconds(timings.at(-1)!.ms)}s, network disconnected`);
         if (cache && key && baseId) {
           try {
@@ -264,7 +286,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
               );
               build = {
                 key,
-                origin: { repoUrl: run.repoUrl, base: baseId, manager: plan.manager, depth: 0 },
+                origin: { repoUrl: run.repoUrl, base: baseId, manager: plan.manager, depth },
               };
             }
           } catch (err) {

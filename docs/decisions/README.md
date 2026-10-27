@@ -8,10 +8,11 @@ changing it.
 A decision is never edited to say something else. If it is revisited, a new record supersedes
 it and the old one gets a `Superseded by` line.
 
-| #                                                        | Decision                                              | Status   |
-| -------------------------------------------------------- | ----------------------------------------------------- | -------- |
-| [0001](0001-dependency-images.md)                        | Dependencies as copy-on-write image layers            | Accepted |
-| [0002](0002-session-sandboxes-and-clean-verification.md) | Persistent session sandboxes, verified in a clean one | Accepted |
+| #                                                        | Decision                                                     | Status   |
+| -------------------------------------------------------- | ------------------------------------------------------------ | -------- |
+| [0001](0001-dependency-images.md)                        | Dependencies as copy-on-write image layers                   | Accepted |
+| [0002](0002-session-sandboxes-and-clean-verification.md) | Persistent session sandboxes, verified in a clean one        | Accepted |
+| [0003](0003-incremental-installs.md)                     | Incremental installs from the repo's newest dependency image | Accepted |
 
 ## Template
 

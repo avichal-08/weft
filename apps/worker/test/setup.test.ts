@@ -2,7 +2,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { detectSetup } from '../src/setup.ts';
+import type { ExecResult, Sandbox } from '@weft/sandbox';
+import { detectSetup, runIncrementalSetup, runSetup } from '../src/setup.ts';
 
 const dirs: string[] = [];
 
@@ -88,5 +89,78 @@ describe('detectSetup', () => {
       'package.json': JSON.stringify({ devDependencies: { vitest: '1' } }),
     });
     expect((await detectSetup(dir))?.manager).toBe('npm');
+  });
+});
+
+function fakeSandbox(answers: ((command: string) => Partial<ExecResult> | undefined)[]) {
+  const commands: string[] = [];
+  const sandbox = {
+    exec: (command: string | string[]) => {
+      const text = Array.isArray(command) ? command.join(' ') : command;
+      commands.push(text);
+      const answer = answers.map((a) => a(text)).find(Boolean) ?? {};
+      return Promise.resolve({ exitCode: 0, stdout: '', stderr: '', timedOut: false, ...answer });
+    },
+    killStrays: () => Promise.resolve(),
+    disconnectNetwork: () => Promise.resolve(),
+  } as unknown as Sandbox;
+  return { sandbox, commands };
+}
+
+const npm = { manager: 'npm' as const, command: 'npm ci --no-audit --no-fund --loglevel=error' };
+
+describe('runIncrementalSetup', () => {
+  it('installs on top of the existing node_modules when that works', async () => {
+    const { sandbox, commands } = fakeSandbox([]);
+    expect(await runIncrementalSetup(sandbox, '/w', npm)).toBe(true);
+    expect(commands.some((c) => c.includes('npm install --no-save'))).toBe(true);
+    expect(commands.some((c) => c.includes('npm ci'))).toBe(false);
+  });
+
+  it('wipes node_modules and installs fresh when the incremental install fails', async () => {
+    const reasons: string[] = [];
+    const { sandbox, commands } = fakeSandbox([
+      (c) => (c.includes('--no-save') ? { exitCode: 1, stderr: 'ERESOLVE' } : undefined),
+    ]);
+    expect(await runIncrementalSetup(sandbox, '/w', npm, (why) => reasons.push(why))).toBe(false);
+    const wipe = commands.findIndex((c) => c.includes('-name node_modules'));
+    expect(wipe).toBeGreaterThan(commands.findIndex((c) => c.includes('--no-save')));
+    expect(commands.findIndex((c) => c.includes('npm ci'))).toBeGreaterThan(wipe);
+    expect(reasons).toEqual([
+      expect.stringMatching(/^npm install --no-save .* failed \(exit code 1\)$/),
+    ]);
+  });
+
+  it('installs fresh for package managers without an incremental command', async () => {
+    const { sandbox, commands } = fakeSandbox([]);
+    const pnpm = { manager: 'pnpm' as const, command: 'pnpm install --frozen-lockfile' };
+    expect(await runIncrementalSetup(sandbox, '/w', pnpm)).toBe(false);
+    expect(commands.filter((c) => c.includes('pnpm install'))).toHaveLength(1);
+  });
+});
+
+describe('runSetup', () => {
+  it('retries the install once after a network error', async () => {
+    let calls = 0;
+    const { sandbox } = fakeSandbox([
+      (c) =>
+        c.includes('npm ci') && calls++ === 0
+          ? { exitCode: 1, stderr: 'npm error code ECONNRESET' }
+          : undefined,
+    ]);
+    await runSetup(sandbox, '/w', npm);
+    expect(calls).toBe(2);
+  });
+
+  it("doesn't retry a failure that isn't the network", async () => {
+    let calls = 0;
+    const { sandbox } = fakeSandbox([
+      (c) =>
+        c.includes('npm ci') && ++calls
+          ? { exitCode: 1, stderr: 'ERESOLVE could not resolve' }
+          : undefined,
+    ]);
+    await expect(runSetup(sandbox, '/w', npm)).rejects.toThrow(/npm ci .* failed \(exit code 1\)/);
+    expect(calls).toBe(1);
   });
 });

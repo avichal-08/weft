@@ -251,7 +251,7 @@ describe('installCache', () => {
     expect(await cache.lookup('k')).toEqual({ kind: 'tar', path: join(dir, 'k.tar') });
   });
 
-  it('finds the newest image built for the same repo, base image and package manager', async () => {
+  it('finds the newest image for the same repo, base image and package manager, under the depth limit', async () => {
     const dir = await tree({});
     const repo = repoId(origin.repoUrl);
     const image = (key: string, over: Partial<DepsImageInfo>): DepsImageInfo => ({
@@ -271,6 +271,7 @@ describe('installCache', () => {
       image('other-base', { createdAt: 9000, base: 'sha256:rebuilt' }),
       image('other-manager', { createdAt: 9000, manager: 'pnpm' }),
       image('unlabelled', { createdAt: 9000, repo: null }),
+      image('too-deep', { createdAt: 9000, depth: 5 }),
     ];
     const images: DepsImages = { ...fakeImages().images, list: () => Promise.resolve(listed) };
     const cache = installCache({ dir, maxBytes: 1e9, images });

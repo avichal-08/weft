@@ -1,6 +1,6 @@
 import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Sandbox } from '@weft/sandbox';
+import type { ExecResult, Sandbox } from '@weft/sandbox';
 
 export type Manager = 'npm' | 'pnpm' | 'yarn' | 'bun';
 export type SetupPlan = { manager: Manager; command: string };
@@ -66,27 +66,71 @@ export async function detectSetup(dir: string): Promise<SetupPlan | null> {
   return { manager, command: FRESH[manager] };
 }
 
-export async function runSetup(sandbox: Sandbox, root: string, plan: SetupPlan): Promise<number> {
-  const started = performance.now();
-  const res = await sandbox.exec(`mkdir -p ${SETUP_CACHE}/home && ${plan.command}`, {
-    cwd: root,
-    env: {
-      HOME: `${SETUP_CACHE}/home`,
-      npm_config_cache: `${SETUP_CACHE}/npm`,
-      npm_config_store_dir: `${SETUP_CACHE}/pnpm`,
-      BUN_INSTALL_CACHE_DIR: `${SETUP_CACHE}/bun`,
-    },
-    timeoutMs: SETUP_TIMEOUT_MS,
-  });
-  if (res.exitCode !== 0) {
-    const why = res.timedOut
-      ? `timed out after ${SETUP_TIMEOUT_MS / 1000}s`
-      : `exit code ${res.exitCode}`;
-    const output = `${res.stdout}\n${res.stderr}`.trim();
-    throw new SetupError(`${plan.command} failed (${why})\n${output.slice(-3000)}`);
-  }
+const SETUP_ENV = {
+  HOME: `${SETUP_CACHE}/home`,
+  npm_config_cache: `${SETUP_CACHE}/npm`,
+  npm_config_store_dir: `${SETUP_CACHE}/pnpm`,
+  npm_config_fetch_retries: '5',
+  npm_config_fetch_retry_maxtimeout: '120000',
+  BUN_INSTALL_CACHE_DIR: `${SETUP_CACHE}/bun`,
+};
+
+const NETWORK_ERROR = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|ECONNREFUSED|socket hang up/;
+
+export const INCREMENTAL: Partial<Record<Manager, string>> = {
+  npm: `npm install --no-save ${NPM_FLAGS}`,
+};
+
+async function install(sandbox: Sandbox, root: string, command: string): Promise<ExecResult> {
+  const attempt = () =>
+    sandbox.exec(`mkdir -p ${SETUP_CACHE}/home && ${command}`, {
+      cwd: root,
+      env: SETUP_ENV,
+      timeoutMs: SETUP_TIMEOUT_MS,
+    });
+  const res = await attempt();
+  const retry = res.exitCode !== 0 && !res.timedOut && NETWORK_ERROR.test(res.stdout + res.stderr);
+  return retry ? attempt() : res;
+}
+
+function failure(command: string, res: ExecResult): SetupError {
+  const why = res.timedOut
+    ? `timed out after ${SETUP_TIMEOUT_MS / 1000}s`
+    : `exit code ${res.exitCode}`;
+  const output = `${res.stdout}\n${res.stderr}`.trim();
+  return new SetupError(`${command} failed (${why})\n${output.slice(-3000)}`);
+}
+
+async function finish(sandbox: Sandbox) {
   await sandbox.exec(['rm', '-rf', ...['npm', 'pnpm', 'bun'].map((c) => `${SETUP_CACHE}/${c}`)]);
   await sandbox.killStrays();
   await sandbox.disconnectNetwork();
+}
+
+export async function runSetup(sandbox: Sandbox, root: string, plan: SetupPlan): Promise<number> {
+  const started = performance.now();
+  const res = await install(sandbox, root, plan.command);
+  if (res.exitCode !== 0) throw failure(plan.command, res);
+  await finish(sandbox);
   return Math.round(performance.now() - started);
+}
+
+export async function runIncrementalSetup(
+  sandbox: Sandbox,
+  root: string,
+  plan: SetupPlan,
+  onFallback: (why: string) => void = () => {},
+): Promise<boolean> {
+  const command = INCREMENTAL[plan.manager];
+  if (command) {
+    const res = await install(sandbox, root, command);
+    if (res.exitCode === 0) {
+      await finish(sandbox);
+      return true;
+    }
+    onFallback(failure(command, res).message.split('\n')[0]!);
+    await sandbox.exec('find . -name node_modules -type d -prune -exec rm -rf {} +', { cwd: root });
+  }
+  await runSetup(sandbox, root, plan);
+  return false;
 }

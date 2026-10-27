@@ -52,6 +52,7 @@ export type InstallCacheConfig = {
 export type CacheHit = { kind: 'image'; image: string } | { kind: 'tar'; path: string };
 
 export const DEPS_REPO = 'weft-deps';
+export const MAX_DEPTH = 5;
 export const depsImage = (key: string) => `${DEPS_REPO}:${key}`;
 
 export function dockerDepsImages(dest: string): DepsImages {
@@ -261,7 +262,13 @@ export function installCache(config: InstallCacheConfig) {
     async nearest(origin: Omit<DepsOrigin, 'depth'>) {
       const repo = repoId(origin.repoUrl);
       const [best] = ((await config.images?.list()) ?? [])
-        .filter((i) => i.repo === repo && i.base === origin.base && i.manager === origin.manager)
+        .filter(
+          (i) =>
+            i.repo === repo &&
+            i.base === origin.base &&
+            i.manager === origin.manager &&
+            i.depth < MAX_DEPTH,
+        )
         .sort((a, b) => b.createdAt - a.createdAt);
       return best ? { key: best.key, image: depsImage(best.key), depth: best.depth } : null;
     },
