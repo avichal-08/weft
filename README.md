@@ -43,6 +43,7 @@ packages/
   db/            postgres schema and migrations (drizzle, neon)
   agent/         the coding agent: tools and loop
   sandbox/       docker sandbox lifecycle (dockerode)
+  github/        github app auth: app jwt, installation tokens
   llm/           provider-agnostic llm client (anthropic, openai, gemini, openrouter, mock)
   tsconfig/      shared TypeScript config
   eslint-config/ shared ESLint flat config

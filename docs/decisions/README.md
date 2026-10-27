@@ -13,6 +13,7 @@ it and the old one gets a `Superseded by` line.
 | [0001](0001-dependency-images.md)                        | Dependencies as copy-on-write image layers                   | Accepted |
 | [0002](0002-session-sandboxes-and-clean-verification.md) | Persistent session sandboxes, verified in a clean one        | Accepted |
 | [0003](0003-incremental-installs.md)                     | Incremental installs from the repo's newest dependency image | Accepted |
+| [0004](0004-github-app-auth.md)                          | GitHub App for repository access                             | Accepted |
 
 ## Template
 
