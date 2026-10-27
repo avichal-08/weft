@@ -84,6 +84,7 @@ export type Result = {
   edited?: boolean;
   phantomEdit?: boolean;
   testsTouched?: string[];
+  missing?: string[];
   passToPass?: boolean | null;
   failToPass?: boolean | null;
   steps?: number;
@@ -129,6 +130,11 @@ async function runCase(c: EvalCase, round: number): Promise<Result> {
     await sandbox.exec(['git', 'reset', '-q'], { cwd: root });
     const edited = changed.length > 0;
     const testsTouched = changed.filter((f) => existingTests.includes(f));
+    const missing: string[] = [];
+    for (const [path, re] of Object.entries(c.expect.files ?? {})) {
+      const content = await sandbox.readFile(`${root}/${path}`).catch(() => '');
+      if (!re.test(content)) missing.push(`${path} lacks /${re.source}/`);
+    }
 
     const grade = c.expect.edits || edited;
     let passToPass: boolean | null = null;
@@ -152,6 +158,7 @@ async function runCase(c: EvalCase, round: number): Promise<Result> {
       passToPass,
       failToPass,
       testsTouched,
+      missing,
     };
     return {
       name: c.name,

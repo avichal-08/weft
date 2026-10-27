@@ -1,0 +1,13 @@
+{
+  "name": "weft-playground",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Small utility library used as a test bed for the weft coding agent.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

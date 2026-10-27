@@ -18,6 +18,7 @@ const ok: Observed = {
   passToPass: null,
   failToPass: null,
   testsTouched: [],
+  missing: [],
 };
 
 const tool = (name: string, args: Record<string, unknown>): AgentEvent => ({

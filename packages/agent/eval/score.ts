@@ -12,6 +12,7 @@ export type Observed = {
   passToPass: boolean | null;
   failToPass: boolean | null;
   testsTouched: string[];
+  missing: string[];
 };
 
 export function wrongLanguageSearches(events: AgentEvent[]): number {
@@ -40,6 +41,7 @@ export function score(c: EvalCase, o: Observed): string[] {
   }
   const said = c.expect.forbidden ? o.reply.match(c.expect.forbidden) : null;
   if (said) problems.push(`reply says "${said[0]}"`);
+  problems.push(...o.missing);
   if (o.passToPass === false) problems.push('broke existing tests');
   if (o.failToPass === false) problems.push('hidden tests fail');
   if (c.expect.keepTests && o.testsTouched.length > 0) {

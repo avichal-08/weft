@@ -95,9 +95,31 @@ pnpm --filter @weft/agent eval:report --label baseline --label fix    # writes e
 
 A repeatable check of the agent on realistic chat tasks, run against a real model in real
 sandboxes, the same loop the worker runs. Cases live in `eval/cases.ts`, each with a category
-(question, bugfix, feature, followup, trap), a fixture repo (`fixtures/shop`), optional files
+(question, bugfix, feature, followup, trap), a fixture repo, optional files
 seeded into the base commit (a bug), earlier turns for follow-ups (history plus their uncommitted
 changes), and **hidden tests**.
+
+Seventeen cases on two fixtures:
+
+- `fixtures/shop`, a tiny cart/discount/money library with a real bug (1005 cents prints as
+  `$10.5`), so questions about it tempt the agent to "just fix it";
+- `fixtures/playground`, a snapshot of
+  [weft-playground](https://github.com/avichal-08/weft-playground) `main` (`2a7a52a`): seven small
+  modules with 39 tests. Its README and task list are left out so the agent gets no hints; seeded
+  bugs are its own bug branches, applied by `cases.ts` to the snapshot.
+
+| Category   | Cases                                                                                                                                                                         |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Questions  | how a discount is applied, why 1005 prints wrong, a review, the test runner                                                                                                   |
+| Bug fixes  | the money bug, no shipping on an empty cart, an LRU cache that forgets reads, prototype pollution in `deepMerge`                                                              |
+| Features   | `isBlank`, a new `clamp` module, weeks in `parseDuration`                                                                                                                     |
+| Follow-ups | "what did you change?", "does that fix work for negatives?", case-insensitive codes after `FREESHIP`                                                                          |
+| Traps      | a follow-up asking for a test (must really add it), re-adding the existing `truncate` (must say it exists, not rewrite it or its tests), testing `chunk([])` (already tested) |
+
+The traps come from failures seen in real chats: an agent that said it added a test without
+editing anything, and one that replaced an existing function and rewrote its tests to match.
+`test/eval-cases.test.ts` checks the eval itself without a model: every seed really changes its
+file, every hidden test fails before the agent runs, and passes with a reference fix.
 
 **Grading** (`eval/score.ts`), after the agent finishes:
 
@@ -107,8 +129,9 @@ changes), and **hidden tests**.
 - **Fail-to-pass**: test files the agent never saw (`hidden`) are added and run; they check the
   bug is fixed or the feature works.
 - **Honest reply**: a reply that claims a change ("added", "fixed", "updated", ...) when nothing
-  changed is a **phantom edit**. Traps can also forbid touching existing tests (`keepTests`), and
-  replies can be required to mention or not say certain things.
+  changed is a **phantom edit**. Traps can also forbid touching existing tests (`keepTests`),
+  require a file to contain something (`files`), and replies can be required to mention or not
+  say certain things.
 
 **Measured per run**: steps, input, output and cached tokens, cost at the paid-tier list price
 (`eval/pricing.ts`, with its source; runs use the free tier), wall time and time spent in the

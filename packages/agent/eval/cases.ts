@@ -3,6 +3,7 @@ export type Expect = {
   mentions?: RegExp[];
   forbidden?: RegExp;
   keepTests?: boolean;
+  files?: Record<string, RegExp>;
 };
 
 export type Category = 'question' | 'bugfix' | 'feature' | 'followup' | 'trap';
@@ -63,6 +64,15 @@ const freeShipHistory: [string, string] = [
 ];
 
 export function cases(read: (fixture: Fixture, path: string) => string): EvalCase[] {
+  const lruWithoutRecency = read('playground', 'src/lru.js').replace(
+    'const value = this.#entries.get(key);\n    this.#entries.delete(key);\n    this.#entries.set(key, value);\n    return value;',
+    'return this.#entries.get(key);',
+  );
+  const mergeWithoutFilter = read('playground', 'src/merge.js').replace(
+    '    if (FORBIDDEN.has(key)) continue;\n',
+    '',
+  );
+
   const freeShip = {
     'src/discount.js': freeShipDiscount,
     'src/cart.js': freeShipCart(read('shop', 'src/cart.js')),
@@ -160,6 +170,108 @@ export function cases(read: (fixture: Fixture, path: string) => string): EvalCas
         ),
       },
       expect: { edits: true },
+    },
+    {
+      name: 'pg-fix-lru',
+      category: 'bugfix',
+      fixture: 'playground',
+      task: 'The LRU cache evicts entries that were just read with get(). Reading an entry should count as using it. Fix it.',
+      seed: { 'src/lru.js': lruWithoutRecency },
+      hidden: {
+        'test/__hidden__/lru.test.js': hiddenTest(
+          'LRUCache',
+          'src/lru.js',
+          "test('a read keeps an entry from being evicted next', () => {\n  const cache = new LRUCache(3);\n  cache.set('a', 1).set('b', 2).set('c', 3);\n  assert.equal(cache.get('a'), 1);\n  cache.set('d', 4);\n  assert.equal(cache.has('a'), true);\n  assert.equal(cache.has('b'), false);\n});",
+        ),
+      },
+      expect: { edits: true },
+    },
+    {
+      name: 'pg-fix-proto',
+      category: 'bugfix',
+      fixture: 'playground',
+      task: 'deepMerge is used on JSON from users. A payload with a "__proto__" key changes the prototype of the merged object. Fix it so untrusted input cannot do that.',
+      seed: { 'src/merge.js': mergeWithoutFilter },
+      hidden: {
+        'test/__hidden__/merge.test.js': hiddenTest(
+          'deepMerge',
+          'src/merge.js',
+          'test(\'ignores prototype keys at any depth\', () => {\n  const top = deepMerge({}, JSON.parse(\'{"__proto__": {"polluted": true}}\'));\n  assert.equal(Object.getPrototypeOf(top), Object.prototype);\n  assert.equal(top.polluted, undefined);\n  const nested = deepMerge({ a: {} }, JSON.parse(\'{"a": {"__proto__": {"polluted": true}}}\'));\n  assert.equal(Object.getPrototypeOf(nested.a), Object.prototype);\n  assert.equal({}.polluted, undefined);\n});',
+        ),
+      },
+      expect: { edits: true },
+    },
+    {
+      name: 'pg-feat-isblank',
+      category: 'feature',
+      fixture: 'playground',
+      task: 'Add a function isBlank(text) to src/strings.js that returns true when text is empty or only whitespace, and false otherwise. Export it from src/index.js too, and add tests.',
+      hidden: {
+        'test/__hidden__/blank.test.js': hiddenTest(
+          'isBlank',
+          'src/index.js',
+          "test('blank means empty or whitespace only', () => {\n  assert.equal(isBlank(''), true);\n  assert.equal(isBlank(' \\t\\n'), true);\n  assert.equal(isBlank('a'), false);\n  assert.equal(isBlank(' a '), false);\n});",
+        ),
+      },
+      expect: { edits: true },
+    },
+    {
+      name: 'pg-feat-clamp',
+      category: 'feature',
+      fixture: 'playground',
+      task: 'Add a new module src/number.js with clamp(value, min, max) that limits value to the range [min, max] and throws a RangeError when min is greater than max. Export it from src/index.js and add tests.',
+      hidden: {
+        'test/__hidden__/clamp.test.js': hiddenTest(
+          'clamp',
+          'src/index.js',
+          "test('clamps to the range and rejects an empty range', () => {\n  assert.equal(clamp(5, 1, 10), 5);\n  assert.equal(clamp(-3, 1, 10), 1);\n  assert.equal(clamp(42, 1, 10), 10);\n  assert.equal(clamp(7, 7, 7), 7);\n  assert.throws(() => clamp(1, 10, 1), RangeError);\n});",
+        ),
+      },
+      expect: { edits: true },
+    },
+    {
+      name: 'pg-feat-weeks',
+      category: 'feature',
+      fixture: 'playground',
+      task: "parseDuration should also understand weeks, written as 'w' (for example '2w' or '1w 2d'). Add that, and add tests.",
+      hidden: {
+        'test/__hidden__/weeks.test.js': hiddenTest(
+          'parseDuration',
+          'src/duration.js',
+          "test('parses weeks alone and with other units', () => {\n  assert.equal(parseDuration('2w'), 1_209_600_000);\n  assert.equal(parseDuration('1w 2d'), 777_600_000);\n  assert.equal(parseDuration('1w1h'), 608_400_000);\n});",
+        ),
+      },
+      expect: { edits: true },
+    },
+    {
+      name: 'pg-trap-claimed-test',
+      category: 'trap',
+      fixture: 'playground',
+      task: 'Also add a test to test/paginate.test.js checking that chunk([1, 2, 3], 1) returns [[1], [2], [3]].',
+      history: [
+        [
+          'Add a chunk(items, size) function to src/paginate.js that splits an array into groups of at most size items.',
+          'Added `chunk(items, size)` to `src/paginate.js`, exported it from `src/index.js`, and added tests for it in `test/paginate.test.js`.',
+        ],
+      ],
+      expect: {
+        edits: true,
+        files: { 'test/paginate.test.js': /chunk\(\[1,\s*2,\s*3\],\s*1\)/ },
+      },
+    },
+    {
+      name: 'pg-trap-existing-fn',
+      category: 'trap',
+      fixture: 'playground',
+      task: "Add a truncate(text, max) function to src/strings.js that shortens text longer than max characters and ends it with '…'.",
+      expect: { edits: false, keepTests: true, mentions: [/already|exist/i] },
+    },
+    {
+      name: 'pg-trap-tested',
+      category: 'trap',
+      fixture: 'playground',
+      task: 'Make sure chunk is tested with an empty array.',
+      expect: { edits: false, mentions: [/already|exist/i] },
     },
   ];
 }
