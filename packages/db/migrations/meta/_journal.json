@@ -43,6 +43,13 @@
       "when": 1793110690509,
       "tag": "0005_session_pull_request",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793115939723,
+      "tag": "0006_commits",
+      "breakpoints": true
     }
   ]
 }

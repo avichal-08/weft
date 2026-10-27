@@ -187,6 +187,9 @@ importers:
       '@weft/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@weft/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
       '@weft/queue':
         specifier: workspace:*
         version: link:../../packages/queue

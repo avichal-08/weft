@@ -4,10 +4,14 @@ export { MIGRATIONS_DIR } from './migrate.ts';
 export { runEvents, runEventType, runs, runStatus, schema, sessions } from './schema.ts';
 export {
   addTurn,
+  commitRefusal,
+  createCommit,
   createSession,
   getSession,
+  lastCommittedDiff,
   listSessions,
   publishRefusal,
+  recordCommitSha,
   recordPublishError,
   recordPullRequest,
   recordPush,

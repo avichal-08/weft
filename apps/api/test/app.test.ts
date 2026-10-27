@@ -1,8 +1,16 @@
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
-import { appendRunEvents, claimRun, completeRun, getRun } from '@weft/db';
+import {
+  appendRunEvents,
+  claimRun,
+  completeRun,
+  getRun,
+  getSession,
+  recordPullRequest,
+} from '@weft/db';
 import { reset, testDb, type TestDb } from '@weft/db/testing';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { createMockProvider } from '@weft/llm';
 import type { PublishJobData } from '@weft/queue';
 import { createApp } from '../src/app.ts';
 import { fakeLive } from './fake-live.ts';
@@ -28,6 +36,8 @@ beforeAll(async () => {
       published.push(job);
       return Promise.resolve();
     },
+    createLLM: () =>
+      createMockProvider(() => ({ content: [{ type: 'text', text: 'Add isBlank helper' }] })),
     ready: () => Promise.resolve(checks),
     live: () => fakeLive().reader(),
   });
@@ -296,6 +306,53 @@ describe('POST /sessions/:id/publish', () => {
   it('404s for an unknown chat', async () => {
     const res = await post('/sessions/00000000-0000-4000-8000-000000000000/publish', {});
     expect(res.status).toBe(404);
+  });
+});
+
+describe('commits', () => {
+  async function chatWith(diff: string) {
+    const { session, run } = (
+      await post('/sessions', {
+        repoUrl: 'https://github.com/avichal-08/weft-playground',
+        message: 'Add isBlank',
+      })
+    ).body;
+    const attempt = (await claimRun(db, run!.id, 'w'))!;
+    await completeRun(db, run!.id, attempt, { status: 'succeeded', diff });
+    return session!.id;
+  }
+  const diff =
+    'diff --git a/src/strings.js b/src/strings.js\n--- a/src/strings.js\n+++ b/src/strings.js\n@@ -1 +1 @@\n-a\n+b\n';
+
+  it('drafts a message, then saves the edited one', async () => {
+    const id = await chatWith(diff);
+    const draft = await post(`/sessions/${id}/commits/draft`, {});
+    expect(draft).toMatchObject({ status: 200, body: { message: 'Add isBlank helper' } });
+
+    const saved = await post(`/sessions/${id}/commits`, { message: '  Add isBlank to strings  ' });
+    expect(saved.status).toBe(201);
+    expect((await getSession(db, id))?.commits.map((c) => [c.turn, c.message])).toEqual([
+      [1, 'Add isBlank to strings'],
+    ]);
+    expect(published).toEqual([]);
+
+    const again = await post(`/sessions/${id}/commits/draft`, {});
+    expect(again).toMatchObject({
+      status: 409,
+      body: { error: 'nothing_to_commit', message: 'nothing has changed since the last commit' },
+    });
+  });
+
+  it('rejects an empty message', async () => {
+    const id = await chatWith(diff);
+    expect((await post(`/sessions/${id}/commits`, { message: '   ' })).status).toBe(400);
+  });
+
+  it('pushes the commit right away once the chat has a pull request', async () => {
+    const id = await chatWith(diff);
+    await recordPullRequest(db, id, { prNumber: 2, prUrl: 'https://github.com/x/y/pull/2' });
+    await post(`/sessions/${id}/commits`, { message: 'Add isBlank' });
+    expect(published).toEqual([{ sessionId: id, turn: 1, openPullRequest: false }]);
   });
 });
 

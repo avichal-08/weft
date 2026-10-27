@@ -89,6 +89,12 @@ time.
 | `recordPublishError(db, id, error)`                                                | Saves why publishing failed.                                                             |
 | `setPublishState(db, id, state)`, `recordPullRequest(db, id, { prNumber, prUrl })` | Publish progress and the pull request it opened.                                         |
 
+**`commits`**: commits the user made in a chat, in order: the `turn` whose changes they cover,
+the `message`, and the `sha` once pushed (empty until then). Deleted with their session.
+`getSession` returns them with the turns; `commitRefusal(session)` adds "nothing has changed since
+the last commit" to the publish rules, and `lastCommittedDiff(session)` is the diff the last commit
+covered.
+
 **`run_events`**: the step-by-step trace of a run, one row per model call (`llm`) or tool call
 (`tool`), keyed by `(run_id, attempt, seq)`. `data` holds the details as JSON (tokens, latency
 and text for `llm`; name, args, error flag, duration and output for `tool`). Rows are deleted

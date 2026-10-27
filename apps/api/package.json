@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@weft/db": "workspace:*",
+    "@weft/llm": "workspace:*",
     "@weft/queue": "workspace:*",
     "express": "^5.3.0",
     "zod": "^4.6.7"

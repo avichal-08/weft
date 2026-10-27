@@ -1,7 +1,8 @@
 import { asc, desc, eq, inArray, sql } from 'drizzle-orm';
-import { runs, sessions } from './schema.ts';
+import { commits, runs, sessions } from './schema.ts';
 import type {
   AddTurnResult,
+  Commit,
   CreateSessionInput,
   Db,
   PublishState,
@@ -91,7 +92,38 @@ export async function getSession(db: Db, id: string): Promise<SessionWithTurns |
   const [session] = await db.select().from(sessions).where(eq(sessions.id, id));
   if (!session) return undefined;
   const turns = await db.select().from(runs).where(eq(runs.sessionId, id)).orderBy(asc(runs.turn));
-  return { ...session, turns };
+  const made = await db
+    .select()
+    .from(commits)
+    .where(eq(commits.sessionId, id))
+    .orderBy(asc(commits.createdAt));
+  return { ...session, turns, commits: made };
+}
+
+export async function createCommit(
+  db: Db,
+  commit: { sessionId: string; turn: number; message: string },
+): Promise<Commit> {
+  const [row] = await db.insert(commits).values(commit).returning();
+  return row!;
+}
+
+export async function recordCommitSha(db: Db, id: string, sha: string): Promise<void> {
+  await db.update(commits).set({ sha }).where(eq(commits.id, id));
+}
+
+export function lastCommittedDiff(session: SessionWithTurns): string {
+  const last = session.commits.at(-1);
+  return last ? (session.turns.find((t) => t.turn === last.turn)?.diff ?? '') : '';
+}
+
+export function commitRefusal(session: SessionWithTurns): string | null {
+  const why = publishRefusal(session.turns);
+  if (why) return why;
+  if (session.turns.at(-1)!.diff === lastCommittedDiff(session)) {
+    return 'nothing has changed since the last commit';
+  }
+  return null;
 }
 
 export async function listSessions(db: Db, limit = 50): Promise<SessionSummary[]> {

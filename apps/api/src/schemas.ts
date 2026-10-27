@@ -30,6 +30,8 @@ export const createSessionBody = z.strictObject({
 
 export const sendMessageBody = z.strictObject({ message });
 
+export const commitBody = z.strictObject({ message: z.string().trim().min(1).max(5000) });
+
 export const listSessionsQuery = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional(),
 });

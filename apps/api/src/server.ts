@@ -1,4 +1,5 @@
 import { createDb } from '@weft/db';
+import { createProvider, loadLLMConfig } from '@weft/llm';
 import {
   createPublishQueue,
   createRedis,
@@ -26,6 +27,14 @@ const app = createApp({
   db,
   enqueue: (runId) => enqueueRun(queue, runId),
   enqueuePublish: (job) => enqueuePublish(publishQueue, job),
+  createLLM: (config) =>
+    createProvider(
+      loadLLMConfig({
+        ...process.env,
+        ...(typeof config.provider === 'string' ? { LLM_PROVIDER: config.provider } : {}),
+        ...(typeof config.model === 'string' ? { LLM_MODEL: config.model } : {}),
+      }),
+    ),
   live: () => {
     const conn = redis.duplicate();
     return {

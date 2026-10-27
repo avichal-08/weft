@@ -1,4 +1,5 @@
 import type { Db } from '@weft/db';
+import type { LLMProvider } from '@weft/llm';
 import type { LiveEntry, PublishJobData } from '@weft/queue';
 
 export type LiveReader = {
@@ -10,6 +11,7 @@ export type AppDeps = {
   db: Db;
   enqueue: (runId: string) => Promise<void>;
   enqueuePublish: (job: PublishJobData) => Promise<void>;
+  createLLM?: (config: Record<string, unknown>) => LLMProvider;
   ready: () => Promise<Record<string, boolean>>;
   live: () => LiveReader;
   liveBlockMs?: number;

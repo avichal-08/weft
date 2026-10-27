@@ -105,4 +105,19 @@ export const runEvents = pgTable(
   (t) => [uniqueIndex('run_events_run_attempt_seq_idx').on(t.runId, t.attempt, t.seq)],
 );
 
-export const schema = { runStatus, sessions, runs, runEventType, runEvents };
+export const commits = pgTable(
+  'commits',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    turn: integer('turn').notNull(),
+    message: text('message').notNull(),
+    sha: text('sha'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('commits_session_idx').on(t.sessionId, t.createdAt)],
+);
+
+export const schema = { runStatus, sessions, runs, runEventType, runEvents, commits };

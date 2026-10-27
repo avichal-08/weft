@@ -4,10 +4,13 @@ import { cancelRun, claimRun, completeRun, getRun } from '../src/runs.ts';
 import { runs, sessions } from '../src/schema.ts';
 import {
   addTurn,
+  commitRefusal,
+  createCommit,
   createSession,
   getSession,
   listSessions,
   publishRefusal,
+  recordCommitSha,
   recordPublishError,
   recordPullRequest,
   recordPush,
@@ -220,5 +223,56 @@ describe('publishRefusal', () => {
     expect(publishRefusal([turn({ diff: '' })])).toBe(
       'nothing in this chat has changed any files yet',
     );
+  });
+});
+
+describe('commits', () => {
+  async function chat(diff: string) {
+    const { session, run } = await createSession(db, input);
+    const attempt = (await claimRun(db, run.id, 'w'))!;
+    await completeRun(db, run.id, attempt, { status: 'succeeded', diff, summary: 'done' });
+    return session.id;
+  }
+
+  it('records commits in order with the session, sha empty until pushed', async () => {
+    const id = await chat('diff --git a/a b/a\n');
+    const first = await createCommit(db, { sessionId: id, turn: 1, message: 'Add a' });
+    await recordCommitSha(db, first.id, 'abc123');
+    const saved = await getSession(db, id);
+    expect(saved?.commits.map((c) => ({ turn: c.turn, message: c.message, sha: c.sha }))).toEqual([
+      { turn: 1, message: 'Add a', sha: 'abc123' },
+    ]);
+  });
+
+  it('refuses a commit when nothing changed since the last one', async () => {
+    const id = await chat('diff --git a/a b/a\n');
+    expect(commitRefusal((await getSession(db, id))!)).toBeNull();
+
+    await createCommit(db, { sessionId: id, turn: 1, message: 'Add a' });
+    expect(commitRefusal((await getSession(db, id))!)).toBe(
+      'nothing has changed since the last commit',
+    );
+
+    const next = await addTurn(db, id, 'more');
+    if (!next.ok) throw new Error('refused');
+    const attempt = (await claimRun(db, next.run.id, 'w'))!;
+    await completeRun(db, next.run.id, attempt, {
+      status: 'succeeded',
+      diff: 'diff --git a/a b/a\n',
+    });
+    expect(commitRefusal((await getSession(db, id))!)).toBe(
+      'nothing has changed since the last commit',
+    );
+  });
+
+  it('applies the publish rules too', async () => {
+    const { session, run } = await createSession(db, input);
+    const attempt = (await claimRun(db, run.id, 'w'))!;
+    await completeRun(db, run.id, attempt, {
+      status: 'failed',
+      failureKind: 'tests_failed',
+      diff: 'd',
+    });
+    expect(commitRefusal((await getSession(db, session.id))!)).toMatch(/tests fail/);
   });
 });

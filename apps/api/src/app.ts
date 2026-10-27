@@ -4,6 +4,8 @@ import {
   createRun,
   createSession,
   getRun,
+  commitRefusal,
+  createCommit,
   getSession,
   publishRefusal,
   setPublishState,
@@ -14,6 +16,7 @@ import {
 import express, { type ErrorRequestHandler, type Express } from 'express';
 import { ZodError } from 'zod';
 import {
+  commitBody,
   createRunBody,
   createSessionBody,
   definedOnly,
@@ -24,6 +27,7 @@ import {
   sendMessageBody,
   streamQuery,
 } from './schemas.ts';
+import { draftCommitMessage } from './commit-message.ts';
 import { parseCursor, streamRun } from './stream.ts';
 import type { AppDeps } from './types.ts';
 
@@ -194,6 +198,44 @@ export function createApp(deps: AppDeps): Express {
       return;
     }
     res.json({ session });
+  });
+
+  app.post('/sessions/:id/commits/draft', async (req, res) => {
+    const { id } = runIdParam.parse(req.params);
+    const session = await getSession(deps.db, id);
+    if (!session) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    const why = commitRefusal(session);
+    if (why) {
+      res.status(409).json({ error: 'nothing_to_commit', message: why });
+      return;
+    }
+    const llm = deps.createLLM ? deps.createLLM(session.config) : null;
+    res.json({ message: await draftCommitMessage(session, llm) });
+  });
+
+  app.post('/sessions/:id/commits', async (req, res) => {
+    const { id } = runIdParam.parse(req.params);
+    const { message } = commitBody.parse(req.body);
+    const session = await getSession(deps.db, id);
+    if (!session) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    const why = commitRefusal(session);
+    if (why) {
+      res.status(409).json({ error: 'nothing_to_commit', message: why });
+      return;
+    }
+    const turn = session.turns.at(-1)!.turn!;
+    const commit = await createCommit(deps.db, { sessionId: id, turn, message });
+    if (session.prNumber) {
+      await deps.enqueuePublish({ sessionId: id, turn, openPullRequest: false }).catch(() => {});
+      await setPublishState(deps.db, id, 'queued');
+    }
+    res.status(201).json({ commit });
   });
 
   app.post('/sessions/:id/publish', async (req, res) => {
