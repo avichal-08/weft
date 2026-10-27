@@ -7,8 +7,11 @@ export {
   createSession,
   getSession,
   listSessions,
+  publishRefusal,
   recordPublishError,
+  recordPullRequest,
   recordPush,
+  setPublishState,
   titleFrom,
 } from './sessions.ts';
 export { appendRunEvents, listRunEvents } from './events.ts';

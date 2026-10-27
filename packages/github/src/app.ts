@@ -13,6 +13,10 @@ export type InstallationToken = { token: string; expiresAt: number };
 
 export type Identity = { name: string; email: string };
 
+export type PullRequest = { number: number; url: string };
+
+export type NewPullRequest = { head: string; base: string; title: string; body: string };
+
 export class GitHubError extends Error {
   override name = 'GitHubError';
   readonly status: number;
@@ -81,8 +85,55 @@ export function githubApp(config: GitHubAppConfig) {
     }
   }
 
+  async function token(ref: RepoRef): Promise<string> {
+    const key = `${ref.owner}/${ref.repo}`.toLowerCase();
+    const cached = tokens.get(key);
+    if (cached && cached.expiresAt - REFRESH_BEFORE_MS > now()) return cached.token;
+    const id = await installationId(ref);
+    const res = await call<{ token: string; expires_at: string }>(
+      'POST',
+      `/app/installations/${id}/access_tokens`,
+      asApp(),
+      { repositories: [ref.repo], permissions: PERMISSIONS },
+    );
+    tokens.set(key, { token: res.token, expiresAt: Date.parse(res.expires_at) });
+    return res.token;
+  }
+
+  const asRepo = async (ref: RepoRef) => `token ${await token(ref)}`;
+
   return {
     installationId,
+    token,
+
+    async defaultBranch(ref: RepoRef): Promise<string> {
+      const repo = await call<{ default_branch: string }>(
+        'GET',
+        `/repos/${ref.owner}/${ref.repo}`,
+        await asRepo(ref),
+      );
+      return repo.default_branch;
+    },
+
+    async findPullRequest(ref: RepoRef, branch: string): Promise<PullRequest | null> {
+      const head = encodeURIComponent(`${ref.owner}:${branch}`);
+      const open = await call<{ number: number; html_url: string }[]>(
+        'GET',
+        `/repos/${ref.owner}/${ref.repo}/pulls?state=open&head=${head}`,
+        await asRepo(ref),
+      );
+      return open[0] ? { number: open[0].number, url: open[0].html_url } : null;
+    },
+
+    async openPullRequest(ref: RepoRef, pr: NewPullRequest): Promise<PullRequest> {
+      const res = await call<{ number: number; html_url: string }>(
+        'POST',
+        `/repos/${ref.owner}/${ref.repo}/pulls`,
+        await asRepo(ref),
+        pr,
+      );
+      return { number: res.number, url: res.html_url };
+    },
 
     identity(): Promise<Identity> {
       bot ??= (async () => {
@@ -99,21 +150,6 @@ export function githubApp(config: GitHubAppConfig) {
         throw err;
       });
       return bot;
-    },
-
-    async token(ref: RepoRef): Promise<string> {
-      const key = `${ref.owner}/${ref.repo}`.toLowerCase();
-      const cached = tokens.get(key);
-      if (cached && cached.expiresAt - REFRESH_BEFORE_MS > now()) return cached.token;
-      const id = await installationId(ref);
-      const res = await call<{ token: string; expires_at: string }>(
-        'POST',
-        `/app/installations/${id}/access_tokens`,
-        asApp(),
-        { repositories: [ref.repo], permissions: PERMISSIONS },
-      );
-      tokens.set(key, { token: res.token, expiresAt: Date.parse(res.expires_at) });
-      return res.token;
     },
   };
 }

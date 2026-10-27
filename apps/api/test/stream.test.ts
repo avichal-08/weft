@@ -17,6 +17,7 @@ beforeAll(async () => {
   const app = createApp({
     db,
     enqueue: () => Promise.resolve(),
+    enqueuePublish: () => Promise.resolve(),
     ready: () => Promise.resolve({}),
     live: () => live.reader(),
     liveBlockMs: 100,

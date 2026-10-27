@@ -22,6 +22,8 @@ const envSchema = z.object({
     .int()
     .min(1000)
     .default(10 * 60_000),
+  GITHUB_APP_ID: z.string().optional(),
+  GITHUB_APP_PRIVATE_KEY_PATH: z.string().optional(),
 });
 
 export const loadEnv = (env: NodeJS.ProcessEnv = process.env) => envSchema.parse(env);

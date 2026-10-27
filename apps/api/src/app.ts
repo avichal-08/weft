@@ -5,6 +5,8 @@ import {
   createSession,
   getRun,
   getSession,
+  publishRefusal,
+  setPublishState,
   listRunEvents,
   listRuns,
   listSessions,
@@ -192,6 +194,29 @@ export function createApp(deps: AppDeps): Express {
       return;
     }
     res.json({ session });
+  });
+
+  app.post('/sessions/:id/publish', async (req, res) => {
+    const { id } = runIdParam.parse(req.params);
+    const session = await getSession(deps.db, id);
+    if (!session) {
+      res.status(404).json({ error: 'not_found' });
+      return;
+    }
+    const why = publishRefusal(session.turns);
+    if (why) {
+      res.status(409).json({ error: 'not_publishable', message: why });
+      return;
+    }
+    const turn = session.turns.at(-1)!.turn!;
+    try {
+      await deps.enqueuePublish({ sessionId: id, turn, openPullRequest: true });
+    } catch {
+      res.status(503).json({ error: 'queue_unavailable' });
+      return;
+    }
+    await setPublishState(deps.db, id, 'queued');
+    res.status(202).json({ session: { ...session, publishState: 'queued' } });
   });
 
   app.post('/sessions/:id/messages', async (req, res) => {

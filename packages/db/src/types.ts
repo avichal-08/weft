@@ -38,6 +38,8 @@ export type CompleteRunInput = Partial<RunUsage> & {
 
 export type PhaseTiming = { phase: string; ms: number };
 
+export type PublishState = 'queued' | 'pushing' | 'pushed' | 'failed';
+
 export type RunEvent = typeof runEvents.$inferSelect;
 export type RunEventType = RunEvent['type'];
 

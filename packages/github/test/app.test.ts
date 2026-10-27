@@ -114,4 +114,43 @@ describe('githubApp', () => {
     expect(gh.calls).toHaveLength(2);
     expect(gh.calls[1]!.auth).toBe('');
   });
+
+  it('reads the default branch, finds an open pull request, and opens one, with the repo token', async () => {
+    const created: unknown[] = [];
+    const gh = fakeGitHub({
+      'GET /repos/avichal-08/demo/installation': () => [200, { id: 77 }],
+      'POST /app/installations/77/access_tokens': () => [
+        201,
+        { token: 'ghs_repo', expires_at: '2099-01-01T00:00:00Z' },
+      ],
+      'GET /repos/avichal-08/demo': () => [200, { default_branch: 'main' }],
+      'GET /repos/avichal-08/demo/pulls?state=open&head=avichal-08%3Aweft%2Fa-1': () => [200, []],
+      'GET /repos/avichal-08/demo/pulls?state=open&head=avichal-08%3Aweft%2Fb-2': () => [
+        200,
+        [{ number: 7, html_url: 'https://github.com/avichal-08/demo/pull/7' }],
+      ],
+      'POST /repos/avichal-08/demo/pulls': (call) => {
+        created.push(call.body);
+        return [201, { number: 8, html_url: 'https://github.com/avichal-08/demo/pull/8' }];
+      },
+    });
+    const app = githubApp({ appId: '1', privateKey: pem, fetch: gh.fetch });
+
+    expect(await app.defaultBranch(repo)).toBe('main');
+    expect(await app.findPullRequest(repo, 'weft/a-1')).toBeNull();
+    expect(await app.findPullRequest(repo, 'weft/b-2')).toEqual({
+      number: 7,
+      url: 'https://github.com/avichal-08/demo/pull/7',
+    });
+    const pr = { head: 'weft/a-1', base: 'main', title: 'Fix a', body: 'Body' };
+    expect(await app.openPullRequest(repo, pr)).toEqual({
+      number: 8,
+      url: 'https://github.com/avichal-08/demo/pull/8',
+    });
+    expect(created).toEqual([pr]);
+    const repoCalls = gh.calls.filter(
+      (c) => !c.url.includes('/installation') && !c.url.startsWith('/app/'),
+    );
+    expect(repoCalls.every((c) => c.auth === 'token ghs_repo')).toBe(true);
+  });
 });

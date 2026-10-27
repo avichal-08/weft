@@ -196,6 +196,16 @@ never in a sandbox, with an installation token from `@weft/github`.
   on; if they touched the same lines, publishing fails with git's error instead.
 - **Refused while the latest turn's tests fail**, while it is still running, or when it didn't
   finish; the reason is saved on the session (`publish_error`).
+- **The publish job** (`handlePublish`, queue `publish`): marks the chat `pushing`, pushes, and
+  when the job asks for it and the chat has no pull request yet, reuses an open one for the
+  branch or opens one against the base branch (the repo's default branch when the chat has
+  none). Failures are saved on the chat, never thrown, so a retry is just another job.
+- **Title and description** come from the chat's own model: the turns and the changed files go
+  in, a title line and a markdown body come out. A failed call or an unusable reply falls back to
+  the chat title and the turns' summaries. weft appends its own last lines, never the model's:
+  whether the test command passed in a clean sandbox, or that nothing verified the changes.
+- **After the pull request exists**, every later turn that succeeds queues a push
+  (`followUpPublish`), so the pull request follows the conversation.
 - **The token never leaves the worker process**: git gets it as an extra header through
   `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0`, scoped to `https://github.com/`, so
   it is not in the command line, the remote URL, git config or any file.
@@ -271,20 +281,21 @@ the worker stops taking jobs, lets active runs finish, then closes Redis and Pos
 
 ## Configuration
 
-| Variable                  | Default                                            |
-| ------------------------- | -------------------------------------------------- |
-| `DATABASE_URL`            | required (Neon, pooled)                            |
-| `REDIS_URL`               | `redis://localhost:6379`                           |
-| `SANDBOX_IMAGE`           | `weft-sandbox:dev`                                 |
-| `WORKER_ID`               | `<hostname>-<random>`                              |
-| `WORKER_CONCURRENCY`      | `1`                                                |
-| `ALLOW_FILE_REPOS`        | `false`                                            |
-| `JANITOR_INTERVAL_MS`     | `60000`                                            |
-| `INSTALL_CACHE_DIR`       | `~/.cache/weft/installs`; empty disables the cache |
-| `INSTALL_CACHE_MAX_MB`    | `10240`                                            |
-| `SESSION_SANDBOXES_MAX`   | `2`; sandboxes kept between turns, `0` disables    |
-| `SESSION_SANDBOX_IDLE_MS` | `600000` (10 min)                                  |
-| `LLM_*`, API keys         | see `@weft/llm`                                    |
+| Variable                                       | Default                                                |
+| ---------------------------------------------- | ------------------------------------------------------ |
+| `DATABASE_URL`                                 | required (Neon, pooled)                                |
+| `REDIS_URL`                                    | `redis://localhost:6379`                               |
+| `SANDBOX_IMAGE`                                | `weft-sandbox:dev`                                     |
+| `WORKER_ID`                                    | `<hostname>-<random>`                                  |
+| `WORKER_CONCURRENCY`                           | `1`                                                    |
+| `ALLOW_FILE_REPOS`                             | `false`                                                |
+| `JANITOR_INTERVAL_MS`                          | `60000`                                                |
+| `INSTALL_CACHE_DIR`                            | `~/.cache/weft/installs`; empty disables the cache     |
+| `INSTALL_CACHE_MAX_MB`                         | `10240`                                                |
+| `SESSION_SANDBOXES_MAX`                        | `2`; sandboxes kept between turns, `0` disables        |
+| `SESSION_SANDBOX_IDLE_MS`                      | `600000` (10 min)                                      |
+| `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY_PATH` | unset: publishing to GitHub is off. See `@weft/github` |
+| `LLM_*`, API keys                              | see `@weft/llm`                                        |
 
 ## Known limits (M2)
 

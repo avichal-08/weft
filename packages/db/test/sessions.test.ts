@@ -7,11 +7,15 @@ import {
   createSession,
   getSession,
   listSessions,
+  publishRefusal,
   recordPublishError,
+  recordPullRequest,
   recordPush,
+  setPublishState,
   titleFrom,
 } from '../src/sessions.ts';
 import { reset, testDb, type TestDb } from '../src/testing.ts';
+import type { Run } from '../src/types.ts';
 
 let db: TestDb;
 const input = {
@@ -166,5 +170,52 @@ describe('recordPush / recordPublishError', () => {
       pushedSha: 'abc123',
       publishError: null,
     });
+  });
+});
+
+describe('publish state', () => {
+  it('moves queued → pushing → pushed or failed, and keeps the pull request', async () => {
+    const { session } = await createSession(db, input);
+    await setPublishState(db, session.id, 'queued');
+    expect((await getSession(db, session.id))?.publishState).toBe('queued');
+    await recordPublishError(db, session.id, 'nope');
+    expect((await getSession(db, session.id))?.publishState).toBe('failed');
+    await recordPush(db, session.id, { branch: 'weft/x-1', pushedTurn: 1, pushedSha: 'a' });
+    await recordPullRequest(db, session.id, {
+      prNumber: 3,
+      prUrl: 'https://github.com/a/b/pull/3',
+    });
+    expect(await getSession(db, session.id)).toMatchObject({
+      publishState: 'pushed',
+      prNumber: 3,
+      prUrl: 'https://github.com/a/b/pull/3',
+    });
+  });
+});
+
+describe('publishRefusal', () => {
+  const turn = (over: Partial<Run>): Run =>
+    ({ status: 'succeeded', diff: '', failureKind: null, ...over }) as Run;
+
+  it('allows a chat whose latest turn succeeded and that changed something', () => {
+    expect(
+      publishRefusal([turn({ diff: 'diff --git a/x b/x' }), turn({ diff: 'diff --git a/x b/x' })]),
+    ).toBeNull();
+  });
+
+  it('explains every reason to refuse', () => {
+    expect(publishRefusal([])).toBe('the chat has no turns yet');
+    expect(publishRefusal([turn({ status: 'running' })])).toBe(
+      'the agent is still working on the latest message',
+    );
+    expect(
+      publishRefusal([turn({ status: 'failed', failureKind: 'tests_failed', diff: 'd' })]),
+    ).toBe("the latest turn's tests fail, so there is nothing to publish yet");
+    expect(publishRefusal([turn({ diff: 'd' }), turn({ status: 'error' })])).toBe(
+      "the latest turn didn't finish",
+    );
+    expect(publishRefusal([turn({ diff: '' })])).toBe(
+      'nothing in this chat has changed any files yet',
+    );
   });
 });

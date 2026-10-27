@@ -4,6 +4,7 @@ import type {
   AddTurnResult,
   CreateSessionInput,
   Db,
+  PublishState,
   Run,
   Session,
   SessionSummary,
@@ -130,10 +131,41 @@ export async function recordPush(
 ): Promise<void> {
   await db
     .update(sessions)
-    .set({ ...push, publishError: null })
+    .set({ ...push, publishError: null, publishState: 'pushed' })
     .where(eq(sessions.id, id));
 }
 
 export async function recordPublishError(db: Db, id: string, error: string): Promise<void> {
-  await db.update(sessions).set({ publishError: error }).where(eq(sessions.id, id));
+  await db
+    .update(sessions)
+    .set({ publishError: error, publishState: 'failed' })
+    .where(eq(sessions.id, id));
+}
+
+export async function setPublishState(db: Db, id: string, state: PublishState): Promise<void> {
+  await db.update(sessions).set({ publishState: state }).where(eq(sessions.id, id));
+}
+
+export async function recordPullRequest(
+  db: Db,
+  id: string,
+  pr: { prNumber: number; prUrl: string },
+): Promise<void> {
+  await db.update(sessions).set(pr).where(eq(sessions.id, id));
+}
+
+export function publishRefusal(turns: Run[]): string | null {
+  const latest = turns.at(-1);
+  if (!latest) return 'the chat has no turns yet';
+  if (latest.status === 'queued' || latest.status === 'running') {
+    return 'the agent is still working on the latest message';
+  }
+  if (latest.status === 'failed' && latest.failureKind === 'tests_failed') {
+    return "the latest turn's tests fail, so there is nothing to publish yet";
+  }
+  if (latest.status !== 'succeeded') return "the latest turn didn't finish";
+  if (!turns.some((t) => t.status === 'succeeded' && t.diff)) {
+    return 'nothing in this chat has changed any files yet';
+  }
+  return null;
 }

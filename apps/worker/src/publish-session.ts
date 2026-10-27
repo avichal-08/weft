@@ -1,4 +1,4 @@
-import { getSession, recordPublishError, recordPush, type Db, type Run } from '@weft/db';
+import { getSession, publishRefusal, recordPublishError, recordPush, type Db } from '@weft/db';
 import { parseRepo } from '@weft/github';
 import { branchName, publishTurns, PublishError, type PublishResult } from './publish.ts';
 
@@ -13,24 +13,12 @@ const LOCAL_AUTHOR = { name: 'weft', email: 'weft@localhost' };
 
 const firstLine = (text: string) => text.trim().split('\n')[0]!.slice(0, 72);
 
-function refusal(latest: Run | undefined): string | null {
-  if (!latest) return 'the chat has no turns yet';
-  if (latest.status === 'queued' || latest.status === 'running') {
-    return 'the agent is still working on the latest message';
-  }
-  if (latest.status === 'failed' && latest.failureKind === 'tests_failed') {
-    return "the latest turn's tests fail, so there is nothing to publish yet";
-  }
-  if (latest.status !== 'succeeded') return "the latest turn didn't finish";
-  return null;
-}
-
 export async function publishSession(deps: PublishDeps, sessionId: string): Promise<PublishResult> {
   const session = await getSession(deps.db, sessionId);
   if (!session) throw new PublishError(`session ${sessionId} not found`);
 
   try {
-    const why = refusal(session.turns.at(-1));
+    const why = publishRefusal(session.turns);
     if (why) throw new PublishError(why);
 
     const ref = parseRepo(session.repoUrl);

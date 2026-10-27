@@ -1,4 +1,4 @@
-import type { PhaseTiming } from './types.ts';
+import type { PhaseTiming, PublishState } from './types.ts';
 import { sql } from 'drizzle-orm';
 import {
   bigserial,
@@ -38,6 +38,9 @@ export const sessions = pgTable(
     pushedTurn: integer('pushed_turn'),
     pushedSha: text('pushed_sha'),
     publishError: text('publish_error'),
+    publishState: text('publish_state').$type<PublishState>(),
+    prNumber: integer('pr_number'),
+    prUrl: text('pr_url'),
   },
   (t) => [index('sessions_updated_idx').on(t.updatedAt.desc())],
 );

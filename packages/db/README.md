@@ -67,7 +67,10 @@ run gets a new attempt, and updates will be fenced on it.
 Each message is a run in that session (`runs.session_id`, `runs.turn` = 1, 2, 3, …), so turns
 reuse the whole run pipeline. Deleting a session deletes its runs. Once the chat is published
 to GitHub it also holds `branch`, `pushed_turn` (the last turn pushed), `pushed_sha` and
-`publish_error` (why the last attempt failed, cleared by the next successful push).
+`publish_error` (why the last attempt failed, cleared by the next successful push),
+`publish_state` (`queued`, `pushing`, `pushed`, `failed`) and the pull request's `pr_number` and
+`pr_url`. `publishRefusal(turns)` is the one rule for whether a chat can be published, shared by
+the API and the worker.
 
 Two indexes guard the conversation: `(session_id, turn)` is unique, and a partial unique index on
 `session_id` where `status in ('queued', 'running')` allows at most one active turn per session.
@@ -76,14 +79,15 @@ messages sent at the same instant from two tabs: one insert wins, the other hits
 Verified on Neon with four simultaneous messages, five rounds: one accepted, three busy, every
 time.
 
-| Function                                                                | Effect                                                                                   |
-| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `createSession(db, { repoUrl, message, baseRef, testCommand, config })` | Creates the session and its first turn in one transaction.                               |
-| `addTurn(db, sessionId, message)`                                       | Next turn, or `{ ok: false, reason: 'busy' }` while a turn is active (or `'not_found'`). |
-| `getSession(db, id)`                                                    | The session with its turns in order.                                                     |
-| `listSessions(db, limit)`                                               | Most recently active first, with turn count and latest status.                           |
-| `recordPush(db, id, { branch, pushedTurn, pushedSha })`                 | Saves what was pushed and clears `publish_error`.                                        |
-| `recordPublishError(db, id, error)`                                     | Saves why publishing failed.                                                             |
+| Function                                                                           | Effect                                                                                   |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `createSession(db, { repoUrl, message, baseRef, testCommand, config })`            | Creates the session and its first turn in one transaction.                               |
+| `addTurn(db, sessionId, message)`                                                  | Next turn, or `{ ok: false, reason: 'busy' }` while a turn is active (or `'not_found'`). |
+| `getSession(db, id)`                                                               | The session with its turns in order.                                                     |
+| `listSessions(db, limit)`                                                          | Most recently active first, with turn count and latest status.                           |
+| `recordPush(db, id, { branch, pushedTurn, pushedSha })`                            | Saves what was pushed and clears `publish_error`.                                        |
+| `recordPublishError(db, id, error)`                                                | Saves why publishing failed.                                                             |
+| `setPublishState(db, id, state)`, `recordPullRequest(db, id, { prNumber, prUrl })` | Publish progress and the pull request it opened.                                         |
 
 **`run_events`**: the step-by-step trace of a run, one row per model call (`llm`) or tool call
 (`tool`), keyed by `(run_id, attempt, seq)`. `data` holds the details as JSON (tokens, latency

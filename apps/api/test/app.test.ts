@@ -3,6 +3,7 @@ import type { Server } from 'node:http';
 import { appendRunEvents, claimRun, completeRun, getRun } from '@weft/db';
 import { reset, testDb, type TestDb } from '@weft/db/testing';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { PublishJobData } from '@weft/queue';
 import { createApp } from '../src/app.ts';
 import { fakeLive } from './fake-live.ts';
 
@@ -10,6 +11,7 @@ let db: TestDb;
 let server: Server;
 let base: string;
 let queued: string[];
+let published: PublishJobData[];
 let queueDown: boolean;
 let checks: Record<string, boolean>;
 
@@ -20,6 +22,10 @@ beforeAll(async () => {
     enqueue: (runId) => {
       if (queueDown) return Promise.reject(new Error('redis down'));
       queued.push(runId);
+      return Promise.resolve();
+    },
+    enqueuePublish: (job) => {
+      published.push(job);
       return Promise.resolve();
     },
     ready: () => Promise.resolve(checks),
@@ -36,6 +42,7 @@ afterAll(() => {
 beforeEach(async () => {
   await reset(db);
   queued = [];
+  published = [];
   queueDown = false;
   checks = { db: true, redis: true };
 });
@@ -249,6 +256,46 @@ describe('sessions', () => {
     const res = await post('/sessions', start);
     expect(res.status).toBe(503);
     expect((await getRun(db, res.body.run!.id))?.status).toBe('queued');
+  });
+});
+
+describe('POST /sessions/:id/publish', () => {
+  async function chatWith(outcome: Parameters<typeof completeRun>[3]) {
+    const { session, run } = (
+      await post('/sessions', {
+        repoUrl: 'https://github.com/avichal-08/weft-playground',
+        message: 'Fix the cache',
+      })
+    ).body;
+    const attempt = (await claimRun(db, run!.id, 'w'))!;
+    await completeRun(db, run!.id, attempt, outcome);
+    return session!.id;
+  }
+
+  it('queues a publish that opens a pull request', async () => {
+    const id = await chatWith({ status: 'succeeded', diff: 'diff --git a/a b/a\n' });
+    const res = await post(`/sessions/${id}/publish`, {});
+    expect(res.status).toBe(202);
+    expect(res.body.session).toMatchObject({ publishState: 'queued' });
+    expect(published).toEqual([{ sessionId: id, turn: 1, openPullRequest: true }]);
+  });
+
+  it("refuses while the latest turn's tests fail, with the reason", async () => {
+    const id = await chatWith({ status: 'failed', failureKind: 'tests_failed', diff: 'd' });
+    const res = await post(`/sessions/${id}/publish`, {});
+    expect(res).toMatchObject({
+      status: 409,
+      body: {
+        error: 'not_publishable',
+        message: "the latest turn's tests fail, so there is nothing to publish yet",
+      },
+    });
+    expect(published).toEqual([]);
+  });
+
+  it('404s for an unknown chat', async () => {
+    const res = await post('/sessions/00000000-0000-4000-8000-000000000000/publish', {});
+    expect(res.status).toBe(404);
   });
 });
 

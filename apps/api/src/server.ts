@@ -1,5 +1,12 @@
 import { createDb } from '@weft/db';
-import { createRedis, createRunsQueue, enqueueRun, readLive } from '@weft/queue';
+import {
+  createPublishQueue,
+  createRedis,
+  createRunsQueue,
+  enqueuePublish,
+  enqueueRun,
+  readLive,
+} from '@weft/queue';
 import { createApp } from './app.ts';
 import { loadEnv } from './env.ts';
 
@@ -7,6 +14,7 @@ const env = loadEnv();
 const { db, pool } = createDb(env.DATABASE_URL);
 const redis = createRedis(env.REDIS_URL);
 const queue = createRunsQueue(redis);
+const publishQueue = createPublishQueue(redis);
 
 const ok = (p: Promise<unknown>) =>
   p.then(
@@ -17,6 +25,7 @@ const ok = (p: Promise<unknown>) =>
 const app = createApp({
   db,
   enqueue: (runId) => enqueueRun(queue, runId),
+  enqueuePublish: (job) => enqueuePublish(publishQueue, job),
   live: () => {
     const conn = redis.duplicate();
     return {
@@ -38,6 +47,7 @@ async function shutdown(signal: string) {
   console.log(`${signal}: shutting down`);
   server.close();
   await queue.close();
+  await publishQueue.close();
   await redis.quit();
   await pool.end();
   process.exit(0);
