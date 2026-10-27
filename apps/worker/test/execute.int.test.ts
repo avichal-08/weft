@@ -453,7 +453,7 @@ describe('conversations', () => {
     await executeRun(deps(createMockProvider(fixScript)), next.run.id);
     const done = await getRun(db, next.run.id);
     expect(done).toMatchObject({ status: 'error', failureKind: 'apply_failed' });
-    expect(done?.failureDetail).toMatch(/no longer apply/);
+    expect(done?.failureDetail).toMatch(/no longer apply to the branch.*Start a new chat/s);
     expect((done?.timings ?? []).map((t) => t.phase)).toEqual([
       'clone',
       'sandbox',

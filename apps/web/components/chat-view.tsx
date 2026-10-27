@@ -31,7 +31,7 @@ function Outcome({ run }: { run: Run }) {
       : run.failureKind?.startsWith('llm_')
         ? 'The model provider returned an error'
         : run.failureKind === 'apply_failed'
-          ? "Earlier changes don't apply to the branch any more"
+          ? 'The branch changed under this chat (was its PR merged?). Start a new chat'
           : run.failureKind === 'disk_limit'
             ? 'The sandbox ran out of disk space'
             : "This turn didn't finish";

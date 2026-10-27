@@ -463,7 +463,7 @@ function describeError(err: unknown): { failureKind: string; failureDetail: stri
   if (err instanceof ApplyError) {
     return {
       failureKind: 'apply_failed',
-      failureDetail: `the previous turn's changes no longer apply to the branch: ${err.message}`,
+      failureDetail: `the changes from earlier in this chat no longer apply to the branch, which changed since (for example, this chat's pull request was merged). Start a new chat to keep working from the current branch.\n\n${err.message}`,
     };
   }
   if (err instanceof LLMError)
