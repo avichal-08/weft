@@ -1,13 +1,14 @@
 import { readFileSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createProvider, LLMError, loadLLMConfig, withRetry, type Message } from '@weft/llm';
 import { createSandbox, type Sandbox } from '@weft/sandbox';
 import { createToolContext, runAgent } from '../src/index.ts';
-import { cases, type EvalCase } from './cases.ts';
-import { score, wrongLanguageSearches } from './score.ts';
+import { cases, type EvalCase, type Fixture } from './cases.ts';
+import { costUsd } from './pricing.ts';
+import { isPhantomEdit, score, wrongLanguageSearches } from './score.ts';
 
 const { values } = parseArgs({
   options: {
@@ -16,13 +17,19 @@ const { values } = parseArgs({
     only: { type: 'string' },
     repeat: { type: 'string', default: '1' },
     label: { type: 'string', default: 'run' },
+    'max-steps': { type: 'string', default: '15' },
+    resume: { type: 'boolean', default: false },
   },
 });
 
-const fixture = fileURLToPath(new URL('../fixtures/shop', import.meta.url));
+const fixtures: Record<Fixture, string> = {
+  shop: fileURLToPath(new URL('../fixtures/shop', import.meta.url)),
+  playground: fileURLToPath(new URL('../fixtures/playground', import.meta.url)),
+};
 const resultsDir = fileURLToPath(new URL('./results', import.meta.url));
 const root = '/workspace/repo';
 const image = process.env.SANDBOX_IMAGE ?? 'weft-sandbox:dev';
+const identity = ['-c', 'user.name=weft', '-c', 'user.email=weft@local'];
 
 const config = loadLLMConfig({
   ...process.env,
@@ -34,9 +41,9 @@ const llm = withRetry(createProvider(config), {
     console.log(`    retry ${attempt} in ${(delayMs / 1000).toFixed(1)}s: ${error.kind}`),
 });
 
-const selected = cases((path) => readFileSync(join(fixture, path), 'utf8')).filter(
-  (c) => !values.only || c.name.includes(values.only),
-);
+const selected = cases((fixture, path) =>
+  readFileSync(join(fixtures[fixture], path), 'utf8'),
+).filter((c) => !values.only || c.name.includes(values.only));
 
 const text = (t: string) => [{ type: 'text' as const, text: t }];
 const historyOf = (c: EvalCase): Message[] =>
@@ -45,22 +52,65 @@ const historyOf = (c: EvalCase): Message[] =>
     { role: 'assistant', content: text(assistant) },
   ]);
 
-const snapshot = async (sandbox: Sandbox) =>
-  (await sandbox.exec('git add -A && git diff --cached --binary && git reset -q', { cwd: root }))
-    .stdout;
+const lines = (out: string) => out.split('\n').filter(Boolean);
 
-async function runCase(c: EvalCase) {
+async function write(sandbox: Sandbox, files: Record<string, string>) {
+  for (const [path, content] of Object.entries(files)) {
+    await sandbox.exec(['sh', '-c', 'mkdir -p "$(dirname "$1")" && cat > "$1"', 'sh', path], {
+      cwd: root,
+      stdin: content,
+    });
+  }
+}
+
+async function commit(sandbox: Sandbox, message: string) {
+  await sandbox.exec(['git', 'add', '-A'], { cwd: root });
+  await sandbox.exec(['git', ...identity, 'commit', '-qm', message, '--allow-empty'], {
+    cwd: root,
+  });
+}
+
+const DAILY_QUOTA = /per ?day|daily/i;
+
+export type Result = {
+  model?: string;
+  label?: string;
+  name: string;
+  category: EvalCase['category'];
+  round: number;
+  problems: string[];
+  llmError?: string;
+  status?: string;
+  edited?: boolean;
+  phantomEdit?: boolean;
+  testsTouched?: string[];
+  passToPass?: boolean | null;
+  failToPass?: boolean | null;
+  steps?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  costUsd?: number | null;
+  seconds?: number;
+  modelSeconds?: number;
+  toolErrors?: number;
+  wrongLanguage?: number;
+  tools?: string[];
+  reply?: string;
+};
+
+async function runCase(c: EvalCase, round: number): Promise<Result> {
   const sandbox = await createSandbox({ image, owner: 'eval' });
   try {
-    await sandbox.putFiles(fixture, root);
-    await sandbox.exec(
-      'git init -q -b main && git add -A && git -c user.name=weft -c user.email=weft@local commit -qm base',
-      { cwd: root },
+    await sandbox.putFiles(fixtures[c.fixture ?? 'shop'], root);
+    await sandbox.exec(['git', 'init', '-q', '-b', 'main'], { cwd: root });
+    await write(sandbox, c.seed ?? {});
+    await commit(sandbox, 'base');
+    await write(sandbox, c.prior ?? {});
+    await commit(sandbox, 'prior');
+    const existingTests = lines(
+      (await sandbox.exec(['git', 'ls-files', '--', 'test'], { cwd: root })).stdout,
     );
-    for (const [path, content] of Object.entries(c.prior ?? {})) {
-      await sandbox.exec(['sh', '-c', 'cat > "$1"', 'sh', path], { cwd: root, stdin: content });
-    }
-    const before = await snapshot(sandbox);
 
     const started = performance.now();
     const res = await runAgent({
@@ -68,85 +118,106 @@ async function runCase(c: EvalCase) {
       ctx: createToolContext({ sandbox, root, testCommand: null }),
       task: c.task,
       history: historyOf(c),
+      maxSteps: Number(values['max-steps']),
     });
     const seconds = (performance.now() - started) / 1000;
 
-    const edited = (await snapshot(sandbox)) !== before;
-    const testsPass =
-      c.kind === 'change'
-        ? (await sandbox.exec('node --test', { cwd: root })).exitCode === 0
-        : null;
-    const checkPass = c.expect.check
-      ? (await sandbox.exec(['node', '--input-type=module', '-e', c.expect.check], { cwd: root }))
-          .exitCode === 0
-      : null;
-    const observed = { status: res.status, reply: res.summary ?? '', edited, testsPass, checkPass };
+    await sandbox.exec(['git', 'add', '-A'], { cwd: root });
+    const changed = lines(
+      (await sandbox.exec(['git', 'diff', '--cached', '--name-only'], { cwd: root })).stdout,
+    );
+    await sandbox.exec(['git', 'reset', '-q'], { cwd: root });
+    const edited = changed.length > 0;
+    const testsTouched = changed.filter((f) => existingTests.includes(f));
 
+    const grade = c.expect.edits || edited;
+    let passToPass: boolean | null = null;
+    let failToPass: boolean | null = null;
+    if (grade && existingTests.length > 0) {
+      await sandbox.exec(['git', 'checkout', 'HEAD', '--', ...existingTests], { cwd: root });
+      passToPass =
+        (await sandbox.exec(['node', '--test', ...existingTests], { cwd: root })).exitCode === 0;
+    }
+    if (c.hidden) {
+      await write(sandbox, c.hidden);
+      failToPass =
+        (await sandbox.exec(['node', '--test', ...Object.keys(c.hidden)], { cwd: root }))
+          .exitCode === 0;
+    }
+
+    const observed = {
+      status: res.status,
+      reply: res.summary ?? '',
+      edited,
+      passToPass,
+      failToPass,
+      testsTouched,
+    };
     return {
       name: c.name,
-      kind: c.kind,
+      category: c.category,
+      round,
       problems: score(c, observed),
       ...observed,
+      phantomEdit: isPhantomEdit(c, observed),
       steps: res.steps,
-      tokens: res.usage.inputTokens + res.usage.outputTokens,
+      inputTokens: res.usage.inputTokens,
+      outputTokens: res.usage.outputTokens,
+      cacheReadTokens: res.usage.cacheReadTokens,
+      costUsd: costUsd(llm.model, res.usage),
       seconds,
+      modelSeconds:
+        res.events.reduce((n, e) => n + (e.type === 'llm' ? (e.latencyMs ?? 0) : 0), 0) / 1000,
+      toolErrors: res.events.filter((e) => e.type === 'tool' && e.isError).length,
       wrongLanguage: wrongLanguageSearches(res.events),
       tools: res.events.flatMap((e) => (e.type === 'tool' ? [e.name] : [])),
     };
   } catch (err) {
     if (!(err instanceof LLMError)) throw err;
-    return { name: c.name, kind: c.kind, problems: [`llm ${err.kind}`], llmError: true };
+    return { name: c.name, category: c.category, round, problems: [], llmError: err.message };
   } finally {
     await sandbox.destroy();
   }
 }
 
-type Result = Awaited<ReturnType<typeof runCase>>;
-
-console.log(
-  `weft eval | ${llm.provider}/${llm.model} | ${selected.length} cases x ${values.repeat}\n`,
-);
-const results: Result[] = [];
-for (let round = 0; round < Number(values.repeat); round++) {
-  for (const c of selected) {
-    const r = await runCase(c);
-    results.push(r);
-    const stats =
-      'steps' in r
-        ? `${r.steps} steps, ${(r.tokens / 1000).toFixed(1)}k tok, ${r.seconds.toFixed(0)}s`
-        : '';
-    console.log(`${r.problems.length === 0 ? '✓' : '✗'} ${c.name.padEnd(22)} ${stats}`);
-    for (const p of r.problems) console.log(`    ${p}`);
+await mkdir(resultsDir, { recursive: true });
+const file = join(resultsDir, `${values.label}-${llm.model.replace(/\W+/g, '_')}.jsonl`);
+const done = new Set<string>();
+if (values.resume) {
+  const previous = await readFile(file, 'utf8').catch(() => '');
+  for (const line of lines(previous)) {
+    const r = JSON.parse(line) as Result;
+    if (!r.llmError) done.add(`${r.name}#${r.round}`);
   }
 }
 
-const scored = results.filter((r) => !('llmError' in r));
-const ran = scored.flatMap((r) => ('steps' in r ? [r] : []));
-const passed = (kind: string) =>
-  `${scored.filter((r) => r.kind === kind && r.problems.length === 0).length}/${scored.filter((r) => r.kind === kind).length}`;
-const sum = (f: (r: (typeof ran)[number]) => number) => ran.reduce((n, r) => n + f(r), 0);
-
-console.log(`
-questions passed      ${passed('question')}
-  without edits       ${ran.filter((r) => r.kind === 'question' && !r.edited).length}/${ran.filter((r) => r.kind === 'question').length}
-changes passed        ${passed('change')}
-all passed            ${scored.filter((r) => r.problems.length === 0).length}/${scored.length}
-wrong-language search ${sum((r) => r.wrongLanguage)}
-avg steps             ${(sum((r) => r.steps) / Math.max(1, ran.length)).toFixed(1)}
-tokens                ${(sum((r) => r.tokens) / 1000).toFixed(1)}k
-llm errors            ${results.length - scored.length}`);
-
-await mkdir(resultsDir, { recursive: true });
-const file = join(
-  resultsDir,
-  `${new Date().toISOString().slice(0, 19).replace(/:/g, '')}-${values.label}-${llm.model.replace(/\W+/g, '_')}.json`,
+console.log(
+  `weft eval | ${llm.provider}/${llm.model} | ${selected.length} cases x ${values.repeat} | ${file}` +
+    (done.size ? ` | resuming, ${done.size} done` : '') +
+    '\n',
 );
-await writeFile(
-  file,
-  JSON.stringify(
-    { provider: llm.provider, model: llm.model, label: values.label, results },
-    null,
-    2,
-  ),
-);
-console.log(`\nsaved ${file}`);
+
+let stopped = false;
+for (let round = 1; round <= Number(values.repeat) && !stopped; round++) {
+  for (const c of selected) {
+    if (done.has(`${c.name}#${round}`)) continue;
+    const r = await runCase(c, round);
+    await appendFile(file, `${JSON.stringify({ model: llm.model, label: values.label, ...r })}\n`);
+    const stats =
+      r.steps === undefined
+        ? ''
+        : `${r.steps} steps, ${(((r.inputTokens ?? 0) + (r.outputTokens ?? 0)) / 1000).toFixed(1)}k tok, ${r.seconds!.toFixed(0)}s`;
+    const mark = r.llmError ? '!' : r.problems.length === 0 ? '✓' : '✗';
+    console.log(`${mark} ${`${c.name} #${round}`.padEnd(28)} ${stats}`);
+    for (const p of r.problems) console.log(`    ${p}`);
+    if (r.llmError) {
+      console.log(`    llm error: ${r.llmError.slice(0, 200)}`);
+      if (DAILY_QUOTA.test(r.llmError)) {
+        console.log('\ndaily quota reached; run again with --resume to continue');
+        stopped = true;
+        break;
+      }
+    }
+  }
+}
+console.log(`\nresults in ${file}; summarize with: pnpm --filter @weft/agent eval:report`);

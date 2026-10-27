@@ -12,7 +12,8 @@
     "test": "vitest run --exclude '**/*.int.test.ts'",
     "test:integration": "vitest run .int.test",
     "demo": "node --env-file=../../.env scripts/demo.ts",
-    "eval": "node --env-file=../../.env eval/run.ts"
+    "eval": "node --env-file=../../.env eval/run.ts",
+    "eval:report": "node eval/report.ts"
   },
   "dependencies": {
     "@weft/llm": "workspace:*",

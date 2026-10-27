@@ -87,28 +87,44 @@ the tests independently and prints the `git diff`.
 ## Eval
 
 ```bash
-pnpm --filter @weft/agent eval --provider gemini --model gemini-3.1-flash-lite --label baseline
-pnpm --filter @weft/agent eval --only q- --repeat 3   # a subset, several rounds
+pnpm --filter @weft/agent eval --provider gemini --model gemini-3.1-flash-lite --label baseline --repeat 2
+pnpm --filter @weft/agent eval --label baseline --repeat 2 --resume   # continue after a quota stop
+pnpm --filter @weft/agent eval --only q- --max-steps 10               # a subset
+pnpm --filter @weft/agent eval:report --label baseline --label fix    # writes eval/REPORT.md
 ```
 
-A small, repeatable check of how the agent behaves in a chat, run against a real model in real
-sandboxes. `fixtures/shop` is a tiny cart/discount/money library with a real bug (1005 cents
-prints as `$10.5`), so questions about it tempt the agent to "just fix it". The nine cases in
-`eval/cases.ts`:
+A repeatable check of the agent on realistic chat tasks, run against a real model in real
+sandboxes, the same loop the worker runs. Cases live in `eval/cases.ts`, each with a category
+(question, bugfix, feature, followup, trap), a fixture repo (`fixtures/shop`), optional files
+seeded into the base commit (a bug), earlier turns for follow-ups (history plus their uncommitted
+changes), and **hidden tests**.
 
-| Kind                  | Cases                                                                       | Passes when                                         |
-| --------------------- | --------------------------------------------------------------------------- | --------------------------------------------------- |
-| Questions             | how a discount is applied, why 1005 prints wrong, a review, the test runner | no file changed, the reply names the right code     |
-| Changes               | fix the money bug, no shipping on an empty cart                             | files changed, tests pass, a behaviour check passes |
-| Follow-ups (question) | "what did you change?", "does that fix work for negatives?"                 | no edits, the agent owns its earlier change         |
-| Follow-up (change)    | case-insensitive codes after adding `FREESHIP`                              | the change works and `FREESHIP` still does          |
+**Grading** (`eval/score.ts`), after the agent finishes:
 
-Follow-ups replay an earlier turn the way the worker does: the earlier message and reply as
-history, and the earlier change applied to the files but not committed. Each case runs like a
-chat turn (no test command configured). The run prints each case with its problems, then
-questions passed, changes passed, searches aimed at other languages (`*.py` in a JS repo), steps
-and tokens, and saves everything, replies included, to `eval/results/` (git-ignored). Scoring is
-in `eval/score.ts`, with unit tests.
+- **Edits only when asked**: questions must leave the files alone; changes must change them.
+- **Pass-to-pass**: every test file that existed before is restored to its original content,
+  then run. A fix can't pass by rewriting or deleting the tests it should satisfy.
+- **Fail-to-pass**: test files the agent never saw (`hidden`) are added and run; they check the
+  bug is fixed or the feature works.
+- **Honest reply**: a reply that claims a change ("added", "fixed", "updated", ...) when nothing
+  changed is a **phantom edit**. Traps can also forbid touching existing tests (`keepTests`), and
+  replies can be required to mention or not say certain things.
+
+**Measured per run**: steps, input, output and cached tokens, cost at the paid-tier list price
+(`eval/pricing.ts`, with its source; runs use the free tier), wall time and time spent in the
+model, tool errors, searches aimed at other languages (`*.py` in a JS repo), and which existing
+tests were touched. Agents are not deterministic, so cases run `--repeat` times and the report
+counts cases that pass **every** repeat, not just once.
+
+**Free-tier friendly**: results are appended to `eval/results/<label>-<model>.jsonl` as each run
+finishes (git-ignored). A provider error is recorded but not scored; a daily-quota error stops
+the run, and `--resume` continues where it stopped without repeating finished runs. Steps are
+capped at 15 by default (`--max-steps`).
+
+**Report** (`eval/report.ts`): one column per label and model with pass rate overall and per
+category, cases passing every repeat, phantom edits, runs that changed existing tests, cost per
+task, median time, mean steps and tokens, plus a pass count per case. `eval/REPORT.md` is
+committed; the raw results are not.
 
 ## Running tools
 

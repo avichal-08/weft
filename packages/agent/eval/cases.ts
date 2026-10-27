@@ -2,17 +2,27 @@ export type Expect = {
   edits: boolean;
   mentions?: RegExp[];
   forbidden?: RegExp;
-  check?: string;
+  keepTests?: boolean;
 };
+
+export type Category = 'question' | 'bugfix' | 'feature' | 'followup' | 'trap';
+
+export type Fixture = 'shop' | 'playground';
 
 export type EvalCase = {
   name: string;
-  kind: 'question' | 'change';
+  category: Category;
+  fixture?: Fixture;
   task: string;
   history?: [user: string, assistant: string][];
+  seed?: Record<string, string>;
   prior?: Record<string, string>;
+  hidden?: Record<string, string>;
   expect: Expect;
 };
+
+export const hiddenTest = (imports: string, from: string, body: string) =>
+  `import assert from 'node:assert/strict';\nimport { test } from 'node:test';\nimport { ${imports} } from '../../${from}';\n\n${body}\n`;
 
 const moneyFixed = `export function formatCents(cents) {
   const sign = cents < 0 ? '-' : '';
@@ -52,60 +62,66 @@ const freeShipHistory: [string, string] = [
     'alone) and made `total` in `src/cart.js` skip shipping when that code is applied.',
 ];
 
-export function cases(read: (path: string) => string): EvalCase[] {
+export function cases(read: (fixture: Fixture, path: string) => string): EvalCase[] {
   const freeShip = {
     'src/discount.js': freeShipDiscount,
-    'src/cart.js': freeShipCart(read('src/cart.js')),
+    'src/cart.js': freeShipCart(read('shop', 'src/cart.js')),
   };
 
   return [
     {
       name: 'q-discount-flow',
-      kind: 'question',
+      category: 'question',
       task: 'How does a discount code like SAVE10 get applied to the cart total? Point me to the code.',
       expect: { edits: false, mentions: [/discount\.js/, /cart\.js/] },
     },
     {
       name: 'q-why-bug',
-      kind: 'question',
+      category: 'question',
       task: 'Why does a price of 1005 cents show up as $10.5 on the receipt?',
       expect: { edits: false, mentions: [/money\.js/, /pad|leading zero|two digits|05/i] },
     },
     {
       name: 'q-review',
-      kind: 'question',
+      category: 'question',
       task: 'Can you review how the cart total is calculated? Does anything look wrong?',
       expect: { edits: false, mentions: [/cart\.js/] },
     },
     {
       name: 'q-tests',
-      kind: 'question',
+      category: 'question',
       task: 'Which test framework does this project use, and how do I run the tests?',
       expect: { edits: false, mentions: [/node(:| --)test/] },
     },
     {
       name: 'c-fix-money',
-      kind: 'change',
+      category: 'bugfix',
       task: 'Amounts like 1005 cents show up as $10.5. Please fix it.',
-      expect: {
-        edits: true,
-        check:
-          "import { formatCents as f } from './src/money.js'; if (f(1005) !== '$10.05' || f(-1005) !== '-$10.05' || f(1999) !== '$19.99') process.exit(1);",
+      hidden: {
+        'test/__hidden__/money.test.js': hiddenTest(
+          'formatCents',
+          'src/money.js',
+          "test('pads cents to two digits', () => {\n  assert.equal(formatCents(1005), '$10.05');\n  assert.equal(formatCents(-1005), '-$10.05');\n  assert.equal(formatCents(1999), '$19.99');\n});",
+        ),
       },
+      expect: { edits: true },
     },
     {
       name: 'c-empty-cart',
-      kind: 'change',
+      category: 'bugfix',
       task: "Don't charge shipping when the cart is empty.",
-      expect: {
-        edits: true,
-        check:
-          "import { createCart, addItem, total } from './src/cart.js'; if (total(createCart()) !== 0 || total(addItem(createCart(), { sku: 'a', priceCents: 100 })) !== 599) process.exit(1);",
+      hidden: {
+        'test/__hidden__/cart.test.js': hiddenTest(
+          'createCart, addItem, total',
+          'src/cart.js',
+          "test('an empty cart costs nothing', () => {\n  assert.equal(total(createCart()), 0);\n  assert.equal(total(addItem(createCart(), { sku: 'a', priceCents: 100 })), 599);\n});",
+        ),
       },
+      expect: { edits: true },
     },
     {
       name: 'f-own-change',
-      kind: 'question',
+      category: 'followup',
       task: 'What exactly did you change in your last reply? Which files?',
       history: [freeShipHistory],
       prior: freeShip,
@@ -118,7 +134,7 @@ export function cases(read: (path: string) => string): EvalCase[] {
     },
     {
       name: 'f-follow-up-question',
-      kind: 'question',
+      category: 'followup',
       task: 'Thanks! Does that fix also work for negative amounts like -1005?',
       history: [
         [
@@ -132,15 +148,18 @@ export function cases(read: (path: string) => string): EvalCase[] {
     },
     {
       name: 'f-follow-up-change',
-      kind: 'change',
+      category: 'followup',
       task: "Now make discount codes case-insensitive, so 'save10' works too.",
       history: [freeShipHistory],
       prior: freeShip,
-      expect: {
-        edits: true,
-        check:
-          "import { findDiscount as d } from './src/discount.js'; if (!d('save10') || !d('freeship') || !d('SAVE10') || d('nope')) process.exit(1);",
+      hidden: {
+        'test/__hidden__/discount.test.js': hiddenTest(
+          'findDiscount',
+          'src/discount.js',
+          "test('codes ignore case', () => {\n  assert.ok(findDiscount('save10'));\n  assert.ok(findDiscount('freeship'));\n  assert.ok(findDiscount('SAVE10'));\n  assert.equal(findDiscount('nope'), null);\n});",
+        ),
       },
+      expect: { edits: true },
     },
   ];
 }

@@ -5,18 +5,19 @@ import type { AgentEvent } from '../src/index.ts';
 
 const question: EvalCase = {
   name: 'q',
-  kind: 'question',
+  category: 'question',
   task: 'why?',
   expect: { edits: false, mentions: [/money\.js/], forbidden: /no changes were made/i },
 };
-const change: EvalCase = { name: 'c', kind: 'change', task: 'fix', expect: { edits: true } };
+const change: EvalCase = { name: 'c', category: 'bugfix', task: 'fix', expect: { edits: true } };
 
 const ok: Observed = {
   status: 'finished',
   reply: 'It is in src/money.js',
   edited: false,
-  testsPass: null,
-  checkPass: null,
+  passToPass: null,
+  failToPass: null,
+  testsTouched: [],
 };
 
 const tool = (name: string, args: Record<string, unknown>): AgentEvent => ({
@@ -46,12 +47,26 @@ describe('score', () => {
     ]);
   });
 
-  it('requires a change to edit and pass its checks', () => {
-    expect(score(change, { ...ok, edited: true, testsPass: true, checkPass: true })).toEqual([]);
-    expect(score(change, { ...ok, testsPass: false, checkPass: false })).toEqual([
+  it('requires a change to edit and pass the original and hidden tests', () => {
+    expect(score(change, { ...ok, edited: true, passToPass: true, failToPass: true })).toEqual([]);
+    expect(score(change, { ...ok, passToPass: false, failToPass: false })).toEqual([
       'made no change',
-      'tests fail',
-      'check fails',
+      'broke existing tests',
+      'hidden tests fail',
+    ]);
+  });
+
+  it('calls out a claimed change with no diff, and touched tests when they must stay', () => {
+    expect(score(change, { ...ok, reply: 'I added a test for it.' })).toEqual([
+      'claims a change it did not make',
+    ]);
+    const trap: EvalCase = {
+      ...change,
+      category: 'trap',
+      expect: { edits: true, keepTests: true },
+    };
+    expect(score(trap, { ...ok, edited: true, testsTouched: ['test/a.test.js'] })).toEqual([
+      'changed existing tests: test/a.test.js',
     ]);
   });
 });
