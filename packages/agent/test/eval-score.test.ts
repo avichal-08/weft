@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EvalCase } from '../eval/cases.ts';
-import { score, wrongLanguageSearches, type Observed } from '../eval/score.ts';
+import { claimsChange, score, wrongLanguageSearches, type Observed } from '../eval/score.ts';
 import type { AgentEvent } from '../src/index.ts';
 
 const question: EvalCase = {
@@ -81,5 +81,36 @@ describe('wrongLanguageSearches', () => {
       tool('view_file', { path: 'setup.py' }),
     ];
     expect(wrongLanguageSearches(events)).toBe(2);
+  });
+
+  it('lets a follow-up describe changes from an earlier turn', () => {
+    const recall: EvalCase = {
+      name: 'r',
+      category: 'followup',
+      task: 'What did you change last time?',
+      expect: { edits: false },
+    };
+    expect(
+      score(recall, { ...ok, reply: 'I modified src/discount.js and added FREESHIP.' }),
+    ).toEqual([]);
+  });
+
+  it('counts a claim of doing the work, not a description of existing code', () => {
+    for (const claim of [
+      'Added `isBlank(text)` to src/strings.js.',
+      "I've added a test for it.",
+      'Done. Fixed the rounding in money.js.',
+      '- Updated the export in src/index.js',
+      'I modified two files.',
+    ]) {
+      expect(claimsChange(claim), claim).toBe(true);
+    }
+    for (const description of [
+      'The truncate function already exists and seems to be implemented correctly.',
+      'This value is updated whenever get() is called.',
+      'It handles changed inputs the same way.',
+    ]) {
+      expect(claimsChange(description), description).toBe(false);
+    }
   });
 });

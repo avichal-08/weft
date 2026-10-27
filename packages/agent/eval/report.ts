@@ -2,9 +2,11 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import type { Category } from './cases.ts';
+import { readFileSync } from 'node:fs';
+import { cases, type Category, type EvalCase, type Fixture } from './cases.ts';
 import { PRICES_SOURCE } from './pricing.ts';
 import type { Result } from './run.ts';
+import { isPhantomEdit, score } from './score.ts';
 
 const CATEGORIES: Category[] = ['question', 'bugfix', 'feature', 'followup', 'trap'];
 
@@ -19,6 +21,7 @@ export type Summary = {
   consistent: number;
   phantomEdits: number;
   testsTouched: number;
+  testsRewritten: number | null;
   meanCost: number | null;
   totalCost: number | null;
   medianSeconds: number;
@@ -26,6 +29,21 @@ export type Summary = {
   meanTokens: number;
   perCase: Record<string, { runs: number; passed: number }>;
 };
+
+export function rescore(r: Result, byName: Map<string, EvalCase>): Result {
+  const c = byName.get(r.name);
+  if (!c || r.llmError || r.edited === undefined) return r;
+  const observed = {
+    status: r.status ?? '',
+    reply: r.reply ?? '',
+    edited: r.edited,
+    passToPass: r.passToPass ?? null,
+    failToPass: r.failToPass ?? null,
+    testsTouched: r.testsTouched ?? [],
+    missing: r.missing ?? [],
+  };
+  return { ...r, problems: score(c, observed), phantomEdit: isPhantomEdit(c, observed) };
+}
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 
@@ -64,6 +82,9 @@ export function summarize(key: string, rows: Result[]): Summary {
     consistent: Object.values(perCase).filter((c) => c.passed === c.runs).length,
     phantomEdits: scored.filter((r) => r.phantomEdit).length,
     testsTouched: scored.filter((r) => (r.testsTouched ?? []).length > 0).length,
+    testsRewritten: scored.some((r) => r.testLinesRemoved !== undefined)
+      ? scored.filter((r) => (r.testLinesRemoved ?? 0) > 0).length
+      : null,
     meanCost: priced ? mean(costs) : null,
     totalCost: priced ? costs.reduce((a, b) => a + b, 0) : null,
     medianSeconds: median(scored.map((r) => r.seconds ?? 0)),
@@ -105,7 +126,11 @@ export function render(summaries: Summary[], generated: string): string {
       summaries.map((s) => String(s.phantomEdits)),
     ),
     row(
-      'Runs that changed existing tests',
+      'Runs that removed or rewrote existing test lines',
+      summaries.map((s) => (s.testsRewritten === null ? 'n/a' : String(s.testsRewritten))),
+    ),
+    row(
+      'Runs that edited existing test files (adding tests counts)',
       summaries.map((s) => String(s.testsTouched)),
     ),
     row(
@@ -152,7 +177,8 @@ export function render(summaries: Summary[], generated: string): string {
   ];
   return `# weft agent eval
 
-Generated ${generated}. Each column is one run of the eval (\`label-model\`). A task passes when
+Generated ${generated}. Each column is one run of the eval (\`label-model\`); stored runs are
+re-scored with the current graders, so a grading fix never needs a new model run. A task passes when
 every check holds: the agent finished, it edited files only when it should, its reply mentions
 what it must, the original tests still pass after any test edits are undone, and the hidden tests
 the agent never saw pass. Cost is computed from recorded tokens at list price
@@ -171,10 +197,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     options: { label: { type: 'string', multiple: true }, out: { type: 'string' } },
   });
   const dir = fileURLToPath(new URL('./results', import.meta.url));
+  const fixtureDir = (f: Fixture) => fileURLToPath(new URL(`../fixtures/${f}`, import.meta.url));
+  const byName = new Map(
+    cases((f, path) => readFileSync(join(fixtureDir(f), path), 'utf8')).map((c) => [c.name, c]),
+  );
   const groups = new Map<string, Result[]>();
   for (const name of (await readdir(dir)).filter((f) => f.endsWith('.jsonl')).sort()) {
     for (const line of (await readFile(join(dir, name), 'utf8')).split('\n').filter(Boolean)) {
-      const r = JSON.parse(line) as Result;
+      const r = rescore(JSON.parse(line) as Result, byName);
       if (values.label?.length && !values.label.includes(r.label ?? '')) continue;
       const key = `${r.label}-${r.model}`;
       groups.set(key, [...(groups.get(key) ?? []), r]);

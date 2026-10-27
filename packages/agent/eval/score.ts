@@ -2,8 +2,11 @@ import type { AgentEvent } from '../src/index.ts';
 import type { EvalCase } from './cases.ts';
 
 const OTHER_LANGUAGES = /\.(py|go|rb|java|rs|php|cs|cpp|kt|swift)\b/;
-const CLAIMS_CHANGE =
-  /\b(i(?:'ve| have)? )?(added|fixed|updated|created|implemented|wrote|changed|modified|removed|refactored)\b/i;
+const ACTIONS = 'added|fixed|updated|created|implemented|wrote|changed|modified|removed|refactored';
+const CLAIMS_CHANGE = new RegExp(
+  `\\bI(?:'ve| have)?\\s+(?:also\\s+|just\\s+)?(?:${ACTIONS})\\b|(?:^|[.!?]\\s+|\\n)\\s*(?:[-*]\\s+)?(?:${ACTIONS})\\b`,
+  'i',
+);
 
 export type Observed = {
   status: string;
@@ -27,7 +30,7 @@ export function wrongLanguageSearches(events: AgentEvent[]): number {
 export const claimsChange = (reply: string) => CLAIMS_CHANGE.test(reply);
 
 export function isPhantomEdit(c: EvalCase, o: Observed): boolean {
-  return c.category !== 'question' && !o.edited && claimsChange(o.reply);
+  return (c.expect.edits || c.category === 'trap') && !o.edited && claimsChange(o.reply);
 }
 
 export function score(c: EvalCase, o: Observed): string[] {

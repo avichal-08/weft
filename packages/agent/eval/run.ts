@@ -19,6 +19,7 @@ const { values } = parseArgs({
     label: { type: 'string', default: 'run' },
     'max-steps': { type: 'string', default: '15' },
     resume: { type: 'boolean', default: false },
+    overview: { type: 'string', default: 'true' },
   },
 });
 
@@ -85,6 +86,7 @@ export type Result = {
   phantomEdit?: boolean;
   testsTouched?: string[];
   missing?: string[];
+  testLinesRemoved?: number;
   passToPass?: boolean | null;
   failToPass?: boolean | null;
   steps?: number;
@@ -120,12 +122,25 @@ async function runCase(c: EvalCase, round: number): Promise<Result> {
       task: c.task,
       history: historyOf(c),
       maxSteps: Number(values['max-steps']),
+      overview: values.overview !== 'false',
     });
     const seconds = (performance.now() - started) / 1000;
 
     await sandbox.exec(['git', 'add', '-A'], { cwd: root });
     const changed = lines(
       (await sandbox.exec(['git', 'diff', '--cached', '--name-only'], { cwd: root })).stdout,
+    );
+    const numstat =
+      existingTests.length > 0
+        ? (
+            await sandbox.exec(['git', 'diff', '--cached', '--numstat', '--', ...existingTests], {
+              cwd: root,
+            })
+          ).stdout
+        : '';
+    const testLinesRemoved = lines(numstat).reduce(
+      (n, line) => n + (Number(line.split('\t')[1]) || 0),
+      0,
     );
     await sandbox.exec(['git', 'reset', '-q'], { cwd: root });
     const edited = changed.length > 0;
@@ -167,6 +182,7 @@ async function runCase(c: EvalCase, round: number): Promise<Result> {
       problems: score(c, observed),
       ...observed,
       phantomEdit: isPhantomEdit(c, observed),
+      testLinesRemoved,
       steps: res.steps,
       inputTokens: res.usage.inputTokens,
       outputTokens: res.usage.outputTokens,

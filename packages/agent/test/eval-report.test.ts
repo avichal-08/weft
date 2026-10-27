@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { render, summarize } from '../eval/report.ts';
+import type { EvalCase } from '../eval/cases.ts';
+import { render, rescore, summarize } from '../eval/report.ts';
 import type { Result } from '../eval/run.ts';
 
 const run = (over: Partial<Result>): Result => ({
@@ -57,6 +58,12 @@ describe('summarize', () => {
     expect(s.meanSteps).toBe(4);
   });
 
+  it('counts rewritten tests only when runs recorded removed lines', () => {
+    expect(s.testsRewritten).toBeNull();
+    const counted = summarize('x', [run({ testLinesRemoved: 0 }), run({ testLinesRemoved: 3 })]);
+    expect(counted.testsRewritten).toBe(1);
+  });
+
   it('gives no cost when a model has no known price', () => {
     expect(summarize('x', [run({ costUsd: null })]).meanCost).toBeNull();
   });
@@ -74,5 +81,32 @@ describe('render', () => {
     expect(md).toContain('| Pass rate | 100% (1/1) | 0% (0/1) |');
     expect(md).toContain('| `fix` | 1/1 | 0/1 |');
     expect(md).toContain('Generated 2026-10-28');
+  });
+});
+
+describe('rescore', () => {
+  it('grades stored runs again with the current rules', () => {
+    const recall: EvalCase = {
+      name: 'recall',
+      category: 'followup',
+      task: 't',
+      expect: { edits: false },
+    };
+    const stored = run({
+      name: 'recall',
+      category: 'followup',
+      problems: ['claims a change it did not make'],
+      phantomEdit: true,
+      status: 'finished',
+      reply: 'I added FREESHIP last time.',
+      edited: false,
+    });
+    expect(rescore(stored, new Map([['recall', recall]]))).toMatchObject({
+      problems: [],
+      phantomEdit: false,
+    });
+    expect(rescore({ ...stored, llmError: 'x' }, new Map([['recall', recall]])).problems).toEqual(
+      stored.problems,
+    );
   });
 });

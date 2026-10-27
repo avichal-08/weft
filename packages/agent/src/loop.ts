@@ -1,4 +1,5 @@
 import { emptyUsage, textOf, toolCalls, type Message, type ToolResultBlock } from '@weft/llm';
+import { repoOverview } from './overview.ts';
 import { systemPrompt } from './prompt.ts';
 import { executeTool } from './tools/execute.ts';
 import { parseToolCall } from './tools/parse.ts';
@@ -14,7 +15,9 @@ const NUDGE =
 export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
   const execute = opts.execute ?? executeTool;
   const maxSteps = opts.maxSteps ?? DEFAULT_MAX_STEPS;
-  const system = opts.system ?? systemPrompt(opts.ctx.testCommand);
+  const overview =
+    opts.system || opts.overview === false ? null : await repoOverview(opts.ctx).catch(() => null);
+  const system = opts.system ?? systemPrompt(opts.ctx.testCommand, overview);
   const tools = toolSpecs(
     opts.ctx.testCommand ? TOOL_NAMES : TOOL_NAMES.filter((name) => name !== 'run_tests'),
   );

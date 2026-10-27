@@ -8,4 +8,5 @@ export { finish, runCommand, runTests } from './tools/run.ts';
 export { TOOL_NAMES, toolSpec, toolSpecs } from './tools/specs.ts';
 export { createFile, strReplaceEdit } from './tools/write.ts';
 export { DEFAULT_MAX_STEPS, runAgent } from './loop.ts';
+export { repoOverview, summarizeFiles } from './overview.ts';
 export { systemPrompt } from './prompt.ts';

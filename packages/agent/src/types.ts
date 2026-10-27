@@ -69,6 +69,7 @@ export type AgentOptions = {
   task: string;
   history?: Message[];
   system?: string;
+  overview?: boolean;
   maxSteps?: number;
   maxNudges?: number;
   maxTokens?: number;
