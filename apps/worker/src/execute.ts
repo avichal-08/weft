@@ -15,7 +15,13 @@ import type { LiveMessage, LivePhase } from '@weft/queue';
 import { createSandbox, imageId, type ExecResult, type Sandbox } from '@weft/sandbox';
 import { CloneError, cloneRepo, type Checkout } from './clone.ts';
 import { buildHistory, latestDiff } from './history.ts';
-import { installKey, manifestPrint, manifestsAfter, type CacheHit } from './install-cache.ts';
+import {
+  installKey,
+  manifestPrint,
+  manifestsAfter,
+  type CacheHit,
+  type DepsOrigin,
+} from './install-cache.ts';
 import { diffHash, release, stillUsable, type KillHandler } from './session-sandboxes.ts';
 import type { SetupPlan } from './setup.ts';
 import { detectSetup, runSetup, SetupError } from './setup.ts';
@@ -66,7 +72,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
   let keepDiff: string | undefined;
   const onKilled: KillHandler = { current: () => {} };
   let checker: Sandbox | undefined;
-  let build: { key: string; base: string } | undefined;
+  let build: { key: string; origin: DepsOrigin } | undefined;
   let killed: string | undefined;
   const timings: PhaseTiming[] = [];
   const timed = async <T>(name: string, fn: () => Promise<T>): Promise<T> => {
@@ -235,12 +241,15 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
 
       if (hit?.kind === 'image') {
         log(`setup: dependencies already in ${hit.image.slice(0, 22)}, no network`);
-      } else if (cache && key && baseId && hit?.kind === 'tar') {
+      } else if (plan && cache && key && baseId && hit?.kind === 'tar') {
         log('setup: restoring dependencies from cache');
         phase('setup', 'cache');
         await timed('cacheRestore', () => cache.restore(box, REPO_ROOT, hit.path));
         log(`setup: restored in ${seconds(timings.at(-1)!.ms)}s, no network`);
-        build = { key, base: baseId };
+        build = {
+          key,
+          origin: { repoUrl: run.repoUrl, base: baseId, manager: plan.manager, depth: 0 },
+        };
       } else if (plan) {
         log(`setup: ${plan.command}`);
         phase('setup', plan.command);
@@ -253,7 +262,10 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
               log(
                 `setup: cached ${(bytes / 1e6).toFixed(0)} MB in ${seconds(timings.at(-1)!.ms)}s`,
               );
-              build = { key, base: baseId };
+              build = {
+                key,
+                origin: { repoUrl: run.repoUrl, base: baseId, manager: plan.manager, depth: 0 },
+              };
             }
           } catch (err) {
             log(`setup: caching failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -379,7 +391,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
     if (kept) log('keeping the sandbox for the next turn');
     await Promise.all([kept ? undefined : sandbox?.destroy(), checker?.destroy()]).catch(() => {});
     if (!kept) await checkout?.cleanup();
-    if (build) deps.installCache?.scheduleBuild(build.key, build.base);
+    if (build) deps.installCache?.scheduleBuild(build.key, build.origin);
   }
 }
 

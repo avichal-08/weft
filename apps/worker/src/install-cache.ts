@@ -18,14 +18,29 @@ import { basename, dirname, join, relative } from 'node:path';
 import { finished } from 'node:stream/promises';
 import { promisify } from 'node:util';
 import { buildImage, hasImage, listImages, removeImage, type Sandbox } from '@weft/sandbox';
-import { SETUP_TIMEOUT_MS, SetupError } from './setup.ts';
+import { SETUP_TIMEOUT_MS, SetupError, type Manager } from './setup.ts';
+
+export type DepsOrigin = { repoUrl: string; base: string; manager: Manager; depth: number };
+
+export type DepsImageInfo = {
+  key: string;
+  bytes: number;
+  repo: string | null;
+  base: string | null;
+  manager: string | null;
+  depth: number;
+  createdAt: number;
+};
 
 export type DepsImages = {
   has(key: string): Promise<boolean>;
-  build(key: string, tar: string, base: string): Promise<void>;
+  build(key: string, tar: string, origin: DepsOrigin): Promise<void>;
   remove(key: string): Promise<boolean>;
-  list(): Promise<{ key: string; bytes: number }[]>;
+  list(): Promise<DepsImageInfo[]>;
 };
+
+export const repoId = (repoUrl: string) =>
+  createHash('sha256').update(repoUrl).digest('hex').slice(0, 16);
 
 export type InstallCacheConfig = {
   dir: string;
@@ -42,22 +57,39 @@ export const depsImage = (key: string) => `${DEPS_REPO}:${key}`;
 export function dockerDepsImages(dest: string): DepsImages {
   return {
     has: (key) => hasImage(depsImage(key)),
-    async build(key, tar, base) {
+    async build(key, tar, origin) {
       const { size } = await stat(tar);
       await buildImage({
-        base,
+        base: origin.base,
         repo: DEPS_REPO,
         tag: key,
         tar,
         dest,
-        labels: { 'weft.deps': key, 'weft.bytes': String(size) },
+        labels: {
+          'weft.deps': key,
+          'weft.bytes': String(size),
+          'weft.repo': repoId(origin.repoUrl),
+          'weft.base': origin.base,
+          'weft.manager': origin.manager,
+          'weft.depth': String(origin.depth),
+        },
       });
     },
     remove: (key) => removeImage(depsImage(key)),
     async list() {
-      return (await listImages('weft.deps')).flatMap(({ labels }) =>
+      return (await listImages('weft.deps')).flatMap(({ labels, createdAt }) =>
         labels['weft.deps']
-          ? [{ key: labels['weft.deps'], bytes: Number(labels['weft.bytes']) || 0 }]
+          ? [
+              {
+                key: labels['weft.deps'],
+                bytes: Number(labels['weft.bytes']) || 0,
+                repo: labels['weft.repo'] ?? null,
+                base: labels['weft.base'] ?? null,
+                manager: labels['weft.manager'] ?? null,
+                depth: Number(labels['weft.depth']) || 0,
+                createdAt,
+              },
+            ]
           : [],
       );
     },
@@ -226,14 +258,22 @@ export function installCache(config: InstallCacheConfig) {
       );
     },
 
-    scheduleBuild(key: string, base: string) {
+    async nearest(origin: Omit<DepsOrigin, 'depth'>) {
+      const repo = repoId(origin.repoUrl);
+      const [best] = ((await config.images?.list()) ?? [])
+        .filter((i) => i.repo === repo && i.base === origin.base && i.manager === origin.manager)
+        .sort((a, b) => b.createdAt - a.createdAt);
+      return best ? { key: best.key, image: depsImage(best.key), depth: best.depth } : null;
+    },
+
+    scheduleBuild(key: string, origin: DepsOrigin) {
       const images = config.images;
       if (!images || queued.has(key)) return;
       queued.add(key);
       builds = builds.then(async () => {
         const started = performance.now();
         try {
-          if (!(await images.has(key))) await images.build(key, file(key), base);
+          if (!(await images.has(key))) await images.build(key, file(key), origin);
           await touch(marker(key));
           await rm(file(key), { force: true });
           const secs = ((performance.now() - started) / 1000).toFixed(1);

@@ -7,7 +7,9 @@ import {
   installCache,
   installKey,
   manifestsAfter,
+  repoId,
   touchesManifests,
+  type DepsImageInfo,
   type DepsImages,
 } from '../src/install-cache.ts';
 
@@ -132,6 +134,13 @@ describe('touchesManifests', () => {
   });
 });
 
+const origin = {
+  repoUrl: 'https://github.com/a/b',
+  base: 'sha256:base',
+  manager: 'npm' as const,
+  depth: 0,
+};
+
 function fakeImages(
   sizes: Record<string, number> = {},
   opts: { inUse?: string[]; fail?: boolean } = {},
@@ -150,7 +159,18 @@ function fakeImages(
       delete sizes[key];
       return Promise.resolve(true);
     },
-    list: () => Promise.resolve(Object.entries(sizes).map(([key, bytes]) => ({ key, bytes }))),
+    list: () =>
+      Promise.resolve(
+        Object.entries(sizes).map(([key, bytes]) => ({
+          key,
+          bytes,
+          repo: null,
+          base: null,
+          manager: null,
+          depth: 0,
+          createdAt: 0,
+        })),
+      ),
   };
   return { images, built, sizes };
 }
@@ -203,8 +223,8 @@ describe('installCache', () => {
     const lines: string[] = [];
     const cache = installCache({ dir, maxBytes: 1e9, images, log: (l) => lines.push(l) });
 
-    cache.scheduleBuild('k', 'sha256:base');
-    cache.scheduleBuild('k', 'sha256:base');
+    cache.scheduleBuild('k', origin);
+    cache.scheduleBuild('k', origin);
     await cache.idle();
 
     expect(built).toEqual(['k']);
@@ -223,11 +243,40 @@ describe('installCache', () => {
       log: (l) => lines.push(l),
     });
 
-    cache.scheduleBuild('k', 'sha256:base');
+    cache.scheduleBuild('k', origin);
     await cache.idle();
 
     expect(await readdir(dir)).toEqual(['k.tar']);
     expect(lines[0]).toMatch(/failed, the tar stays: commit failed/);
     expect(await cache.lookup('k')).toEqual({ kind: 'tar', path: join(dir, 'k.tar') });
+  });
+
+  it('finds the newest image built for the same repo, base image and package manager', async () => {
+    const dir = await tree({});
+    const repo = repoId(origin.repoUrl);
+    const image = (key: string, over: Partial<DepsImageInfo>): DepsImageInfo => ({
+      key,
+      bytes: 1,
+      repo,
+      base: origin.base,
+      manager: 'npm',
+      depth: 0,
+      createdAt: 1000,
+      ...over,
+    });
+    const listed = [
+      image('old', { createdAt: 1000 }),
+      image('new', { createdAt: 3000, depth: 2 }),
+      image('other-repo', { createdAt: 9000, repo: repoId('https://github.com/x/y') }),
+      image('other-base', { createdAt: 9000, base: 'sha256:rebuilt' }),
+      image('other-manager', { createdAt: 9000, manager: 'pnpm' }),
+      image('unlabelled', { createdAt: 9000, repo: null }),
+    ];
+    const images: DepsImages = { ...fakeImages().images, list: () => Promise.resolve(listed) };
+    const cache = installCache({ dir, maxBytes: 1e9, images });
+
+    expect(await cache.nearest(origin)).toEqual({ key: 'new', image: 'weft-deps:new', depth: 2 });
+    expect(await cache.nearest({ ...origin, repoUrl: 'https://github.com/c/d' })).toBeNull();
+    expect(await installCache({ dir, maxBytes: 1e9 }).nearest(origin)).toBeNull();
   });
 });

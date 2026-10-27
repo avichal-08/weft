@@ -9,7 +9,8 @@ import { createMockProvider, type ContentBlock } from '@weft/llm';
 import type { LiveMessage } from '@weft/queue';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { executeRun, REPO_ROOT } from '../src/execute.ts';
-import { dockerDepsImages, installCache as createCache } from '../src/install-cache.ts';
+import { dockerDepsImages, installCache as createCache, repoId } from '../src/install-cache.ts';
+import { imageId } from '@weft/sandbox';
 import type { WorkerDeps } from '../src/types.ts';
 
 const fixture = fileURLToPath(new URL('./fixtures/with-deps', import.meta.url));
@@ -189,6 +190,16 @@ describe('setup phase', () => {
     try {
       expect(key).toMatch(/^[0-9a-f]{64}$/);
       expect(await images.has(key!)).toBe(true);
+      const built = (await images.list()).find((i) => i.key === key);
+      expect(built).toMatchObject({
+        repo: repoId(repoUrl),
+        base: await imageId(image),
+        manager: 'npm',
+        depth: 0,
+      });
+      expect(
+        await installCache.nearest({ repoUrl, base: built!.base!, manager: 'npm' }),
+      ).toMatchObject({ key });
       expect((await readdir(dir)).filter((n) => n.endsWith('.tar'))).toHaveLength(0);
 
       const second: string[] = [];

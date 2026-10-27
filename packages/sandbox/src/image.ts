@@ -41,7 +41,12 @@ export async function buildImage(
   }
 }
 
-export type ImageInfo = { id: string; tags: string[]; labels: Record<string, string> };
+export type ImageInfo = {
+  id: string;
+  tags: string[];
+  labels: Record<string, string>;
+  createdAt: number;
+};
 
 const isStatus = (err: unknown, code: number) =>
   typeof err === 'object' && err !== null && (err as { statusCode?: number }).statusCode === code;
@@ -72,5 +77,10 @@ export async function listImages(
   docker: Docker = new Docker(),
 ): Promise<ImageInfo[]> {
   const images = await docker.listImages({ filters: { label: [label] } });
-  return images.map((i) => ({ id: i.Id, tags: i.RepoTags ?? [], labels: i.Labels ?? {} }));
+  return images.map((i) => ({
+    id: i.Id,
+    tags: i.RepoTags ?? [],
+    labels: i.Labels ?? {},
+    createdAt: i.Created * 1000,
+  }));
 }

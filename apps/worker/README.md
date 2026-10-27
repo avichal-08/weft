@@ -126,6 +126,10 @@ command, and every dependency file in the repo (each `package.json`, the lockfil
   outlives a run: builds run one at a time, a key is never queued twice, and a failed build is
   logged and leaves the tar in place, so the next turn still has a cache. Images are built from
   the base image by id, matching the id in the key.
+- **Every image records where it came from**, as labels: `weft.repo` (a hash of the repo URL),
+  `weft.base` (the base image id), `weft.manager` and `weft.depth` (0 for a fresh install). The
+  cache's `nearest({ repoUrl, base, manager })` returns the newest image matching all three,
+  never one from another repo; incremental installs start from it.
 - **Bounded.** Tars and images share `INSTALL_CACHE_MAX_MB` and are ranked by last use (a tar's
   mtime, an image's `<key>.used` marker). Tar writes go to a temporary file renamed into place.
   An image a running sandbox uses can't be removed, so it is skipped until the next eviction.

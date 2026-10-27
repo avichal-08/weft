@@ -104,6 +104,8 @@ describe('buildImage', () => {
     expect((await listImages('weft.deps=k2', docker)).map((i) => i.tags)).toEqual([
       [`${repo}:use`],
     ]);
+    const [listed] = await listImages('weft.deps=k2', docker);
+    expect(Date.now() - listed!.createdAt).toBeLessThan(10 * 60_000);
 
     const sandbox = await createSandbox({ image: `${repo}:use` }, docker);
     try {
