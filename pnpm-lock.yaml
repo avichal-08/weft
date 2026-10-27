@@ -282,6 +282,9 @@ importers:
       '@weft/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@weft/github':
+        specifier: workspace:*
+        version: link:../../packages/github
       '@weft/llm':
         specifier: workspace:*
         version: link:../../packages/llm

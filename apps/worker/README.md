@@ -178,6 +178,28 @@ the diff again. Why, and what it gives up:
 On the 639 MB repo, a follow-up that resumes reaches the agent in 1.6 s, most of it the
 `git ls-remote` round trip; a cold turn from the dependency image takes about 7 s.
 
+### Publishing
+
+`publishSession(deps, sessionId)` pushes a chat to a branch on GitHub
+([ADR 0005](../../docs/decisions/0005-publishing-chats-as-branches.md)). It runs on the host,
+never in a sandbox, with an installation token from `@weft/github`.
+
+- **One branch per chat**, `weft/<title slug>-<session id>`, created from the base branch on the
+  first push.
+- **One commit per succeeded turn**, holding only that turn's changes, with the first line of
+  the turn's summary as the message and the app's bot as author. Turns that changed nothing are
+  skipped; a failed turn in between gets no commit of its own (its changes land in the next
+  succeeded one).
+- **How a commit is built**: clone the branch, undo the last pushed diff (`git apply -R`), apply
+  the turn's diff (both are cumulative against the base), commit. The branch only ever moves
+  forward; nothing is force-pushed. Commits someone else pushed to the branch are kept and built
+  on; if they touched the same lines, publishing fails with git's error instead.
+- **Refused while the latest turn's tests fail**, while it is still running, or when it didn't
+  finish; the reason is saved on the session (`publish_error`).
+- **The token never leaves the worker process**: git gets it as an extra header through
+  `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0`, scoped to `https://github.com/`, so
+  it is not in the command line, the remote URL, git config or any file.
+
 ### Phase timings
 
 Each phase is timed and stored on the run as `timings`, in the order it ran, and logged as one

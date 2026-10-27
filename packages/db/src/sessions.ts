@@ -122,3 +122,18 @@ export async function listSessions(db: Db, limit = 50): Promise<SessionSummary[]
     lastStatus: latest.get(s.id)?.status ?? null,
   }));
 }
+
+export async function recordPush(
+  db: Db,
+  id: string,
+  push: { branch: string; pushedTurn: number; pushedSha: string },
+): Promise<void> {
+  await db
+    .update(sessions)
+    .set({ ...push, publishError: null })
+    .where(eq(sessions.id, id));
+}
+
+export async function recordPublishError(db: Db, id: string, error: string): Promise<void> {
+  await db.update(sessions).set({ publishError: error }).where(eq(sessions.id, id));
+}

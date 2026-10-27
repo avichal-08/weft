@@ -2,7 +2,15 @@ import { eq } from 'drizzle-orm';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { cancelRun, claimRun, completeRun, getRun } from '../src/runs.ts';
 import { runs, sessions } from '../src/schema.ts';
-import { addTurn, createSession, getSession, listSessions, titleFrom } from '../src/sessions.ts';
+import {
+  addTurn,
+  createSession,
+  getSession,
+  listSessions,
+  recordPublishError,
+  recordPush,
+  titleFrom,
+} from '../src/sessions.ts';
 import { reset, testDb, type TestDb } from '../src/testing.ts';
 
 let db: TestDb;
@@ -134,5 +142,29 @@ describe('titleFrom', () => {
   it('flattens whitespace and shortens long messages', () => {
     expect(titleFrom('  fix\n the   bug ')).toBe('fix the bug');
     expect(titleFrom('x'.repeat(200))).toHaveLength(80);
+  });
+});
+
+describe('recordPush / recordPublishError', () => {
+  it('stores the branch and the last pushed turn, and clears an earlier error', async () => {
+    const { session } = await createSession(db, input);
+    expect(await getSession(db, session.id)).toMatchObject({ branch: null, pushedTurn: null });
+
+    await recordPublishError(db, session.id, 'the latest turn failed its tests');
+    expect((await getSession(db, session.id))?.publishError).toBe(
+      'the latest turn failed its tests',
+    );
+
+    await recordPush(db, session.id, {
+      branch: 'weft/why-cache-1a2b3c4d',
+      pushedTurn: 2,
+      pushedSha: 'abc123',
+    });
+    expect(await getSession(db, session.id)).toMatchObject({
+      branch: 'weft/why-cache-1a2b3c4d',
+      pushedTurn: 2,
+      pushedSha: 'abc123',
+      publishError: null,
+    });
   });
 });

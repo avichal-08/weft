@@ -29,6 +29,13 @@
       "when": 1793022228885,
       "tag": "0003_run_timings",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793108990724,
+      "tag": "0004_session_publish",
+      "breakpoints": true
     }
   ]
 }

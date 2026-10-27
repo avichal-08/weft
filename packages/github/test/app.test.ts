@@ -98,4 +98,20 @@ describe('githubApp', () => {
         'POST /app/installations/77/access_tokens failed (403): Resource not accessible by integration',
     });
   });
+
+  it("knows its bot's commit identity, and asks GitHub only once", async () => {
+    const gh = fakeGitHub({
+      'GET /app': () => [200, { slug: 'weft-avichal-08' }],
+      'GET /users/weft-avichal-08%5Bbot%5D': () => [200, { id: 4242 }],
+    });
+    const app = githubApp({ appId: '1', privateKey: pem, fetch: gh.fetch });
+    const expected = {
+      name: 'weft-avichal-08[bot]',
+      email: '4242+weft-avichal-08[bot]@users.noreply.github.com',
+    };
+    expect(await app.identity()).toEqual(expected);
+    expect(await app.identity()).toEqual(expected);
+    expect(gh.calls).toHaveLength(2);
+    expect(gh.calls[1]!.auth).toBe('');
+  });
 });

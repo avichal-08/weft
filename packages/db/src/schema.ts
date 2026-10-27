@@ -33,6 +33,11 @@ export const sessions = pgTable(
     config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+
+    branch: text('branch'),
+    pushedTurn: integer('pushed_turn'),
+    pushedSha: text('pushed_sha'),
+    publishError: text('publish_error'),
   },
   (t) => [index('sessions_updated_idx').on(t.updatedAt.desc())],
 );

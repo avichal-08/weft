@@ -11,6 +11,8 @@ export type GitHubAppConfig = {
 
 export type InstallationToken = { token: string; expiresAt: number };
 
+export type Identity = { name: string; email: string };
+
 export class GitHubError extends Error {
   override name = 'GitHubError';
   readonly status: number;
@@ -32,13 +34,19 @@ export function githubApp(config: GitHubAppConfig) {
   const http = config.fetch ?? fetch;
   const now = config.now ?? Date.now;
   const tokens = new Map<string, InstallationToken>();
+  let bot: Promise<Identity> | undefined;
 
-  async function call<T>(method: string, path: string, auth: string, body?: unknown): Promise<T> {
+  async function call<T>(
+    method: string,
+    path: string,
+    auth: string | null,
+    body?: unknown,
+  ): Promise<T> {
     const res = await http(`${api}${path}`, {
       method,
       headers: {
         accept: 'application/vnd.github+json',
-        authorization: auth,
+        ...(auth ? { authorization: auth } : {}),
         'x-github-api-version': '2022-11-28',
         ...(body ? { 'content-type': 'application/json' } : {}),
       },
@@ -75,6 +83,23 @@ export function githubApp(config: GitHubAppConfig) {
 
   return {
     installationId,
+
+    identity(): Promise<Identity> {
+      bot ??= (async () => {
+        const { slug } = await call<{ slug: string }>('GET', '/app', asApp());
+        const login = `${slug}[bot]`;
+        const { id } = await call<{ id: number }>(
+          'GET',
+          `/users/${encodeURIComponent(login)}`,
+          null,
+        );
+        return { name: login, email: `${id}+${login}@users.noreply.github.com` };
+      })().catch((err: unknown) => {
+        bot = undefined;
+        throw err;
+      });
+      return bot;
+    },
 
     async token(ref: RepoRef): Promise<string> {
       const key = `${ref.owner}/${ref.repo}`.toLowerCase();

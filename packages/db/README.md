@@ -65,7 +65,9 @@ run gets a new attempt, and updates will be fenced on it.
 **`sessions`**: a chat with the agent about one repository: `title` (from the first message),
 `repo_url`, `base_ref`, an optional `test_command`, `config`, and `updated_at` for ordering.
 Each message is a run in that session (`runs.session_id`, `runs.turn` = 1, 2, 3, …), so turns
-reuse the whole run pipeline. Deleting a session deletes its runs.
+reuse the whole run pipeline. Deleting a session deletes its runs. Once the chat is published
+to GitHub it also holds `branch`, `pushed_turn` (the last turn pushed), `pushed_sha` and
+`publish_error` (why the last attempt failed, cleared by the next successful push).
 
 Two indexes guard the conversation: `(session_id, turn)` is unique, and a partial unique index on
 `session_id` where `status in ('queued', 'running')` allows at most one active turn per session.
@@ -80,6 +82,8 @@ time.
 | `addTurn(db, sessionId, message)`                                       | Next turn, or `{ ok: false, reason: 'busy' }` while a turn is active (or `'not_found'`). |
 | `getSession(db, id)`                                                    | The session with its turns in order.                                                     |
 | `listSessions(db, limit)`                                               | Most recently active first, with turn count and latest status.                           |
+| `recordPush(db, id, { branch, pushedTurn, pushedSha })`                 | Saves what was pushed and clears `publish_error`.                                        |
+| `recordPublishError(db, id, error)`                                     | Saves why publishing failed.                                                             |
 
 **`run_events`**: the step-by-step trace of a run, one row per model call (`llm`) or tool call
 (`tool`), keyed by `(run_id, attempt, seq)`. `data` holds the details as JSON (tokens, latency
