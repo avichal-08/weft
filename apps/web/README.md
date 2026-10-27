@@ -39,6 +39,14 @@ mechanics stay out of the way until you want them.
 - **The composer** stays at the bottom: Enter sends, Shift+Enter adds a line, the model in use is
   shown beside the button, and while a turn runs it turns into **Stop**, which cancels the turn.
 
+### Publishing
+
+The chat header has a **Create PR** button. It asks the API to publish the chat; if the API
+refuses (the latest turn's tests fail, the agent is still working, nothing changed yet), its
+reason is shown under the button. While the push and pull request are in progress the button
+reads "Opening PR…" and the page refreshes itself; afterwards it becomes a **PR #n** link, which
+shows "pushing…" while later turns are pushed to the same pull request.
+
 ### Live updates
 
 A running turn is pushed to the browser as it happens, over server-sent events:

@@ -2,13 +2,14 @@
 
 import { refresh } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { cancelRun, createSession, sendMessage, type ApiError } from '@/lib/api';
+import { cancelRun, createSession, publishSession, sendMessage, type ApiError } from '@/lib/api';
 import type { FormState } from '@/lib/types';
 
 const text = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
 
 const describe = (status: number, body: ApiError) =>
   body.issues?.map((i) => `${i.path || 'request'}: ${i.message}`).join(' · ') ??
+  body.message ??
   body.error ??
   `request failed (${status})`;
 
@@ -57,4 +58,11 @@ export async function sendMessageAction(
 export async function cancelRunAction(id: string): Promise<void> {
   await cancelRun(id);
   refresh();
+}
+
+export async function publishAction(sessionId: string): Promise<FormState> {
+  const res = await publishSession(sessionId);
+  if (!res.ok) return { error: describe(res.status, res.body) };
+  refresh();
+  return { sent: Date.now() };
 }

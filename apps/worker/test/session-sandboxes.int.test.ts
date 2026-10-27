@@ -143,6 +143,42 @@ describe('session sandboxes', () => {
     expect(run?.timings?.[0]?.phase).toBe('clone');
   });
 
+  it('leaves nothing staged, so the next turn can git restore its own changes', async () => {
+    const dir = await origin();
+    const { session, run } = await createSession(db, {
+      repoUrl: pathToFileURL(dir).href,
+      message: 'edit',
+    });
+    await executeRun(
+      deps(
+        createMockProvider([
+          call('run_command', { command: 'echo "// edited" >> src/math.js', timeout_sec: 10 }),
+          call('finish', { summary: 'edited' }),
+        ]),
+      ),
+      run.id,
+    );
+    expect((await getRun(db, run.id))?.diff).toContain('+// edited');
+
+    const next = await addTurn(db, session.id, 'undo it');
+    if (!next.ok) throw new Error('turn 2 was refused');
+    await executeRun(
+      deps(
+        createMockProvider([
+          call('run_command', {
+            command: 'git restore src/math.js && git status --short',
+            timeout_sec: 10,
+          }),
+          call('finish', { summary: 'restored' }),
+        ]),
+      ),
+      next.run.id,
+    );
+    const undone = await getRun(db, next.run.id);
+    expect(undone?.timings?.[0]?.phase).toBe('resume');
+    expect(undone?.diff).toBe('');
+  });
+
   it("doesn't keep a sandbox from a turn that ended in an error", async () => {
     const { run } = await createSession(db, {
       repoUrl: pathToFileURL(await origin()).href,

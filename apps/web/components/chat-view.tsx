@@ -6,12 +6,14 @@ import { parseDiff } from '@/lib/diff';
 import { repoName, tokens } from '@/lib/format';
 import { ACTIVE, type Run, type RunEvent } from '@/lib/types';
 import { Changes } from './changes';
+import { AutoRefresh } from './auto-refresh';
 import { ChatShell } from './chat-shell';
 import { Composer } from './composer';
 import { CopyButton } from './copy-button';
 import { LiveWorkLog } from './live-work-log';
 import { LogoMark } from './logo';
 import { Prose } from './prose';
+import { PublishButton } from './publish-button';
 import { WorkLog } from './work-log';
 
 function Outcome({ run }: { run: Run }) {
@@ -136,7 +138,11 @@ export async function ChatView({ params }: { params: Promise<{ id: string }> }) 
         deletions: files.reduce((n, f) => n + f.deletions, 0),
       }}
       changes={<Changes diff={diff} />}
+      publish={<PublishButton session={session} working={activeRunId !== null} />}
     >
+      <AutoRefresh
+        active={session.publishState === 'queued' || session.publishState === 'pushing'}
+      />
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6">
         <ol className="grid flex-1 grid-cols-1 content-start gap-14 pt-10 pb-6">
           {session.turns.map((run, i) => {

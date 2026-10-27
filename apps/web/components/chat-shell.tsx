@@ -10,6 +10,7 @@ export function ChatShell({
   working,
   stats,
   changes,
+  publish,
   children,
 }: {
   title: string;
@@ -18,6 +19,7 @@ export function ChatShell({
   working: boolean;
   stats: { files: number; additions: number; deletions: number };
   changes: ReactNode;
+  publish?: ReactNode;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -57,6 +59,7 @@ export function ChatShell({
               Working
             </span>
           )}
+          {publish}
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}

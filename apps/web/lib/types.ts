@@ -68,6 +68,12 @@ export type Session = {
   config: { provider?: string; model?: string; maxSteps?: number };
   createdAt: string;
   updatedAt: string;
+  branch: string | null;
+  pushedTurn: number | null;
+  publishState: 'queued' | 'pushing' | 'pushed' | 'failed' | null;
+  publishError: string | null;
+  prNumber: number | null;
+  prUrl: string | null;
 };
 
 export type SessionSummary = Session & { turns: number; lastStatus: RunStatus | null };

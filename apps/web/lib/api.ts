@@ -7,6 +7,7 @@ export type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; 
 
 export type ApiError = {
   error?: string;
+  message?: string;
   issues?: { path: string; message: string }[];
 };
 
@@ -33,6 +34,8 @@ export const createSession = (body: unknown) =>
     method: 'POST',
     body: JSON.stringify(body),
   });
+export const publishSession = (id: string) =>
+  call<{ session: Session }>(`/sessions/${id}/publish`, { method: 'POST' });
 export const sendMessage = (id: string, message: string) =>
   call<{ run: Run }>(`/sessions/${id}/messages`, {
     method: 'POST',

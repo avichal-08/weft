@@ -49,6 +49,7 @@ export const DIFF_COMMAND = [
   '{ grep -qx node_modules "$exclude" 2>/dev/null || echo node_modules >> "$exclude"; }',
   'git add -A',
   'git diff --cached --binary --no-color',
+  'git reset -q',
 ].join(' && ');
 
 export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOutcome> {
