@@ -202,8 +202,9 @@ never in a sandbox, with an installation token from `@weft/github`.
   none). Failures are saved on the chat, never thrown, so a retry is just another job.
 - **Title and description** come from the chat's own model: the turns and the changed files go
   in, a title line and a markdown body come out. A failed call or an unusable reply falls back to
-  the chat title and the turns' summaries. weft appends its own last lines, never the model's:
-  whether the test command passed in a clean sandbox, or that nothing verified the changes.
+  the chat title and the turns' summaries. The description reads like one a person wrote: it
+  never mentions weft, the chat or sandboxes. When the repo has a test command, weft adds a
+  `## Testing` section saying it passes; without one there is no testing section.
 - **After the pull request exists**, every later turn that succeeds queues a push
   (`followUpPublish`), so the pull request follows the conversation.
 - **The token never leaves the worker process**: git gets it as an extra header through

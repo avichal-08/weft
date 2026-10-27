@@ -6,17 +6,14 @@ export type PullRequestText = { title: string; body: string };
 const TITLE_CHARS = 70;
 
 const SYSTEM = `You write GitHub pull request descriptions for changes made by a coding agent.
-Reply with the title on the first line (plain text, at most ${TITLE_CHARS} characters, imperative mood, no prefix), then a blank line, then a short markdown body: what changed and why, as a few bullet points. Mention only what the changes do. Do not invent tests, issues or numbers.`;
+Reply with the title on the first line (plain text, at most ${TITLE_CHARS} characters, imperative mood, no prefix), then a blank line, then a short markdown body: what changed and why, as a few bullet points. Describe only what the changes do, as a person would. Do not mention how the change was made, and do not invent tests, issues or numbers.`;
 
 export function changedFiles(diff: string): string[] {
   return [...new Set([...diff.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((m) => m[1]!))];
 }
 
-function footer(session: SessionWithTurns, turns: number): string {
-  const tests = session.testCommand
-    ? `Tests: \`${session.testCommand}\` passed in a clean sandbox for the latest change.`
-    : 'No test command is set for this repository, so these changes were not verified by tests.';
-  return `---\n${tests}\n\nOpened by weft from a chat of ${turns} turn${turns === 1 ? '' : 's'}.`;
+function testing(session: SessionWithTurns): string {
+  return session.testCommand ? `\n\n## Testing\n\n\`${session.testCommand}\` passes.` : '';
 }
 
 function fallback(session: SessionWithTurns, files: string[]): PullRequestText {
@@ -45,7 +42,6 @@ export async function describePullRequest(
 ): Promise<PullRequestText> {
   const latest = session.turns.findLast((t) => t.status === 'succeeded' && t.diff);
   const files = changedFiles(latest?.diff ?? '');
-  const turns = session.turns.length;
   let text: PullRequestText | null = null;
   if (llm) {
     const chat = session.turns
@@ -68,5 +64,5 @@ export async function describePullRequest(
     }
   }
   const { title, body } = text ?? fallback(session, files);
-  return { title, body: `${body}\n\n${footer(session, turns)}` };
+  return { title, body: `${body}${testing(session)}` };
 }

@@ -28,14 +28,14 @@ const session = (testCommand: string | null): SessionWithTurns =>
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
 
 describe('describePullRequest', () => {
-  it("uses the model's title and body, and ends with weft's own test note", async () => {
+  it("uses the model's title and body, and adds a plain testing section", async () => {
     const llm = createMockProvider([
       text('Refresh LRU recency on get\n\n- `get()` now moves the entry to the front'),
     ]);
     const pr = await describePullRequest(session('npm test'), llm);
     expect(pr.title).toBe('Refresh LRU recency on get');
     expect(pr.body).toBe(
-      '- `get()` now moves the entry to the front\n\n---\nTests: `npm test` passed in a clean sandbox for the latest change.\n\nOpened by weft from a chat of 2 turns.',
+      '- `get()` now moves the entry to the front\n\n## Testing\n\n`npm test` passes.',
     );
     expect(llm.calls[0]!.messages[0]!.content).toEqual([
       expect.objectContaining({
@@ -58,9 +58,7 @@ describe('describePullRequest', () => {
         '- get() never refreshes recency.\n- Made get() move the entry to the newest slot.',
       );
       expect(pr.body).toContain('Files: `src/lru.js`');
-      expect(pr.body).toContain(
-        'No test command is set for this repository, so these changes were not verified by tests.',
-      );
+      expect(pr.body).not.toMatch(/Testing|weft|turn|sandbox/);
     }
   });
 
