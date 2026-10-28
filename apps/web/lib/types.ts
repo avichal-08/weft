@@ -1,5 +1,13 @@
 export type RunMode = 'code' | 'ask';
 
+export type Finding = {
+  kind: 'secret' | 'workflow' | 'test_rewrite' | 'large_file';
+  severity: 'block' | 'warn';
+  file: string;
+  line?: number;
+  message: string;
+};
+
 export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'error' | 'cancelled';
 
 export type Run = {
@@ -27,6 +35,7 @@ export type Run = {
   failureKind: string | null;
   failureDetail: string | null;
   timings: { phase: string; ms: number }[] | null;
+  checks: Finding[] | null;
 };
 
 export type FormState = {

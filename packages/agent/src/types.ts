@@ -41,7 +41,7 @@ export type ToolOutput = {
 export type AgentMode = 'code' | 'ask';
 
 export type AgentStatus =
-  'finished' | 'max_steps' | 'no_tool_call' | 'max_tokens' | 'refusal' | 'aborted';
+  'finished' | 'max_steps' | 'budget' | 'no_tool_call' | 'max_tokens' | 'refusal' | 'aborted';
 
 export type AgentEvent =
   | {
@@ -76,6 +76,7 @@ export type AgentOptions = {
   maxSteps?: number;
   maxNudges?: number;
   maxTokens?: number;
+  tokenBudget?: number;
   signal?: AbortSignal;
   onEvent?: (event: AgentEvent) => void;
   execute?: ToolExecutor;

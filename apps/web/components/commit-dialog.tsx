@@ -3,16 +3,20 @@
 import { LoaderCircle } from 'lucide-react';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { draftCommitAction, saveCommitAction } from '@/app/actions';
+import type { Finding } from '@/lib/types';
+import { Warnings } from './checks';
 
 export type CommitMode = 'commit' | 'commit-pr';
 
 export function CommitDialog({
   sessionId,
   mode,
+  warnings,
   onClose,
 }: {
   sessionId: string;
   mode: CommitMode;
+  warnings: Finding[];
   onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -59,6 +63,7 @@ export function CommitDialog({
         <h2 className="text-sm font-medium">
           {mode === 'commit-pr' ? 'Commit & create pull request' : 'Commit changes'}
         </h2>
+        {warnings.length > 0 && <Warnings findings={warnings} />}
         {drafting ? (
           <p className="flex h-32 items-center justify-center gap-2 rounded-lg border border-line bg-surface text-sm text-muted">
             <LoaderCircle className="size-4 animate-spin" /> Writing a commit message…

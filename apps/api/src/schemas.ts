@@ -10,6 +10,7 @@ const repoFields = {
       provider: z.enum(['mock', 'anthropic', 'openai', 'gemini', 'openrouter']).optional(),
       model: z.string().min(1).max(200).optional(),
       maxSteps: z.number().int().min(1).max(100).optional(),
+      tokenBudget: z.number().int().min(10_000).max(5_000_000).optional(),
     })
     .default({}),
 };

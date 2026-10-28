@@ -55,6 +55,12 @@ The chat header has **Commit** and **Create PR**
 - **Create PR** with uncommitted changes opens the same dialog as **Commit & create PR**;
   with everything committed it publishes directly. If the API refuses, its reason shows under
   the buttons.
+- **Checks** on the chat's diff ([ADR 0009](../../docs/decisions/0009-diff-checks.md)) show
+  under the latest Code turn: a red box for findings that block (a secret, an environment file, a
+  workflow change), which disables Commit and Create PR with the reason as their tooltip, and an
+  amber "Worth a look" box for warnings (rewritten tests, large files), which the commit dialog
+  repeats above the message. Only the latest Code turn shows them, since its diff covers the whole
+  chat.
 - While publishing, the button reads "Opening PR…" and the page refreshes itself; afterwards it is
   a **PR #n** link, and later commits are pushed to it right away ("pushing…").
 - The Changes panel lists the chat's commits: the subject, and the short sha (a GitHub link) once

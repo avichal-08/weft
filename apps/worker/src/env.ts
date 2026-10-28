@@ -13,6 +13,7 @@ const envSchema = z.object({
     .default(`${hostname()}-${randomUUID().slice(0, 8)}`),
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(1),
   ALLOW_FILE_REPOS: z.stringbool().default(false),
+  TOKEN_BUDGET: z.coerce.number().int().min(10_000).default(500_000),
   JANITOR_INTERVAL_MS: z.coerce.number().int().min(5000).default(60_000),
   INSTALL_CACHE_DIR: z.string().default(join(homedir(), '.cache', 'weft', 'installs')),
   INSTALL_CACHE_MAX_MB: z.coerce.number().int().min(0).default(10_240),

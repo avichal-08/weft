@@ -73,6 +73,26 @@ describe('runAgent', () => {
     expect(res).toMatchObject({ status: 'max_steps', steps: 3 });
   });
 
+  it('warns once near the token budget, then stops when it is spent', async () => {
+    const llm = createMockProvider(() => turn(tool('glob', { pattern: '*' })));
+    const res = await runAgent({ llm, ctx, task: 't', tokenBudget: 500, execute: echo });
+    expect(res).toMatchObject({ status: 'budget', steps: 5 });
+    const warnings = res.messages.flatMap((m) =>
+      m.content.filter((b) => b.type === 'text' && b.text.includes('token budget')),
+    );
+    expect(warnings).toHaveLength(1);
+    expect(res.messages.findIndex((m) => m.content.includes(warnings[0]!))).toBe(8);
+  });
+
+  it('still finishes when the last step replies past the budget', async () => {
+    const llm = createMockProvider([
+      turn(tool('glob', { pattern: '*' })),
+      turn(tool('finish', { summary: 'done' })),
+    ]);
+    const res = await runAgent({ llm, ctx, task: 't', tokenBudget: 150, execute: echo });
+    expect(res).toMatchObject({ status: 'finished', summary: 'done' });
+  });
+
   it('treats a plain-text answer as the reply', async () => {
     const llm = createMockProvider([turn(text('It adds two numbers.'))]);
     const res = await runAgent({ llm, ctx, task: 'what does add do?', execute: echo });

@@ -74,6 +74,8 @@ enters a sandbox.
   or published while they fail.
 - **Provider-agnostic agent.** The loop never knows which model it talks to, and each chat picks
   its own.
+- **Bounded turns.** Steps, a token budget ([ADR 0010](decisions/0010-token-budget.md)), and
+  sandbox CPU, memory, disk and time limits cap what one turn can cost.
 - **Measured changes.** Phase timings on every run, and an eval suite
   ([ADR 0007](decisions/0007-agent-evals.md)) for agent changes.
 
@@ -81,4 +83,6 @@ enters a sandbox.
 
 One worker's sandbox pool is in memory, so a follow-up on another worker starts cold. Incremental
 installs are npm only. Only public repositories with the app installed can be published. The
-sandbox is Docker with no network, not a VM or gVisor.
+sandbox is Docker with no network, not a VM or gVisor. There is no authentication or rate limiting:
+each turn is bounded by steps, a token budget and sandbox limits, and limits per user on turns and
+sandboxes come with authentication, before any public deployment.

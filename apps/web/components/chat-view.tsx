@@ -4,7 +4,8 @@ import { notFound } from 'next/navigation';
 import { getRunEvents, getSession } from '@/lib/api';
 import { parseDiff } from '@/lib/diff';
 import { repoName, tokens } from '@/lib/format';
-import { ACTIVE, type Run, type RunEvent } from '@/lib/types';
+import { ACTIVE, type Finding, type Run, type RunEvent } from '@/lib/types';
+import { Checks } from './checks';
 import { Changes } from './changes';
 import { AutoRefresh } from './auto-refresh';
 import { ChatShell } from './chat-shell';
@@ -34,7 +35,9 @@ function Outcome({ run }: { run: Run }) {
           ? 'The branch changed under this chat (was its PR merged?). Start a new chat'
           : run.failureKind === 'disk_limit'
             ? 'The sandbox ran out of disk space'
-            : "This turn didn't finish";
+            : run.failureKind === 'budget'
+              ? 'This turn hit its token limit; its changes so far are kept. Reply to continue'
+              : "This turn didn't finish";
   return (
     <details className="group rounded-xl border border-warn/25 bg-warn-soft text-sm">
       <summary className="flex cursor-pointer list-none items-center gap-2 px-3.5 py-2.5 text-warn">
@@ -51,7 +54,17 @@ function Outcome({ run }: { run: Run }) {
   );
 }
 
-function Turn({ run, events, attempt }: { run: Run; events: RunEvent[]; attempt: number }) {
+function Turn({
+  run,
+  events,
+  attempt,
+  findings,
+}: {
+  run: Run;
+  events: RunEvent[];
+  attempt: number;
+  findings: Finding[];
+}) {
   const active = ACTIVE.includes(run.status);
 
   return (
@@ -87,6 +100,7 @@ function Turn({ run, events, attempt }: { run: Run; events: RunEvent[]; attempt:
           )}
           {!active && run.summary && <Prose>{run.summary}</Prose>}
           {!active && <Outcome run={run} />}
+          {!active && <Checks findings={findings} />}
           {!active && (
             <div className="-ml-1.5 flex items-center gap-1 text-xs text-faint opacity-0 transition group-hover/turn:opacity-100">
               {run.summary && <CopyButton text={run.summary} />}
@@ -152,7 +166,12 @@ export async function ChatView({ params }: { params: Promise<{ id: string }> }) 
       }}
       changes={<Changes diff={diff} commits={session.commits} repoUrl={session.repoUrl} />}
       publish={
-        <ShipControls session={session} working={activeRunId !== null} uncommitted={uncommitted} />
+        <ShipControls
+          session={session}
+          working={activeRunId !== null}
+          uncommitted={uncommitted}
+          findings={work?.checks ?? []}
+        />
       }
     >
       <AutoRefresh
@@ -168,6 +187,7 @@ export async function ChatView({ params }: { params: Promise<{ id: string }> }) 
                 run={run}
                 events={trace?.ok ? trace.data.events : []}
                 attempt={trace?.ok ? trace.data.attempt : run.attempt}
+                findings={run.id === work?.id ? (run.checks ?? []) : []}
               />
             );
           })}

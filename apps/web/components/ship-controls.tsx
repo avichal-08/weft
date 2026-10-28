@@ -3,7 +3,7 @@
 import { GitCommitHorizontal, GitPullRequest, LoaderCircle } from 'lucide-react';
 import { useActionState, useState } from 'react';
 import { publishAction } from '@/app/actions';
-import type { FormState, Session } from '@/lib/types';
+import type { Finding, FormState, Session } from '@/lib/types';
 import { CommitDialog, type CommitMode } from './commit-dialog';
 
 const button =
@@ -13,23 +13,27 @@ export function ShipControls({
   session,
   working,
   uncommitted,
+  findings,
 }: {
   session: Session;
   working: boolean;
   uncommitted: boolean;
+  findings: Finding[];
 }) {
+  const blocked = findings.find((f) => f.severity === 'block')?.message;
+  const warnings = findings.filter((f) => f.severity === 'warn');
   const [mode, setMode] = useState<CommitMode | null>(null);
   const [state, publish, pending] = useActionState<FormState>(() => publishAction(session.id), {});
   const busy = pending || session.publishState === 'queued' || session.publishState === 'pushing';
   const problem = state.error ?? (session.publishState === 'failed' ? session.publishError : null);
-  const waiting = working ? 'Wait for weft to finish this turn' : undefined;
+  const waiting = working ? 'Wait for weft to finish this turn' : blocked;
 
   return (
     <div className="relative flex items-center gap-2">
       <button
         type="button"
         onClick={() => setMode('commit')}
-        disabled={!uncommitted || working || busy}
+        disabled={!uncommitted || working || busy || !!blocked}
         title={waiting ?? (uncommitted ? undefined : 'Nothing new to commit')}
         className={button}
       >
@@ -56,7 +60,7 @@ export function ShipControls({
         <button
           type="button"
           onClick={() => setMode('commit-pr')}
-          disabled={working || busy}
+          disabled={working || busy || !!blocked}
           title={waiting}
           className={button}
         >
@@ -65,7 +69,12 @@ export function ShipControls({
         </button>
       ) : (
         <form action={publish}>
-          <button type="submit" disabled={busy || working} title={waiting} className={button}>
+          <button
+            type="submit"
+            disabled={busy || working || !!blocked}
+            title={waiting}
+            className={button}
+          >
             {busy ? (
               <LoaderCircle className="size-4 animate-spin text-muted" />
             ) : (
@@ -82,7 +91,14 @@ export function ShipControls({
         </p>
       )}
 
-      {mode && <CommitDialog sessionId={session.id} mode={mode} onClose={() => setMode(null)} />}
+      {mode && (
+        <CommitDialog
+          sessionId={session.id}
+          mode={mode}
+          warnings={warnings}
+          onClose={() => setMode(null)}
+        />
+      )}
     </div>
   );
 }

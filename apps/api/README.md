@@ -40,7 +40,7 @@ Errors are JSON: `{ error: 'invalid_request', issues: [{ path, message }] }`,
 `{ error: 'invalid_json' }`, `{ error: 'not_found' }`, `{ error: 'internal' }`.
 
 `POST /runs` body: `repoUrl` (https or file URL), `task`, `testCommand`, optional `baseRef`,
-optional `config` (`provider`, `model`, `maxSteps` 1–100). Unknown fields are rejected.
+optional `config` (`provider`, `model`, `maxSteps` 1–100, `tokenBudget` 10k–5M). Unknown fields are rejected.
 
 A turn is a run, so a turn's trace and cancellation use `GET /runs/:id/events` and
 `POST /runs/:id/cancel`. The `409 busy` comes from the database's one-active-turn index, so it

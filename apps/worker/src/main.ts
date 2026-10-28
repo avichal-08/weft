@@ -91,6 +91,7 @@ const worker = new Worker<RunJobData>(
         sandboxImage: env.SANDBOX_IMAGE,
         createLLM,
         allowFileRepos: env.ALLOW_FILE_REPOS,
+        tokenBudget: env.TOKEN_BUDGET,
         log: (line) => console.log(line),
         live: (runId, message) => publishLive(publisher, runId, message),
         ...(cache ? { installCache: cache } : {}),

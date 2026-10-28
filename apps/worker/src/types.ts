@@ -8,6 +8,7 @@ export type RunConfig = {
   provider?: string;
   model?: string;
   maxSteps?: number;
+  tokenBudget?: number;
 };
 
 export type WorkerDeps = {
@@ -16,6 +17,7 @@ export type WorkerDeps = {
   sandboxImage: string;
   createLLM: (config: RunConfig) => LLMProvider;
   allowFileRepos?: boolean;
+  tokenBudget?: number;
   watchIntervalMs?: number;
   diskLimitMb?: number;
   diskCheckMs?: number;

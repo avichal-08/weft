@@ -1,4 +1,4 @@
-import { createToolContext, runAgent, type AgentEvent } from '@weft/agent';
+import { createToolContext, DEFAULT_TOKEN_BUDGET, runAgent, type AgentEvent } from '@weft/agent';
 import { checkDiff } from '@weft/checks';
 import {
   appendRunEvents,
@@ -324,6 +324,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
         history: buildHistory(previous),
         mode: run.mode,
         maxSteps: config.maxSteps ?? DEFAULT_MAX_STEPS,
+        tokenBudget: config.tokenBudget ?? deps.tokenBudget ?? DEFAULT_TOKEN_BUDGET,
         signal: abort.signal,
         onEvent,
       }),
@@ -404,7 +405,9 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
         failureKind: result.status === 'finished' ? 'tests_failed' : result.status,
         failureDetail: !passed
           ? tail(verify!.stdout + verify!.stderr)
-          : 'the agent stopped without replying',
+          : result.status === 'budget'
+            ? `the turn used its token budget (${result.usage.inputTokens + result.usage.cacheReadTokens + result.usage.outputTokens} tokens); its changes so far are kept`
+            : 'the agent stopped without replying',
         ...summaryOf(result.summary),
       }),
     );

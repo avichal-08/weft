@@ -7,10 +7,14 @@ import { READ_ONLY_TOOL_NAMES, TOOL_NAMES, toolSpecs } from './tools/specs.ts';
 import type { AgentEvent, AgentMode, AgentOptions, AgentResult, AgentStatus } from './types.ts';
 
 export const DEFAULT_MAX_STEPS = 30;
+export const DEFAULT_TOKEN_BUDGET = 500_000;
+const BUDGET_WARNING_AT = 0.8;
 const EVENT_OUTPUT_CHARS = 2000;
 const NUDGE =
   'Your last response was empty. Continue working on the request using the tools, ' +
   'or reply to the user.';
+const BUDGET_WARNING =
+  "You have used most of this turn's token budget. Finish the current change and reply to the user.";
 
 const unavailable = (name: string, mode: AgentMode) =>
   mode === 'ask'
@@ -20,6 +24,7 @@ const unavailable = (name: string, mode: AgentMode) =>
 export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
   const execute = opts.execute ?? executeTool;
   const maxSteps = opts.maxSteps ?? DEFAULT_MAX_STEPS;
+  const budget = opts.tokenBudget ?? DEFAULT_TOKEN_BUDGET;
   const overview =
     opts.system || opts.overview === false ? null : await repoOverview(opts.ctx).catch(() => null);
   const mode = opts.mode ?? 'code';
@@ -37,6 +42,8 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
   const events: AgentEvent[] = [];
   const usage = emptyUsage();
   let nudges = 0;
+  let warned: boolean = false;
+  const spent = () => usage.inputTokens + usage.cacheReadTokens + usage.outputTokens;
   let step = 0;
 
   const emit = (event: AgentEvent) => {
@@ -54,6 +61,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
 
   while (step < maxSteps) {
     if (opts.signal?.aborted) return done('aborted');
+    if (spent() >= budget) return done('budget');
     step++;
 
     const res = await opts.llm.complete({
@@ -120,7 +128,12 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
       if (parsed.ok && parsed.name === 'finish') summary = parsed.args.summary;
     }
 
-    messages.push({ role: 'user', content: results });
+    const warn: boolean = !warned && spent() >= budget * BUDGET_WARNING_AT;
+    warned ||= warn;
+    messages.push({
+      role: 'user',
+      content: warn ? [...results, { type: 'text', text: BUDGET_WARNING }] : results,
+    });
     if (summary !== undefined) return done('finished', summary);
   }
 

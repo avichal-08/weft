@@ -59,6 +59,11 @@ change, to say what it would change and suggest Code mode. The loop refuses any 
 offer, whatever the mode, so a model that calls `str_replace_edit` or `run_command` anyway gets an
 error back and nothing runs. Why: [ADR 0008](../../docs/decisions/0008-ask-mode.md).
 
+**Token budget** (`tokenBudget`, default `DEFAULT_TOKEN_BUDGET` = 500k): the input, cached and
+output tokens a turn may use. Once 80% is spent the model is told, once, to finish the current
+change and reply; once it is all spent the loop stops with `budget` before the next model call. A
+step that replies still finishes normally. Why: [ADR 0010](../../docs/decisions/0010-token-budget.md).
+
 **Tests are optional.** With a `testCommand`, the agent checks changes with `run_tests`. Without
 one, `run_tests` is not offered at all, and the prompt tells the agent to use `run_command` if
 the repo clearly has tests.
@@ -70,6 +75,7 @@ results back in one message (the APIs require every call to be answered, failed 
 | -------------- | ----------------------------------------------------------------------------- |
 | `finished`     | The model called `finish`, or answered in plain text; `summary` is the reply. |
 | `max_steps`    | The step budget (default 30) ran out.                                         |
+| `budget`       | The token budget (`tokenBudget`, default 500k) was spent; see below.          |
 | `no_tool_call` | The model returned nothing, was reminded once, and did it again.              |
 | `max_tokens`   | A response hit the output token limit without a tool call.                    |
 | `refusal`      | The model declined.                                                           |

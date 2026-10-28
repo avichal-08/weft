@@ -19,6 +19,7 @@ it and the old one gets a `Superseded by` line.
 | [0007](0007-agent-evals.md)                              | Evaluating the agent with a small suite of graded tasks      | Accepted                   |
 | [0008](0008-ask-mode.md)                                 | Ask mode: read-only turns enforced by the tool set           | Accepted                   |
 | [0009](0009-diff-checks.md)                              | Checking a chat's diff before it is committed or published   | Accepted                   |
+| [0010](0010-token-budget.md)                             | A token budget per turn                                      | Accepted                   |
 
 ## Template
 

@@ -285,7 +285,7 @@ message would make it instant.
 | Outcome     | When                                                                                                            |
 | ----------- | --------------------------------------------------------------------------------------------------------------- |
 | `succeeded` | The agent replied with `finish`, and the tests pass if there is a test command.                                 |
-| `failed`    | `tests_failed`, or the agent stopped early (`max_steps`, `no_tool_call`, ...).                                  |
+| `failed`    | `tests_failed`, or the agent stopped early (`max_steps`, `budget`, `no_tool_call`, ...).                        |
 | `error`     | `clone_failed`, `apply_failed`, `setup_failed`, `disk_limit`, `llm_<kind>` (e.g. `llm_rate_limit`), `internal`. |
 
 Failed runs keep the diff and the tail of the test output in `failure_detail`.
@@ -295,21 +295,22 @@ the worker stops taking jobs, lets active runs finish, then closes Redis and Pos
 
 ## Configuration
 
-| Variable                                       | Default                                                |
-| ---------------------------------------------- | ------------------------------------------------------ |
-| `DATABASE_URL`                                 | required (Neon, pooled)                                |
-| `REDIS_URL`                                    | `redis://localhost:6379`                               |
-| `SANDBOX_IMAGE`                                | `weft-sandbox:dev`                                     |
-| `WORKER_ID`                                    | `<hostname>-<random>`                                  |
-| `WORKER_CONCURRENCY`                           | `1`                                                    |
-| `ALLOW_FILE_REPOS`                             | `false`                                                |
-| `JANITOR_INTERVAL_MS`                          | `60000`                                                |
-| `INSTALL_CACHE_DIR`                            | `~/.cache/weft/installs`; empty disables the cache     |
-| `INSTALL_CACHE_MAX_MB`                         | `10240`                                                |
-| `SESSION_SANDBOXES_MAX`                        | `2`; sandboxes kept between turns, `0` disables        |
-| `SESSION_SANDBOX_IDLE_MS`                      | `600000` (10 min)                                      |
-| `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY_PATH` | unset: publishing to GitHub is off. See `@weft/github` |
-| `LLM_*`, API keys                              | see `@weft/llm`                                        |
+| Variable                                       | Default                                                             |
+| ---------------------------------------------- | ------------------------------------------------------------------- |
+| `DATABASE_URL`                                 | required (Neon, pooled)                                             |
+| `REDIS_URL`                                    | `redis://localhost:6379`                                            |
+| `SANDBOX_IMAGE`                                | `weft-sandbox:dev`                                                  |
+| `WORKER_ID`                                    | `<hostname>-<random>`                                               |
+| `WORKER_CONCURRENCY`                           | `1`                                                                 |
+| `ALLOW_FILE_REPOS`                             | `false`                                                             |
+| `TOKEN_BUDGET`                                 | `500000` tokens per turn, unless the chat sets `config.tokenBudget` |
+| `JANITOR_INTERVAL_MS`                          | `60000`                                                             |
+| `INSTALL_CACHE_DIR`                            | `~/.cache/weft/installs`; empty disables the cache                  |
+| `INSTALL_CACHE_MAX_MB`                         | `10240`                                                             |
+| `SESSION_SANDBOXES_MAX`                        | `2`; sandboxes kept between turns, `0` disables                     |
+| `SESSION_SANDBOX_IDLE_MS`                      | `600000` (10 min)                                                   |
+| `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY_PATH` | unset: publishing to GitHub is off. See `@weft/github`              |
+| `LLM_*`, API keys                              | see `@weft/llm`                                                     |
 
 ## Known limits (M2)
 
