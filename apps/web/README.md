@@ -16,8 +16,10 @@ pnpm --filter @weft/web dev     # http://localhost:3000 (needs the api on :3001 
 | `/sessions/[id]` | The conversation, a composer, and the chat's cumulative changes                                                     |
 | `/runs/[id]`     | One turn in detail (status, tokens, time per phase, timeline, diff), linked from each turn                          |
 
-The sidebar lists every chat, most recently active first, with a dot for the latest turn's state
-(blue and pulsing while the agent works).
+The sidebar lists every chat, most recently active first, grouped into Today, Yesterday, Previous 7
+days and Older. Each row shows the title, the repository and how long ago, an icon only when the
+latest turn is working, failed or errored, and an accent bar on the open chat. It collapses to an
+icon rail (the button by the logo, or Ctrl/⌘+B), remembered per browser.
 
 ## The conversation
 

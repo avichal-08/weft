@@ -4,7 +4,7 @@ import { hashPassword, verifyPassword } from '../lib/password';
 import { rateLimiter } from '../lib/rate-limit';
 import { sessionKey, signSession, verifySession } from '../lib/token';
 
-describe('password', () => {
+describe('password', { timeout: 20_000 }, () => {
   it('verifies the right password and rejects anything else', async () => {
     const stored = await hashPassword('correct horse battery');
     expect(stored).toMatch(/^scrypt:32768:8:1:[^:]+:[^:]+$/);

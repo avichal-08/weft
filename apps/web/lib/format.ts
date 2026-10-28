@@ -28,3 +28,14 @@ export function elapsed(from: string | null, to: string | null): string {
   const s = Math.max(0, Math.round(((to ? Date.parse(to) : Date.now()) - Date.parse(from)) / 1000));
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
 }
+
+export type DayGroup = 'Today' | 'Yesterday' | 'Previous 7 days' | 'Older';
+
+export function dayGroup(iso: string, now = new Date()): DayGroup {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const at = Date.parse(iso);
+  if (at >= start) return 'Today';
+  if (at >= start - 86_400_000) return 'Yesterday';
+  if (at >= start - 7 * 86_400_000) return 'Previous 7 days';
+  return 'Older';
+}

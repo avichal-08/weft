@@ -7,7 +7,7 @@ import type { Finding, FormState, Session } from '@/lib/types';
 import { CommitDialog, type CommitMode } from './commit-dialog';
 
 const button =
-  'flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-[13px] transition enabled:hover:border-line-strong enabled:hover:bg-surface-2 disabled:opacity-60';
+  'flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-[13px] font-medium transition enabled:hover:border-line-strong enabled:hover:bg-surface-2 disabled:opacity-50';
 
 export function ShipControls({
   session,
@@ -46,7 +46,7 @@ export function ShipControls({
           href={session.prUrl}
           target="_blank"
           rel="noreferrer"
-          className="flex items-center gap-1.5 rounded-lg border border-ok/30 bg-ok-soft px-2.5 py-1.5 text-[13px] text-ok hover:border-ok/50"
+          className="flex items-center gap-1.5 rounded-full border border-ok/30 bg-ok-soft px-3 py-1.5 text-[13px] font-medium text-ok hover:border-ok/50"
         >
           {busy ? (
             <LoaderCircle className="size-4 animate-spin" />

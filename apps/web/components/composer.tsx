@@ -44,11 +44,11 @@ export function Composer({
       <form
         ref={form}
         action={action}
-        className="rounded-2xl border border-line-strong bg-surface shadow-card transition focus-within:border-accent/50 focus-within:ring-4 focus-within:ring-accent-soft"
+        className="rounded-[22px] border border-line-strong bg-surface/90 shadow-card backdrop-blur-xl transition focus-within:border-accent/45 focus-within:ring-4 focus-within:ring-accent-soft"
       >
         <textarea
           ref={input}
-          className="block max-h-60 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-6 outline-none placeholder:text-faint disabled:opacity-60"
+          className="block max-h-60 w-full resize-none bg-transparent px-4 pt-4 pb-1 text-[15px] leading-6 outline-none placeholder:text-faint disabled:opacity-60"
           name="message"
           rows={1}
           placeholder={
@@ -70,7 +70,7 @@ export function Composer({
             {state.error ? (
               <span className="text-bad">{state.error}</span>
             ) : (
-              <span className="rounded-md bg-surface-2 px-2 py-1 font-mono text-[11px] text-muted">
+              <span className="rounded-full border border-line px-2.5 py-1 font-mono text-[11px] text-muted">
                 {model ?? 'default model'}
               </span>
             )}
@@ -78,7 +78,7 @@ export function Composer({
           {busy ? (
             <button
               formAction={cancelRunAction.bind(null, activeRunId)}
-              className="grid size-8 place-items-center rounded-full bg-fg text-bg transition hover:opacity-80"
+              className="grid size-9 place-items-center rounded-full bg-fg text-bg transition hover:opacity-80"
               aria-label="Stop"
               title="Stop"
             >
@@ -86,7 +86,7 @@ export function Composer({
             </button>
           ) : (
             <button
-              className="grid size-8 place-items-center rounded-full bg-accent text-white transition hover:bg-accent-hover disabled:opacity-40"
+              className="grid size-9 place-items-center rounded-full bg-fg text-bg transition hover:opacity-85 disabled:opacity-40"
               disabled={pending}
               aria-label="Send"
               title="Send (Enter)"

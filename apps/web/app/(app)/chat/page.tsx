@@ -1,17 +1,18 @@
-import { LogoMark } from '@/components/logo';
+import { PixelField } from '@/components/landing/pixel-field';
 import { NewChatForm } from '@/components/new-chat-form';
 
-export default function Home() {
+export default function NewChat() {
   return (
-    <div className="relative flex-1 overflow-y-auto">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-[radial-gradient(ellipse_at_top,var(--accent-soft),transparent_70%)]" />
-      <div className="relative mx-auto grid min-h-full max-w-2xl grid-cols-1 content-center gap-8 px-6 py-16">
-        <div className="grid justify-items-center gap-4 text-center">
-          <LogoMark className="size-11" />
-          <h1 className="text-3xl font-semibold tracking-tight">What should we work on?</h1>
-          <p className="max-w-md text-[15px] text-muted">
-            Point weft at a repository and ask a question or describe a change. It explores the code
-            in an isolated sandbox and shows every step.
+    <div className="relative isolate flex-1 overflow-y-auto">
+      <PixelField className="-z-10 [mask-image:radial-gradient(ellipse_70%_45%_at_50%_0%,black_10%,transparent_70%)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-96 bg-[radial-gradient(ellipse_55%_60%_at_50%_0%,var(--accent-soft),transparent)]" />
+      <div className="relative mx-auto grid min-h-full max-w-2xl grid-cols-1 content-center gap-9 px-6 py-16">
+        <div className="landing-rise grid justify-items-center gap-3 text-center">
+          <h1 className="text-[40px] leading-[1.05] font-semibold tracking-[-0.045em] text-balance sm:text-5xl">
+            What should we work on?
+          </h1>
+          <p className="max-w-md text-[15px] leading-7 text-muted">
+            Point weft at a GitHub repository, then ask a question or describe a change.
           </p>
         </div>
         <NewChatForm />

@@ -26,7 +26,7 @@ export function ModeToggle({
     <div
       role="radiogroup"
       aria-label="Mode"
-      className="flex shrink-0 rounded-lg bg-surface-2 p-0.5"
+      className="flex shrink-0 rounded-full border border-line bg-surface-2 p-0.5"
     >
       <input type="hidden" name="mode" value={mode} />
       {MODES.map(({ mode: m, label, title, Icon }) => (
@@ -38,7 +38,7 @@ export function ModeToggle({
           title={title}
           disabled={disabled}
           onClick={() => onChange(m)}
-          className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs transition disabled:opacity-60 ${
+          className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition disabled:opacity-60 ${
             mode === m ? 'bg-surface text-fg shadow-sm' : 'text-muted hover:text-fg'
           }`}
         >

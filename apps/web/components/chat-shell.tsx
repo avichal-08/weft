@@ -40,13 +40,13 @@ export function ChatShell({
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b border-line px-5 py-2.5">
+        <header className="flex items-center gap-3 border-b border-line bg-bg/80 px-5 py-3 backdrop-blur-xl">
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-medium">{title}</h1>
+            <h1 className="truncate text-[15px] font-semibold tracking-tight">{title}</h1>
             <div className="mt-0.5 flex items-center gap-2 text-xs text-muted">
               <span className="truncate font-mono">{repo}</span>
               {branch && (
-                <span className="flex shrink-0 items-center gap-1 rounded-md bg-surface-2 px-1.5 py-0.5 font-mono text-[11px]">
+                <span className="flex shrink-0 items-center gap-1 rounded-full border border-line px-2 py-0.5 font-mono text-[11px]">
                   <GitBranch className="size-3" />
                   {branch}
                 </span>
@@ -63,7 +63,7 @@ export function ChatShell({
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[13px] transition ${open ? 'border-line-strong bg-surface-2' : 'border-line hover:border-line-strong hover:bg-surface-2'}`}
+            className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] font-medium transition ${open ? 'border-line-strong bg-surface-2' : 'border-line hover:border-line-strong hover:bg-surface-2'}`}
           >
             <FileDiff className="size-4 text-muted" />
             <span>Changes</span>
