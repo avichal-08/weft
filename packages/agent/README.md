@@ -168,7 +168,22 @@ capped at 15 by default (`--max-steps`).
 **Report** (`eval/report.ts`): one column per label and model with pass rate overall and per
 category, cases passing every repeat, phantom edits, runs that changed existing tests, cost per
 task, median time, mean steps and tokens, plus a pass count per case. `eval/REPORT.md` is
-committed; the raw results are not.
+committed; the raw results are not. Columns follow the order of `--label`.
+
+### What the runs showed
+
+- **`baseline`** (no overview): `gemini-3.1-flash-lite` passed 32/34. The real failure was
+  `f-follow-up-question`, 0/2: asked what an input returns, it added an assertion to
+  `test/money.test.js` to find out, despite the prompt's rule. `gemini-2.5-flash-lite` (8 cases,
+  quota-limited) grepped for `*.py` in a JavaScript repository in 5 runs and gave up.
+- **`overview`** (repository overview in the prompt): searches in other languages on
+  `gemini-2.5-flash-lite` dropped to none in the 5 cases rerun, but it still stopped after one
+  search, passing 1/5. On `gemini-3.1-flash-lite` it passed 30/34: `f-follow-up-question` still
+  edited tests, and one run of `f-follow-up-change` changed an existing test's input instead of
+  adding a test, which the rewritten-lines check flagged. Not a measurable change either way at two
+  repeats.
+- **`ask`** (Ask mode, the 8 no-edit cases): 16/16, including `f-follow-up-question`, where Code mode passed
+  14/16 (`baseline`) and 12/16 (`overview`) on the same cases, at 6.1k tokens per task against 12.9k. Making the turn read-only fixed what the prompt rule and the overview did not.
 
 ## Running tools
 

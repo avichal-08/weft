@@ -22,6 +22,7 @@ export type Summary = {
   phantomEdits: number;
   testsTouched: number;
   testsRewritten: number | null;
+  wrongLanguage: number | null;
   meanCost: number | null;
   totalCost: number | null;
   medianSeconds: number;
@@ -96,6 +97,9 @@ export function summarize(key: string, rows: Result[]): Summary {
     testsRewritten: scored.every((r) => r.testLinesRewritten !== undefined)
       ? scored.filter((r) => r.testLinesRewritten! > 0).length
       : null,
+    wrongLanguage: scored.every((r) => r.wrongLanguage !== undefined)
+      ? scored.filter((r) => r.wrongLanguage! > 0).length
+      : null,
     meanCost: priced ? mean(costs) : null,
     totalCost: priced ? costs.reduce((a, b) => a + b, 0) : null,
     medianSeconds: median(scored.map((r) => r.seconds ?? 0)),
@@ -143,6 +147,10 @@ export function render(summaries: Summary[], generated: string): string {
     row(
       'Runs that edited existing test files (adding tests counts)',
       summaries.map((s) => String(s.testsTouched)),
+    ),
+    row(
+      'Runs that searched other languages (`*.py` in a JS repo)',
+      summaries.map((s) => (s.wrongLanguage === null ? 'n/a' : String(s.wrongLanguage))),
     ),
     row(
       'Cost per task (list price)',
@@ -221,7 +229,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       groups.set(key, [...(groups.get(key) ?? []), r]);
     }
   }
+  const order = (key: string) => {
+    const i = values.label?.findIndex((l) => key.startsWith(`${l}-`)) ?? -1;
+    return i === -1 ? Infinity : i;
+  };
   const summaries = [...groups]
+    .sort(([a], [b]) => order(a) - order(b) || a.localeCompare(b))
     .map(([key, rows]) => summarize(key, rows))
     .filter((s) => s.runs > 0);
   const out = values.out ?? fileURLToPath(new URL('./REPORT.md', import.meta.url));

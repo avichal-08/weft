@@ -47,6 +47,20 @@ edits when only a question was asked, and no replies claiming changes that were 
 Results, with cost and time per task, are in [`REPORT.md`](packages/agent/eval/REPORT.md); the
 reasoning is in [ADR 0007](docs/decisions/0007-agent-evals.md).
 
+On `gemini-3.1-flash-lite`, two runs of each task:
+
+- **94% of runs pass** (32/34), at about $0.005 per task at list price and a 23 s median. Bug
+  fixes, features and traps pass every run, with no replies claiming changes that weren't made.
+- **The failure the eval found:** asked a question in a follow-up, the agent edited a test file to
+  answer it, in every Code-mode run. **Ask mode** ([ADR 0008](docs/decisions/0008-ask-mode.md))
+  makes such turns read-only: 16/16 on the 8 question-style tasks, where Code mode passed 12–14 of
+  16, at about half the tokens (6.1k against 12.9k per task).
+- **A repository overview in the prompt** (file counts by language, top-level layout, test
+  scripts) stopped the smaller `gemini-2.5-flash-lite` from searching for `*.py` in a JavaScript
+  repository (5 runs of 8 before, none after), but it still gives up too early, and on
+  `gemini-3.1-flash-lite` it made no measurable difference (88% against 94%, within the noise of
+  two runs per task).
+
 ## Stack
 
 TypeScript throughout, in a pnpm and Turborepo monorepo. Next.js 16 and React 19 for the web

@@ -67,6 +67,13 @@ describe('summarize', () => {
     expect(counted.testsRewritten).toBe(1);
   });
 
+  it('counts runs that searched other languages when every run recorded it', () => {
+    expect(s.wrongLanguage).toBeNull();
+    expect(
+      summarize('x', [run({ wrongLanguage: 0 }), run({ wrongLanguage: 2 })]).wrongLanguage,
+    ).toBe(1);
+  });
+
   it('gives no cost when a model has no known price', () => {
     expect(summarize('x', [run({ costUsd: null })]).meanCost).toBeNull();
   });
