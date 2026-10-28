@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createProvider, LLMError, loadLLMConfig, withRetry, type Message } from '@weft/llm';
 import { createSandbox, type Sandbox } from '@weft/sandbox';
-import { createToolContext, runAgent } from '../src/index.ts';
+import { createToolContext, runAgent, type AgentMode } from '../src/index.ts';
 import { cases, type EvalCase, type Fixture } from './cases.ts';
 import { costUsd } from './pricing.ts';
 import { isPhantomEdit, rewrittenTestLines, score, wrongLanguageSearches } from './score.ts';
@@ -20,6 +20,7 @@ const { values } = parseArgs({
     'max-steps': { type: 'string', default: '15' },
     resume: { type: 'boolean', default: false },
     overview: { type: 'string', default: 'true' },
+    mode: { type: 'string', default: 'code' },
   },
 });
 
@@ -42,9 +43,12 @@ const llm = withRetry(createProvider(config), {
     console.log(`    retry ${attempt} in ${(delayMs / 1000).toFixed(1)}s: ${error.kind}`),
 });
 
-const selected = cases((fixture, path) =>
-  readFileSync(join(fixtures[fixture], path), 'utf8'),
-).filter((c) => !values.only || c.name.includes(values.only));
+if (values.mode !== 'code' && values.mode !== 'ask') throw new Error('--mode is code or ask');
+const mode: AgentMode = values.mode;
+
+const selected = cases((fixture, path) => readFileSync(join(fixtures[fixture], path), 'utf8'))
+  .filter((c) => !values.only || c.name.includes(values.only))
+  .filter((c) => mode === 'code' || !c.expect.edits);
 
 const text = (t: string) => [{ type: 'text' as const, text: t }];
 const historyOf = (c: EvalCase): Message[] =>
@@ -76,6 +80,7 @@ const DAILY_QUOTA = /per ?day|daily/i;
 export type Result = {
   model?: string;
   label?: string;
+  mode?: AgentMode;
   name: string;
   category: EvalCase['category'];
   round: number;
@@ -124,6 +129,7 @@ async function runCase(c: EvalCase, round: number): Promise<Result> {
       history: historyOf(c),
       maxSteps: Number(values['max-steps']),
       overview: values.overview !== 'false',
+      mode,
     });
     const seconds = (performance.now() - started) / 1000;
 
@@ -213,7 +219,7 @@ if (values.resume) {
 }
 
 console.log(
-  `weft eval | ${llm.provider}/${llm.model} | ${selected.length} cases x ${values.repeat} | ${file}` +
+  `weft eval | ${llm.provider}/${llm.model} | ${mode} mode | ${selected.length} cases x ${values.repeat} | ${file}` +
     (done.size ? ` | resuming, ${done.size} done` : '') +
     '\n',
 );
@@ -223,7 +229,10 @@ for (let round = 1; round <= Number(values.repeat) && !stopped; round++) {
   for (const c of selected) {
     if (done.has(`${c.name}#${round}`)) continue;
     const r = await runCase(c, round);
-    await appendFile(file, `${JSON.stringify({ model: llm.model, label: values.label, ...r })}\n`);
+    await appendFile(
+      file,
+      `${JSON.stringify({ model: llm.model, label: values.label, mode, ...r })}\n`,
+    );
     const stats =
       r.steps === undefined
         ? ''

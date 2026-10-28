@@ -96,6 +96,8 @@ the tests independently and prints the `git diff`.
 pnpm --filter @weft/agent eval --provider gemini --model gemini-3.1-flash-lite --label baseline --repeat 2
 pnpm --filter @weft/agent eval --label baseline --repeat 2 --resume   # continue after a quota stop
 pnpm --filter @weft/agent eval --only q- --max-steps 10               # a subset
+pnpm --filter @weft/agent eval --mode ask --label ask --repeat 2     # read-only, no-edit cases only
+pnpm --filter @weft/agent eval --overview false --label baseline      # without the repo overview
 pnpm --filter @weft/agent eval:report --label baseline --label fix    # writes eval/REPORT.md
 ```
 
@@ -138,6 +140,10 @@ file, every hidden test fails before the agent runs, and passes with a reference
   changed is a **phantom edit**. Traps can also forbid touching existing tests (`keepTests`),
   require a file to contain something (`files`), and replies can be required to mention or not
   say certain things.
+
+**Ask mode** (`--mode ask`) runs the agent read-only and only the cases that expect no edits (the
+questions, the follow-ups that recall or ask, and the traps whose answer is that the work already
+exists), since a change request can't pass without editing. Rows record their `mode`.
 
 **Measured per run**: steps, input, output and cached tokens, cost at the paid-tier list price
 (`eval/pricing.ts`, with its source; runs use the free tier), wall time and time spent in the
