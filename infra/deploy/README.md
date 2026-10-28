@@ -1,6 +1,7 @@
 # infra/deploy
 
-Production stack for one VM ([ADR 0012](../../docs/decisions/0012-single-vm-deployment.md)):
+Production stack for one VM ([ADR 0012](../../docs/decisions/0012-single-vm-deployment.md)), on AWS
+EC2 ([ADR 0013](../../docs/decisions/0013-hosting-on-aws-ec2.md)):
 Caddy in front, web, api, worker and Redis behind it, Postgres on Neon.
 
 | Service   | Image                              | Exposed    | Gets                                                       |
@@ -23,7 +24,7 @@ Caddy in front, web, api, worker and Redis behind it, Postgres on Neon.
 
 ## Run it
 
-The full runbook, from creating the VM to operating it, is [`docs/deploy.md`](../../docs/deploy.md);
+The full runbook, from the AWS account to operating the instance, is [`docs/deploy.md`](../../docs/deploy.md);
 `bootstrap.sh` prepares a fresh Ubuntu VM (Docker, swap, security updates, `/opt/weft`). On the
 VM this folder is all of the repository there is: a sparse checkout at `/opt/weft`, updated with
 `git pull`, next to the `.env` and key file that never leave the server.

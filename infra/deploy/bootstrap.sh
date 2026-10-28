@@ -7,7 +7,7 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-DEPLOY_USER="${SUDO_USER:-azureuser}"
+DEPLOY_USER="${SUDO_USER:-ubuntu}"
 SWAP_SIZE="${SWAP_SIZE:-4G}"
 export DEBIAN_FRONTEND=noninteractive
 

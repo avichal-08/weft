@@ -1,6 +1,6 @@
 # 0012. Deploying on one VM with Docker Compose
 
-- Status: Accepted
+- Status: Accepted; the choice of Azure superseded by [0013](0013-hosting-on-aws-ec2.md)
 - Date: 2026-10-28
 
 ## Context
