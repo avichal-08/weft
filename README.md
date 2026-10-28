@@ -39,6 +39,7 @@ apps/
   web/           chat ui: conversations, live work log, changes panel (next.js)
   worker/        runs turns: clone → sandbox → install → agent → verify → diff
 docs/
+  architecture.md one-page map of the system
   decisions/     architecture decision records: what was chosen, and why
 infra/
   compose.yml    redis (queue + live streams)
