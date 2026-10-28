@@ -23,6 +23,9 @@ Caddy in front, web, api, worker and Redis behind it, Postgres on Neon.
 
 ## Run it
 
+The full runbook, from creating the VM to operating it, is [`docs/deploy.md`](../../docs/deploy.md);
+`bootstrap.sh` prepares a fresh Ubuntu VM (Docker, swap, security updates, `/opt/weft`).
+
 ```bash
 cp .env.example .env && chmod 600 .env    # fill it in
 docker compose --profile image pull sandbox

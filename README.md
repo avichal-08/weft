@@ -76,6 +76,7 @@ apps/
   worker/        runs turns: clone → sandbox → install → agent → verify → diff
 docs/
   architecture.md one-page map of the system
+  deploy.md      runbook: create the vm, configure and run weft
   decisions/     architecture decision records: what was chosen, and why
 infra/
   compose.yml    redis for development (queue + live streams)
