@@ -24,7 +24,9 @@ Caddy in front, web, api, worker and Redis behind it, Postgres on Neon.
 ## Run it
 
 The full runbook, from creating the VM to operating it, is [`docs/deploy.md`](../../docs/deploy.md);
-`bootstrap.sh` prepares a fresh Ubuntu VM (Docker, swap, security updates, `/opt/weft`).
+`bootstrap.sh` prepares a fresh Ubuntu VM (Docker, swap, security updates, `/opt/weft`). On the
+VM this folder is all of the repository there is: a sparse checkout at `/opt/weft`, updated with
+`git pull`, next to the `.env` and key file that never leave the server.
 
 ```bash
 cp .env.example .env && chmod 600 .env    # fill it in

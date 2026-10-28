@@ -75,12 +75,28 @@ creates `/opt/weft`. It prints `DOCKER_GID=...` for the next step. It is safe to
 
 ## 5. Configure weft
 
-The VM keeps a clone of the repository; the stack runs from `infra/deploy` inside it, where
-`.env` and the key file sit next to `compose.yml` (both are ignored by git). Log in again after
-`bootstrap.sh` so the `docker` group applies, then:
+The VM runs images, not source code, so it keeps only the `infra/deploy` folder of the
+repository: a sparse checkout, which still updates with `git pull`. `.env` and the key file sit
+next to `compose.yml` there, both ignored by git. Log in again after `bootstrap.sh` so the
+`docker` group applies, then on the VM:
 
 ```bash
-ssh azureuser@<vm-ip> 'git clone https://github.com/avichal-08/weft.git /opt/weft'
+git clone --filter=blob:none --no-checkout https://github.com/avichal-08/weft.git /opt/weft
+cd /opt/weft
+git sparse-checkout set --no-cone '/infra/deploy/'
+git checkout main
+find . -path ./.git -prune -o -type f -print    # only infra/deploy/*
+```
+
+`--filter=blob:none` skips downloading the contents of everything else, and the `--no-cone`
+pattern limits the working tree to exactly `infra/deploy`. (The default cone mode would also check
+out the files at the top of the repository and in `infra/`.) The `build:` sections in `compose.yml` refer to the
+rest of the repository, so the VM can't build images; it only pulls them. To build there in an
+emergency, widen the checkout with `git sparse-checkout disable` (and set it back afterwards).
+
+Then copy the GitHub App key from your machine:
+
+```bash
 scp ~/.config/weft/github-app.pem azureuser@<vm-ip>:/opt/weft/infra/deploy/github-app.pem
 ```
 
@@ -164,7 +180,7 @@ docker compose logs -f worker              # each turn's steps and timings
 | Change the password | new `WEFT_PASSWORD_HASH`, then `docker compose up -d web`                                                                                   |
 
 Wait for the commit's CI run to finish before deploying it: `latest` moves only once its images
-are published. `git pull` brings changes to `compose.yml` and the `Caddyfile`; the images bring
+are published. `git pull` updates only `infra/deploy` (`compose.yml`, the `Caddyfile`); the images bring
 everything else. Run `docker image prune -f` now and then to drop old image layers.
 
 A redeploy waits up to 10 minutes for active turns to finish (`stop_grace_period`). A deallocated
