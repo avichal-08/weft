@@ -1,35 +1,57 @@
 # weft
 
-A cloud coding agent, in the spirit of Claude Code on the web: hand it work on a GitHub repo and
-watch it build in an isolated sandbox.
+A cloud coding agent, in the spirit of Claude Code on the web. Point it at a GitHub repository,
+ask for a fix, a feature, a review or an explanation, watch it work in an isolated sandbox, and
+ship the result as a pull request.
 
-> Early and in active development. The first list is where it's headed; the second is what works
-> today.
+## What it does
 
-## Where it's going
+- **Chat with a repository.** Each message is a turn that continues from the previous one's
+  changes: questions, changes, corrections and follow-ups in one conversation. The agent finds
+  code the way Claude Code does, with `grep`, `glob` and reading files, not an embedding index,
+  and runs on Anthropic, OpenAI, Gemini or OpenRouter models.
+- **Ship it as a pull request.** Commit when the work is ready (weft drafts the message, you edit
+  it), then Create PR. A GitHub App pushes the branch as its own bot with repo-scoped,
+  short-lived tokens that never enter the sandbox. Later commits go to the same pull request.
+- **Checked, not trusted.** Tests are rerun in a fresh sandbox with only the agent's diff
+  applied, and nothing can be committed or published while they fail.
+- **A locked-down sandbox per chat.** Dependencies install with network, then the network is
+  cut and the agent works offline, as an unprivileged user with no capabilities and capped
+  memory, processes and disk.
+- **Fast follow-ups.** Installed dependencies become copy-on-write image layers and a chat keeps
+  its sandbox between messages, so on a repository with 639 MB of `node_modules` a follow-up
+  starts in about 1 s instead of 55 s.
+- **Live and replayable.** Every model call and tool call streams to the browser as it happens
+  and is stored as a trace.
 
-- **Hand it real work.** Connect a repo and ask it to fix a bug, build a feature, refactor,
-  review, or explain how something works.
-- **Steer it like a teammate.** One conversation per task: follow-ups, corrections and questions,
-  with every step visible live.
-- **Ship the result.** Changes come back as a pull request, checked by the tests.
+## How it works
 
-## Where it is now
+The web app talks to an API, which stores each message as a run in Postgres and queues it in
+Redis. A worker picks the run up, prepares a sandbox, runs the agent loop against the model,
+collects the change as a git diff, verifies it in a clean sandbox and records the result, while
+streaming every step back through Redis. Publishing is a separate job that pushes commits to a
+branch and opens the pull request.
 
-- **Chat with a public GitHub repo**: each message is a turn that continues from the previous
-  one's changes, with Claude Code-style agentic search (`grep`, `glob`, reading files, no
-  embedding index), on Anthropic, OpenAI, Gemini or OpenRouter.
-- **Ship it as a pull request**: commit when the work is ready (weft drafts the message, you edit
-  it), then Create PR; a GitHub App pushes the branch as its own bot with repo-scoped, short-lived
-  tokens that never enter the sandbox. Later commits go to the same pull request.
-- **A locked-down sandbox per chat**: dependencies install with network, then the network is cut
-  and the agent works offline. Tests are rerun in a fresh sandbox before a turn counts as passing,
-  and nothing can be committed or published while they fail.
-- **Fast follow-ups**: installed dependencies become copy-on-write image layers and a chat keeps
-  its sandbox between messages, so on a repo with 639 MB of `node_modules` a follow-up starts in
-  about 1 s instead of 55 s. Why each piece works the way it does is in
-  [`docs/decisions`](docs/decisions).
-- **Live and replayable**: every step streams to the browser and is stored as a trace.
+- [`docs/architecture.md`](docs/architecture.md): a one-page map of the system and a turn, end to
+  end.
+- [`docs/decisions`](docs/decisions): why each piece works the way it does, with the numbers and
+  the alternatives considered.
+
+## Evaluation
+
+Changes to the agent are measured, not judged by a few chats. The eval suite in
+[`packages/agent/eval`](packages/agent/eval) runs 17 tasks in the real sandbox: questions, bug
+fixes, features, follow-ups, and traps where the right answer is to change nothing. Each run is
+graded by code: hidden tests the agent never saw, the original tests restored and rerun, no
+edits when only a question was asked, and no replies claiming changes that were never made.
+Results, with cost and time per task, are in [`REPORT.md`](packages/agent/eval/REPORT.md); the
+reasoning is in [ADR 0007](docs/decisions/0007-agent-evals.md).
+
+## Stack
+
+TypeScript throughout, in a pnpm and Turborepo monorepo. Next.js 16 and React 19 for the web
+app, Express 5 for the API, BullMQ and Redis for queues and live streams, Postgres on Neon with
+Drizzle, Docker for sandboxes, Vitest for tests.
 
 ## Layout
 
@@ -45,15 +67,17 @@ infra/
   compose.yml    redis (queue + live streams)
   sandbox/       image every agent run executes in
 packages/
-  queue/         bullmq queue and redis live streams shared by api and worker
-  db/            postgres schema and migrations (drizzle, neon)
-  agent/         the coding agent: tools and loop
+  agent/         the coding agent: tools, loop and eval suite
   sandbox/       docker sandbox lifecycle (dockerode)
-  github/        github app auth: app jwt, installation tokens
   llm/           provider-agnostic llm client (anthropic, openai, gemini, openrouter, mock)
+  queue/         bullmq queues and redis live streams shared by api and worker
+  db/            postgres schema and migrations (drizzle, neon)
+  github/        github app auth: app jwt, installation tokens, pull requests
   tsconfig/      shared TypeScript config
   eslint-config/ shared ESLint flat config
 ```
+
+Each app and package has its own README with the details.
 
 ## Development
 
@@ -76,10 +100,22 @@ pnpm --filter @weft/worker dev
 pnpm --filter @weft/web dev
 ```
 
+Or start a chat from the command line:
+
 ```bash
 curl -X POST localhost:3001/sessions -H 'content-type: application/json' \
   -d '{"repoUrl":"https://github.com/you/repo","message":"What does this repo do?"}'
 ```
 
 Postgres is hosted on [Neon](https://neon.tech). `DATABASE_URL` is the pooled connection used by
-the services; `DATABASE_URL_UNPOOLED` is the direct one, used for migrations.
+the services; `DATABASE_URL_UNPOOLED` is the direct one, used for migrations. Publishing needs a
+GitHub App installed on the repository, with contents and pull requests write access:
+`GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY_PATH` (see
+[`packages/github`](packages/github/README.md)). Without it, everything except publishing works.
+
+Run the agent evals with a model of your choice:
+
+```bash
+pnpm --filter @weft/agent eval --provider gemini --model gemini-3.1-flash-lite --label run
+pnpm --filter @weft/agent eval:report
+```
