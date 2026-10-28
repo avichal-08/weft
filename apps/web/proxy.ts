@@ -7,6 +7,9 @@ export async function proxy(request: NextRequest) {
     sessionKey(process.env.SESSION_SECRET),
   );
   if (ok) return NextResponse.next();
+  if (request.nextUrl.pathname === '/') {
+    return NextResponse.rewrite(new URL('/welcome', request.url));
+  }
   if (request.nextUrl.pathname.startsWith('/api/')) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
@@ -14,5 +17,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!(?:login|healthz)(?:/|$)|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!(?:login|healthz|welcome)(?:/|$)|_next/static|_next/image|favicon.ico).*)'],
 };
