@@ -5,7 +5,7 @@ export { createToolContext, DEFAULT_TEST_TIMEOUT_MS, executeTool } from './tools
 export { parseToolCall } from './tools/parse.ts';
 export { glob, grep, viewFile } from './tools/read.ts';
 export { finish, runCommand, runTests } from './tools/run.ts';
-export { TOOL_NAMES, toolSpec, toolSpecs } from './tools/specs.ts';
+export { READ_ONLY_TOOL_NAMES, TOOL_NAMES, toolSpec, toolSpecs } from './tools/specs.ts';
 export { createFile, strReplaceEdit } from './tools/write.ts';
 export { DEFAULT_MAX_STEPS, runAgent } from './loop.ts';
 export { repoOverview, summarizeFiles } from './overview.ts';

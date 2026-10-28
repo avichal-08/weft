@@ -17,6 +17,7 @@ it and the old one gets a `Superseded by` line.
 | [0005](0005-publishing-chats-as-branches.md)             | Publishing a chat as a branch with one commit per turn       | Superseded in part by 0006 |
 | [0006](0006-user-commits-with-generated-messages.md)     | Commits made by the user, with generated messages            | Accepted                   |
 | [0007](0007-agent-evals.md)                              | Evaluating the agent with a small suite of graded tasks      | Accepted                   |
+| [0008](0008-ask-mode.md)                                 | Ask mode: read-only turns enforced by the tool set           | Accepted                   |
 
 ## Template
 

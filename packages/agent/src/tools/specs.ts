@@ -5,6 +5,8 @@ import { TOOLS } from './definitions.ts';
 
 export const TOOL_NAMES = Object.keys(TOOLS) as ToolName[];
 
+export const READ_ONLY_TOOL_NAMES: readonly ToolName[] = ['grep', 'glob', 'view_file', 'finish'];
+
 export function toolSpec(name: ToolName): ToolSpec {
   const { $schema: _, ...inputSchema } = z.toJSONSchema(TOOLS[name].schema, { io: 'input' });
   return { name, description: TOOLS[name].description, inputSchema };

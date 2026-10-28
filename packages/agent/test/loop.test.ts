@@ -145,6 +145,57 @@ describe('runAgent', () => {
     expect(names).toContain('run_command');
     expect(llm.calls[0]!.system).toContain('No test command is configured');
   });
+
+  it('refuses a tool it did not offer', async () => {
+    const without = createToolContext({ sandbox: {} as Sandbox, root: '/w' });
+    const llm = createMockProvider([
+      turn(tool('run_tests', {})),
+      turn(tool('finish', { summary: 's' })),
+    ]);
+    const res = await runAgent({ llm, ctx: without, task: 't', execute: echo });
+    expect(res.events.find((e) => e.type === 'tool' && e.name === 'run_tests')).toMatchObject({
+      isError: true,
+      output: 'run_tests is not available in this repository.',
+    });
+  });
+
+  describe('in Ask mode', () => {
+    it('offers only the read-only tools and says so in the prompt', async () => {
+      const llm = createMockProvider([turn(tool('finish', { summary: 's' }))]);
+      await runAgent({ llm, ctx, task: 't', mode: 'ask', execute: echo });
+      expect(llm.calls[0]!.tools!.map((t) => t.name)).toEqual([
+        'grep',
+        'glob',
+        'view_file',
+        'finish',
+      ]);
+      expect(llm.calls[0]!.system).toContain('Ask mode');
+      expect(llm.calls[0]!.system).not.toContain('str_replace_edit');
+    });
+
+    it('never executes an edit or a command, even when the model calls one', async () => {
+      const executed: string[] = [];
+      const record: ToolExecutor = (c, call) => {
+        executed.push(call.name);
+        return echo(c, call);
+      };
+      const llm = createMockProvider([
+        turn(
+          tool('str_replace_edit', { path: 'a.js', old_str: 'a', new_str: 'b' }, 'e'),
+          tool('create_file', { path: 'b.js', content: 'x' }, 'c'),
+          tool('run_command', { command: 'rm -rf src' }, 'r'),
+          tool('view_file', { path: 'a.js' }, 'v'),
+        ),
+        turn(tool('finish', { summary: 'answered' })),
+      ]);
+      const res = await runAgent({ llm, ctx, task: 't', mode: 'ask', execute: record });
+      expect(executed).toEqual(['view_file', 'finish']);
+      expect(res.status).toBe('finished');
+      const refused = res.events.filter((e) => e.type === 'tool' && e.isError);
+      expect(refused).toHaveLength(3);
+      expect(refused[0]?.type === 'tool' && refused[0].output).toContain('Ask mode');
+    });
+  });
 });
 
 describe('systemPrompt', () => {

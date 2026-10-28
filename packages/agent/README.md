@@ -53,6 +53,12 @@ answer questions without editing, make focused edits for change requests, and en
 with `finish`, whose `summary` is the reply shown to the user. `history` goes before the new
 message, so follow-ups have context.
 
+**Ask mode** (`mode: 'ask'`) makes a turn read-only: the model is offered only `grep`, `glob`,
+`view_file` and `finish`, and the prompt tells it to answer from the code and, when asked for a
+change, to say what it would change and suggest Code mode. The loop refuses any tool it didn't
+offer, whatever the mode, so a model that calls `str_replace_edit` or `run_command` anyway gets an
+error back and nothing runs. Why: [ADR 0008](../../docs/decisions/0008-ask-mode.md).
+
 **Tests are optional.** With a `testCommand`, the agent checks changes with `run_tests`. Without
 one, `run_tests` is not offered at all, and the prompt tells the agent to use `run_command` if
 the repo clearly has tests.

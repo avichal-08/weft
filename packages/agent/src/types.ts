@@ -38,6 +38,8 @@ export type ToolOutput = {
   isError: boolean;
 };
 
+export type AgentMode = 'code' | 'ask';
+
 export type AgentStatus =
   'finished' | 'max_steps' | 'no_tool_call' | 'max_tokens' | 'refusal' | 'aborted';
 
@@ -70,6 +72,7 @@ export type AgentOptions = {
   history?: Message[];
   system?: string;
   overview?: boolean;
+  mode?: AgentMode;
   maxSteps?: number;
   maxNudges?: number;
   maxTokens?: number;

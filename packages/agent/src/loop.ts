@@ -3,8 +3,8 @@ import { repoOverview } from './overview.ts';
 import { systemPrompt } from './prompt.ts';
 import { executeTool } from './tools/execute.ts';
 import { parseToolCall } from './tools/parse.ts';
-import { TOOL_NAMES, toolSpecs } from './tools/specs.ts';
-import type { AgentEvent, AgentOptions, AgentResult, AgentStatus } from './types.ts';
+import { READ_ONLY_TOOL_NAMES, TOOL_NAMES, toolSpecs } from './tools/specs.ts';
+import type { AgentEvent, AgentMode, AgentOptions, AgentResult, AgentStatus } from './types.ts';
 
 export const DEFAULT_MAX_STEPS = 30;
 const EVENT_OUTPUT_CHARS = 2000;
@@ -12,15 +12,23 @@ const NUDGE =
   'Your last response was empty. Continue working on the request using the tools, ' +
   'or reply to the user.';
 
+const unavailable = (name: string, mode: AgentMode) =>
+  mode === 'ask'
+    ? `${name} is not available: this message is in Ask mode, which is read-only. Answer from the code you can read.`
+    : `${name} is not available in this repository.`;
+
 export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
   const execute = opts.execute ?? executeTool;
   const maxSteps = opts.maxSteps ?? DEFAULT_MAX_STEPS;
   const overview =
     opts.system || opts.overview === false ? null : await repoOverview(opts.ctx).catch(() => null);
-  const system = opts.system ?? systemPrompt(opts.ctx.testCommand, overview);
-  const tools = toolSpecs(
-    opts.ctx.testCommand ? TOOL_NAMES : TOOL_NAMES.filter((name) => name !== 'run_tests'),
-  );
+  const mode = opts.mode ?? 'code';
+  const system = opts.system ?? systemPrompt(opts.ctx.testCommand, overview, mode);
+  const offered =
+    mode === 'ask'
+      ? READ_ONLY_TOOL_NAMES
+      : TOOL_NAMES.filter((name) => opts.ctx.testCommand || name !== 'run_tests');
+  const tools = toolSpecs(offered);
 
   const messages: Message[] = [
     ...(opts.history ?? []),
@@ -87,9 +95,11 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
     for (const call of calls) {
       const started = performance.now();
       const parsed = parseToolCall(call);
-      const out = parsed.ok
-        ? await execute(opts.ctx, parsed)
-        : { content: parsed.error, isError: true };
+      const out = !parsed.ok
+        ? { content: parsed.error, isError: true }
+        : !offered.includes(parsed.name)
+          ? { content: unavailable(parsed.name, mode), isError: true }
+          : await execute(opts.ctx, parsed);
 
       results.push({
         type: 'tool_result',
