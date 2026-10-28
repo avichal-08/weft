@@ -20,6 +20,7 @@ it and the old one gets a `Superseded by` line.
 | [0008](0008-ask-mode.md)                                 | Ask mode: read-only turns enforced by the tool set           | Accepted                   |
 | [0009](0009-diff-checks.md)                              | Checking a chat's diff before it is committed or published   | Accepted                   |
 | [0010](0010-token-budget.md)                             | A token budget per turn                                      | Accepted                   |
+| [0011](0011-single-user-sign-in.md)                      | Single-user sign-in with a password and a signed cookie      | Accepted                   |
 
 ## Template
 

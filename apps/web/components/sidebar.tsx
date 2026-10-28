@@ -1,6 +1,7 @@
-import { Plus } from 'lucide-react';
+import { LogOut, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { Suspense } from 'react';
+import { logoutAction } from '@/app/login/actions';
 import { listSessions } from '@/lib/api';
 import { ago, repoName } from '@/lib/format';
 import { Logo } from './logo';
@@ -65,6 +66,11 @@ export function Sidebar() {
           <SessionList />
         </Suspense>
       </nav>
+      <form action={logoutAction} className="border-t border-line px-3 py-3">
+        <button className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] text-muted transition hover:bg-surface-2 hover:text-fg">
+          <LogOut className="size-4" /> Sign out
+        </button>
+      </form>
     </aside>
   );
 }

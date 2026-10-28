@@ -11,6 +11,7 @@ import {
   sendMessage,
   type ApiError,
 } from '@/lib/api';
+import { requireSession } from '@/lib/session';
 import type { FormState, RunMode } from '@/lib/types';
 
 const text = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
@@ -23,6 +24,7 @@ const describe = (status: number, body: ApiError) =>
   `request failed (${status})`;
 
 export async function createSessionAction(_prev: FormState, form: FormData): Promise<FormState> {
+  await requireSession();
   const fields = {
     repoUrl: text(form, 'repoUrl'),
     baseRef: text(form, 'baseRef'),
@@ -52,6 +54,7 @@ export async function sendMessageAction(
   _prev: FormState,
   form: FormData,
 ): Promise<FormState> {
+  await requireSession();
   const message = text(form, 'message');
   if (!message) return {};
   const res = await sendMessage(sessionId, message, modeOf(form));
@@ -67,11 +70,13 @@ export async function sendMessageAction(
 }
 
 export async function cancelRunAction(id: string): Promise<void> {
+  await requireSession();
   await cancelRun(id);
   refresh();
 }
 
 export async function publishAction(sessionId: string): Promise<FormState> {
+  await requireSession();
   const res = await publishSession(sessionId);
   if (!res.ok) return { error: describe(res.status, res.body) };
   refresh();
@@ -81,6 +86,7 @@ export async function publishAction(sessionId: string): Promise<FormState> {
 export async function draftCommitAction(
   sessionId: string,
 ): Promise<{ message?: string; error?: string }> {
+  await requireSession();
   const res = await draftCommit(sessionId);
   return res.ok ? { message: res.data.message } : { error: describe(res.status, res.body) };
 }
@@ -90,6 +96,7 @@ export async function saveCommitAction(
   message: string,
   openPullRequest: boolean,
 ): Promise<{ error?: string }> {
+  await requireSession();
   const saved = await createCommit(sessionId, message);
   if (!saved.ok) return { error: describe(saved.status, saved.body) };
   if (openPullRequest) {

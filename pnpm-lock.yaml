@@ -227,6 +227,9 @@ importers:
 
   apps/web:
     dependencies:
+      jose:
+        specifier: ^6.2.13
+        version: 6.2.13
       lucide-react:
         specifier: ^1.59.0
         version: 1.59.0(@types/react@19.3.0)(react@19.3.0)
@@ -276,6 +279,9 @@ importers:
       typescript:
         specifier: ~6.0.0
         version: 6.0.3
+      vitest:
+        specifier: ^5.0.5
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
 
   apps/worker:
     dependencies:
@@ -3291,6 +3297,9 @@ packages:
   jiti@2.7.0:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
+
+  jose@6.2.13:
+    resolution: {integrity: sha512-7TIg10ZE1x82YediN+lcrPNvGMKge9yFHQD+Qho/b8y2adfugU3AsvvHfxV0fzyFllT6l9xCjf4RWY9g/Z9PJQ==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -7332,6 +7341,8 @@ snapshots:
       set-function-name: 2.0.2
 
   jiti@2.7.0: {}
+
+  jose@6.2.13: {}
 
   js-tokens@4.0.0: {}
 

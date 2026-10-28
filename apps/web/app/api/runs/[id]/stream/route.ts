@@ -1,6 +1,8 @@
 import { API_URL } from '@/lib/api';
+import { signedIn } from '@/lib/session';
 
 export async function GET(request: Request, ctx: RouteContext<'/api/runs/[id]/stream'>) {
+  if (!(await signedIn())) return Response.json({ error: 'unauthorized' }, { status: 401 });
   const { id } = await ctx.params;
   const headers = new Headers({ accept: 'text/event-stream' });
   const last = request.headers.get('last-event-id');

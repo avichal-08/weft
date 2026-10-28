@@ -116,9 +116,38 @@ Actions create chats, send messages and cancel turns, and one route handler prox
 stream, all from the Next.js server (`lib/api.ts`, marked `server-only`). There is no CORS to configure and the API doesn't need to be
 reachable from the browser.
 
-| Variable  | Default                 |
-| --------- | ----------------------- |
-| `API_URL` | `http://localhost:3001` |
+| Variable             | Default                                     |
+| -------------------- | ------------------------------------------- |
+| `API_URL`            | `http://localhost:3001`                     |
+| `WEFT_PASSWORD_HASH` | required to sign in: from `auth:hash`       |
+| `SESSION_SECRET`     | required to sign in: at least 32 characters |
+
+For local development copy `.env.example` to `.env.local` and fill in the two sign-in values.
+
+## Sign-in
+
+weft has one user, so sign-in is one password
+([ADR 0011](../../docs/decisions/0011-single-user-sign-in.md)).
+
+```bash
+pnpm --filter @weft/web auth:hash   # prompts twice, prints WEFT_PASSWORD_HASH=scrypt:...
+```
+
+- **The password** is stored only as a scrypt hash (N=2^15, r=8, p=1, a random salt), in
+  `WEFT_PASSWORD_HASH`. The format uses `:` separators, so it needs no quoting in a `.env` file or
+  Docker Compose. At least 12 characters.
+- **`/login`** checks it in constant time and sets `weft_session`: an HS256 JWT (`jose`) for the
+  subject `owner`, signed with `SESSION_SECRET`, valid 7 days, `HttpOnly`, `SameSite=Lax`, and
+  `Secure` in production. Five attempts a minute per client IP (the first `X-Forwarded-For`
+  entry, set by the reverse proxy), then "Too many attempts".
+- **`proxy.ts`** checks the cookie on every request except `/login` and static assets: pages
+  redirect to `/login`, `/api/*` answers 401. Every Server Action and the stream route check the
+  session again themselves, as Next's docs advise, so moving a route can't drop the check.
+- **Sign out** in the sidebar deletes the cookie. Rotating `SESSION_SECRET` signs out every
+  session at once.
+- Without both variables nobody can sign in: the login form says sign-in isn't configured.
+- Pages live in the `(app)` route group, whose layout has the sidebar; `/login` sits outside it,
+  so the sign-in page never lists chats.
 
 ## Notes
 

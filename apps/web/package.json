@@ -7,9 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "auth:hash": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/hash-password.mts",
+    "test": "vitest run"
   },
   "dependencies": {
+    "jose": "^6.2.13",
     "lucide-react": "^1.59.0",
     "next": "16.4.1",
     "react": "19.3.0",
@@ -27,6 +30,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.1",
     "tailwindcss": "^4",
-    "typescript": "~6.0.0"
+    "typescript": "~6.0.0",
+    "vitest": "^5.0.5"
   }
 }
