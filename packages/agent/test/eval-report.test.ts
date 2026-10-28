@@ -58,9 +58,12 @@ describe('summarize', () => {
     expect(s.meanSteps).toBe(4);
   });
 
-  it('counts rewritten tests only when runs recorded removed lines', () => {
+  it('counts rewritten tests only when every run has a known count', () => {
     expect(s.testsRewritten).toBeNull();
-    const counted = summarize('x', [run({ testLinesRemoved: 0 }), run({ testLinesRemoved: 3 })]);
+    const counted = summarize('x', [
+      run({ testLinesRewritten: 0 }),
+      run({ testLinesRewritten: 3 }),
+    ]);
     expect(counted.testsRewritten).toBe(1);
   });
 

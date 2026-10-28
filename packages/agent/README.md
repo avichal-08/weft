@@ -135,8 +135,11 @@ file, every hidden test fails before the agent runs, and passes with a reference
 
 **Measured per run**: steps, input, output and cached tokens, cost at the paid-tier list price
 (`eval/pricing.ts`, with its source; runs use the free tier), wall time and time spent in the
-model, tool errors, searches aimed at other languages (`*.py` in a JS repo), and which existing
-tests were touched. Agents are not deterministic, so cases run `--repeat` times and the report
+model, tool errors, searches aimed at other languages (`*.py` in a JS repo), which existing
+tests were touched, and their diff. From the diff the report counts **rewritten test lines**: a
+removed line counts unless an added line keeps all of its words in order, so extending an import
+or an assertion is fine, while changing an expected value, deleting an assertion, commenting it
+out or adding `.skip` is not. Agents are not deterministic, so cases run `--repeat` times and the report
 counts cases that pass **every** repeat, not just once.
 
 **Free-tier friendly**: results are appended to `eval/results/<label>-<model>.jsonl` as each run

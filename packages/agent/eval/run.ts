@@ -8,7 +8,7 @@ import { createSandbox, type Sandbox } from '@weft/sandbox';
 import { createToolContext, runAgent } from '../src/index.ts';
 import { cases, type EvalCase, type Fixture } from './cases.ts';
 import { costUsd } from './pricing.ts';
-import { isPhantomEdit, score, wrongLanguageSearches } from './score.ts';
+import { isPhantomEdit, rewrittenTestLines, score, wrongLanguageSearches } from './score.ts';
 
 const { values } = parseArgs({
   options: {
@@ -86,7 +86,8 @@ export type Result = {
   phantomEdit?: boolean;
   testsTouched?: string[];
   missing?: string[];
-  testLinesRemoved?: number;
+  testDiff?: string;
+  testLinesRewritten?: number;
   passToPass?: boolean | null;
   failToPass?: boolean | null;
   steps?: number;
@@ -130,18 +131,14 @@ async function runCase(c: EvalCase, round: number): Promise<Result> {
     const changed = lines(
       (await sandbox.exec(['git', 'diff', '--cached', '--name-only'], { cwd: root })).stdout,
     );
-    const numstat =
+    const testDiff =
       existingTests.length > 0
         ? (
-            await sandbox.exec(['git', 'diff', '--cached', '--numstat', '--', ...existingTests], {
+            await sandbox.exec(['git', 'diff', '--cached', '-U0', '--', ...existingTests], {
               cwd: root,
             })
           ).stdout
         : '';
-    const testLinesRemoved = lines(numstat).reduce(
-      (n, line) => n + (Number(line.split('\t')[1]) || 0),
-      0,
-    );
     await sandbox.exec(['git', 'reset', '-q'], { cwd: root });
     const edited = changed.length > 0;
     const testsTouched = changed.filter((f) => existingTests.includes(f));
@@ -182,7 +179,8 @@ async function runCase(c: EvalCase, round: number): Promise<Result> {
       problems: score(c, observed),
       ...observed,
       phantomEdit: isPhantomEdit(c, observed),
-      testLinesRemoved,
+      testDiff,
+      testLinesRewritten: rewrittenTestLines(testDiff),
       steps: res.steps,
       inputTokens: res.usage.inputTokens,
       outputTokens: res.usage.outputTokens,

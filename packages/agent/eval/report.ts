@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { cases, type Category, type EvalCase, type Fixture } from './cases.ts';
 import { PRICES_SOURCE } from './pricing.ts';
 import type { Result } from './run.ts';
-import { isPhantomEdit, score } from './score.ts';
+import { isPhantomEdit, rewrittenTestLines, score } from './score.ts';
 
 const CATEGORIES: Category[] = ['question', 'bugfix', 'feature', 'followup', 'trap'];
 
@@ -42,7 +42,18 @@ export function rescore(r: Result, byName: Map<string, EvalCase>): Result {
     testsTouched: r.testsTouched ?? [],
     missing: r.missing ?? [],
   };
-  return { ...r, problems: score(c, observed), phantomEdit: isPhantomEdit(c, observed) };
+  const testLinesRewritten =
+    r.testDiff !== undefined
+      ? rewrittenTestLines(r.testDiff)
+      : observed.testsTouched.length === 0
+        ? 0
+        : undefined;
+  return {
+    ...r,
+    problems: score(c, observed),
+    phantomEdit: isPhantomEdit(c, observed),
+    ...(testLinesRewritten === undefined ? {} : { testLinesRewritten }),
+  };
 }
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
@@ -82,8 +93,8 @@ export function summarize(key: string, rows: Result[]): Summary {
     consistent: Object.values(perCase).filter((c) => c.passed === c.runs).length,
     phantomEdits: scored.filter((r) => r.phantomEdit).length,
     testsTouched: scored.filter((r) => (r.testsTouched ?? []).length > 0).length,
-    testsRewritten: scored.some((r) => r.testLinesRemoved !== undefined)
-      ? scored.filter((r) => (r.testLinesRemoved ?? 0) > 0).length
+    testsRewritten: scored.every((r) => r.testLinesRewritten !== undefined)
+      ? scored.filter((r) => r.testLinesRewritten! > 0).length
       : null,
     meanCost: priced ? mean(costs) : null,
     totalCost: priced ? costs.reduce((a, b) => a + b, 0) : null,

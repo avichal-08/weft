@@ -17,7 +17,7 @@ the agent never saw pass. Cost is computed from recorded tokens at list price
 | trap                                                       | –                                | 100% (6/6)                       | 100% (6/6)                       |
 | Cases passing every repeat                                 | 2/8                              | 16/17                            | 17/17                            |
 | Phantom edits                                              | 0                                | 0                                | 0                                |
-| Runs that removed or rewrote existing test lines           | n/a                              | n/a                              | 4                                |
+| Runs that removed or rewrote existing test lines           | 0                                | n/a                              | n/a                              |
 | Runs that edited existing test files (adding tests counts) | 0                                | 11                               | 12                               |
 | Cost per task (list price)                                 | $0.0003                          | $0.0045                          | $0.0049                          |
 | Median time per task                                       | 3 s                              | 23 s                             | 52 s                             |
