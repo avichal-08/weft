@@ -4,6 +4,8 @@ A cloud coding agent, in the spirit of Claude Code on the web. Point it at a Git
 ask for a fix, a feature, a review or an explanation, watch it work in an isolated sandbox, and
 ship the result as a pull request.
 
+**Live at [weft.avichal.me](https://weft.avichal.me)** (the app itself is behind a sign-in).
+
 ## What it does
 
 - **Chat with a repository.** Each message is a turn that continues from the previous one's
@@ -61,6 +63,15 @@ On `gemini-3.1-flash-lite`, two runs of each task:
   `gemini-3.1-flash-lite` it made no measurable difference (88% against 94%, within the noise of
   two runs per task).
 
+## Deployment
+
+The live instance runs on one AWS EC2 machine with Docker Compose: Caddy terminates TLS and is
+the only service exposed, and web, api, worker and Redis sit behind it, with Postgres on Neon. CI
+builds and publishes the images on every push to `main`; a deploy pulls them on the server. The
+reasoning is in [ADR 0012](docs/decisions/0012-single-vm-deployment.md) and
+[ADR 0013](docs/decisions/0013-hosting-on-aws-ec2.md), and the step-by-step runbook in
+[`docs/deploy.md`](docs/deploy.md).
+
 ## Stack
 
 TypeScript throughout, in a pnpm and Turborepo monorepo. Next.js 16 and React 19 for the web
@@ -76,7 +87,7 @@ apps/
   worker/        runs turns: clone → sandbox → install → agent → verify → diff
 docs/
   architecture.md one-page map of the system
-  deploy.md      runbook: create the vm, configure and run weft
+  deploy.md      runbook: launch the instance, configure and run weft
   decisions/     architecture decision records: what was chosen, and why
 infra/
   compose.yml    redis for development (queue + live streams)
@@ -109,7 +120,9 @@ pnpm sandbox:build && pnpm sandbox:smoke
 pnpm check                  # lint, typecheck and unit tests
 ```
 
-Run it end to end (three terminals), then open http://localhost:3000:
+The web app needs a sign-in password: copy `apps/web/.env.example` to `apps/web/.env.local` and
+fill it in (`pnpm --filter @weft/web auth:hash` makes the hash). Then run it end to end (three
+terminals) and open http://localhost:3000:
 
 ```bash
 pnpm --filter @weft/api dev

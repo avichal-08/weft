@@ -152,7 +152,7 @@ questions, the follow-ups that recall or ask, and the traps whose answer is that
 exists), since a change request can't pass without editing. Rows record their `mode`.
 
 **Measured per run**: steps, input, output and cached tokens, cost at the paid-tier list price
-(`eval/pricing.ts`, with its source; runs use the free tier), wall time and time spent in the
+(`eval/pricing.ts`, with its source, whatever tier the keys are on), wall time and time spent in the
 model, tool errors, searches aimed at other languages (`*.py` in a JS repo), which existing
 tests were touched, and their diff. From the diff the report counts **rewritten test lines**: a
 removed line counts unless an added line keeps all of its words in order, so extending an import
@@ -160,7 +160,7 @@ or an assertion is fine, while changing an expected value, deleting an assertion
 out or adding `.skip` is not. Agents are not deterministic, so cases run `--repeat` times and the report
 counts cases that pass **every** repeat, not just once.
 
-**Free-tier friendly**: results are appended to `eval/results/<label>-<model>.jsonl` as each run
+**Built for rate limits**: results are appended to `eval/results/<label>-<model>.jsonl` as each run
 finishes (git-ignored). A provider error is recorded but not scored; a daily-quota error stops
 the run, and `--resume` continues where it stopped without repeating finished runs. Steps are
 capped at 15 by default (`--max-steps`).

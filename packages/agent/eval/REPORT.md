@@ -5,7 +5,7 @@ re-scored with the current graders, so a grading fix never needs a new model run
 every check holds: the agent finished, it edited files only when it should, its reply mentions
 what it must, the original tests still pass after any test edits are undone, and the hidden tests
 the agent never saw pass. Cost is computed from recorded tokens at list price
-(https://ai.google.dev/gemini-api/docs/pricing (paid tier, standard, read 2026-10-27)); runs used the free tier.
+(https://ai.google.dev/gemini-api/docs/pricing (paid tier, standard, read 2026-10-27)), whatever tier the runs used.
 
 |                                                            | `baseline-gemini-2.5-flash-lite` | `baseline-gemini-3.1-flash-lite` | `overview-gemini-2.5-flash-lite` | `overview-gemini-3.1-flash-lite` | `ask-gemini-3.1-flash-lite` |
 | ---------------------------------------------------------- | -------------------------------- | -------------------------------- | -------------------------------- | -------------------------------- | --------------------------- |

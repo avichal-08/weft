@@ -1,69 +1,62 @@
-# 0013. Hosting on AWS EC2, reached through Session Manager
+# 0013. Hosting on AWS EC2
 
-- Status: Accepted; shell access superseded by [0014](0014-ssh-access.md)
+- Status: Accepted
 - Date: 2026-10-28
-- Supersedes the choice of Azure in [0012](0012-single-vm-deployment.md); the single-VM topology stands
 
 ## Context
 
-[0012](0012-single-vm-deployment.md) put weft on one VM running Docker Compose and picked an Azure
-`Standard_B2ms`. weft is a portfolio and learning project with one user, not a product that has
-to stay up: a deployment that runs for some months and teaches a widely used cloud is worth more
-than the longest possible uptime. The owner already runs another project on Azure and has not
-used AWS.
+[0012](0012-single-vm-deployment.md) runs weft on one VM with Docker Compose. That needs a
+machine with enough memory for the services plus the sandboxes they create, a stable address for
+DNS and TLS, and a way for the operator to reach a shell without exposing it to the internet.
 
-New AWS accounts (opened on or after 15 July 2025) can choose a Free plan: up to $200 in credits,
-no charges, and the account closes after six months or when the credits run out. A Free plan
-account can only launch instance types marked free-tier eligible: `t3.micro`, `t3.small`,
-`t4g.micro`, `t4g.small`, `c7i-flex.large` and `m7i-flex.large`. Their running hours are paid
-from the credits.
+Sizing comes from the workload: the services themselves use about 0.6 GB, and each sandbox gets
+up to 2 GB while installing dependencies and running tests. Two concurrent sandboxes, as
+configured in `compose.yml`, need about 8 GB. CPU is idle most of the time and busy in short
+bursts while dependencies install and tests run.
 
 ## Decision
 
-- **AWS, region `ap-southeast-2` (Sydney)**, on the Free plan. Mumbai and Singapore would be closer
-  to the owner in India, but the Free plan offered this account only Sydney. Pages take about
-  150 ms more to reach than from a nearby region, which matters little next to agent turns that
-  take seconds.
-- **One `m7i-flex.large` instance** (2 vCPU, 8 GiB, x86), the only eligible type with the memory
-  0012 sized for, running Ubuntu 24.04 with a 40 GB gp3 volume. x86 keeps the images CI already
-  builds.
-- **An Elastic IP**, so the address and DNS survive stopping the instance.
-- **No inbound SSH.** The security group allows only 80 and 443 (TCP and UDP for HTTP/3). Shell
-  access is through **SSM Session Manager**: the instance has an IAM role with
-  `AmazonSSMManagedInstanceCore`, and the SSM agent preinstalled on Ubuntu's AMIs connects out to
-  AWS. No key pair is created.
-- **Account hygiene:** MFA on the root user, daily work as an IAM Identity Center user with an
-  administrator permission set, and an AWS Budget that alerts before the credits run out.
-- **Stopped when not in use.** A stopped instance costs only its volume and Elastic IP, which
-  stretches the credits across the plan's six months.
-- Everything above the VM is unchanged: the Compose stack, the images from CI, `bootstrap.sh`, the
-  sparse checkout and the manual deploy.
+- **AWS EC2, one `m7i-flex.large`** (2 vCPU, 8 GiB, x86) running Ubuntu 24.04 LTS, with a 40 GiB
+  gp3 volume. Flex instances run at a 40% CPU baseline and burst above it, which matches a
+  mostly idle, bursty workload, and x86 matches the images CI builds. The deployment is in
+  `ap-southeast-2`; nothing depends on the region.
+- **An Elastic IP**, so the address, and with it DNS and the certificate, survives stopping and
+  starting the instance.
+- **A security group** that allows 80 and 443 (TCP, and UDP for HTTP/3) from anywhere and SSH only
+  from the operator's address (`/32`). Nothing else is reachable; the services behind Caddy are
+  not published at all.
+- **SSH with an ED25519 key pair** created at launch; Ubuntu's images accept key authentication
+  only.
+- **SSM Session Manager as the fallback.** An instance role with `AmazonSSMManagedInstanceCore`
+  lets the operator open a shell from the console or the CLI when the SSH rule no longer matches
+  their address or the key is unavailable, without widening the security group.
+- **Account hygiene:** MFA on the root user, day-to-day access through IAM Identity Center, and an
+  AWS Budget with alerts before spending reaches its limit.
 
 ## Alternatives considered
 
-**Azure `Standard_B2ms`**, as in 0012. About $20 a month for the owner and no expiry, so cheaper
-over a year and the better choice for a service that must stay up; but no new platform learned.
+**Session Manager only, no inbound SSH.** No open management port, no key to manage and sessions
+logged in CloudTrail, but it needs the CLI plugin for terminal use and gives up `scp`, which the
+runbook uses to place the GitHub App key.
 
-**A smaller eligible type** (`t3.small`, `c7i-flex.large` with 4 GiB). Stretches the credits, but
-dependency installs inside sandboxes need the memory; 4 GiB would mean one sandbox at a time and
-installs failing on larger repositories.
+**SSH open to `0.0.0.0/0`.** No rule to update when the operator's address changes, but every SSH
+scanner on the internet would reach the instance.
 
-**ARM (`t4g`)**. Cheaper per hour, but the eligible ARM sizes have at most 2 GiB, and the images
-would need multi-architecture builds.
+**A smaller instance** (2 or 4 GiB). Cheaper, but dependency installs inside sandboxes would fail
+on larger repositories, and only one sandbox could run at a time.
 
-**SSH with a key and the port open to one IP.** Familiar, but a key to manage, a port to keep
-restricted as home IPs change, and no session log. Session Manager removes all three.
+**ARM (Graviton).** Better price per hour, but every image, the sandbox included, would need
+multi-architecture builds.
 
-**ECS or EKS.** The managed way to run containers on AWS, but the worker needs a Docker daemon it
-controls, which Fargate doesn't offer, and a cluster is far more than one user needs. Covered as a
-learning exercise separately.
+**ECS or EKS.** The managed ways to run containers on AWS, but the worker needs a Docker daemon it
+controls, which Fargate doesn't offer, and a cluster is far more than one machine's worth of work.
 
 ## Consequences
 
-- No open management port; access is controlled by IAM and recorded in CloudTrail.
-- Running all the time, the credits last roughly two and a half to three months; stopped when
-  idle, the full six months.
-- When the Free plan ends the account closes and weft goes offline, which is acceptable for this
-  project. Moving back to Azure or another VM needs only the runbook's first steps; the stack and
-  `.env` carry over.
-- Copying files to the instance goes through the session (pasting) rather than `scp`.
+- Shell access depends on the SSH rule matching the operator's address; when it changes, the rule
+  is updated in the console, and Session Manager works in the meantime.
+- Stopping the instance when it isn't needed leaves only the volume and the Elastic IP to pay for,
+  and keeps the address, so the site comes back on start without DNS changes.
+- The setup above the VM (Compose stack, images, `bootstrap.sh`, configuration) is
+  provider-neutral; moving clouds means repeating only the first steps of
+  [`docs/deploy.md`](../deploy.md).

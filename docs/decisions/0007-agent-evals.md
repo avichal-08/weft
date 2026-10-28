@@ -13,12 +13,12 @@ by hand. Agents are not deterministic, and the failures that matter are not only
 - making a fix pass by rewriting the tests it should satisfy,
 - searching in the wrong language and giving up.
 
-The suite also has to be cheap enough to run often. Runs use free-tier Gemini keys, where some
+The suite also has to be cheap enough to run often, including on rate-limited API keys, where some
 models allow only 20 requests a day.
 
 ## Decision
 
-- **A small suite of our own tasks, not a public benchmark.** 17 cases in
+- **A small suite of weft's own tasks, not a public benchmark.** 17 cases in
   `packages/agent/eval/cases.ts` over two JavaScript fixtures: a small shop module, and a snapshot
   of the playground repository used for live tests. Categories: questions, bug fixes, features,
   follow-ups that carry earlier turns, and traps where the right answer is to change nothing or
@@ -43,7 +43,7 @@ models allow only 20 requests a day.
 - **Repeats and consistency.** Cases run `--repeat` times, and the report counts cases that pass
   every repeat as well as the overall pass rate.
 - **Cost at list price.** Tokens are recorded per run and priced at the paid-tier list price, with
-  the source and date in `eval/pricing.ts`, even though runs use the free tier.
+  the source and date in `eval/pricing.ts`, whatever tier the runs actually used.
 - **Built for quotas.** A daily-quota error stops the run, `--resume` skips finished runs, provider
   errors are recorded but not scored, and steps are capped at 15.
 
@@ -51,7 +51,7 @@ models allow only 20 requests a day.
 
 **A public benchmark such as SWE-bench Verified.** Comparable with published numbers, but each
 task needs a large repository, its own environment and many model calls. That is far beyond a
-free-tier quota, and its tasks don't test conversations, questions or traps.
+daily request quota, and its tasks don't test conversations, questions or traps.
 
 **An LLM judge.** It can grade open-ended answers, but adds cost and its own errors, and the
 judge's model changes the score. Tests, file checks and patterns are cheaper and repeatable;
@@ -69,7 +69,7 @@ tampering from passing, so rewrites are reported as a number rather than failed.
   committed report (`packages/agent/eval/REPORT.md`).
 - 17 cases with two repeats is a small sample: a difference of one or two runs is not evidence on
   its own, and the report should be read with that in mind.
-- Free-tier timeouts and retries make wall time noisy; steps and tokens are more stable signals.
+- Provider timeouts and retries make wall time noisy; steps and tokens are more stable signals.
 - Answers are graded by patterns, so a correct answer worded unexpectedly can fail and is fixed by
   adjusting the grader and re-scoring.
 - The rewritten-lines check is a heuristic. A line kept word for word but moved into a different

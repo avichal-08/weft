@@ -1,7 +1,7 @@
 # Resources
 
-What I'm reading while building weft, grouped by the problem each one helps with.
-★ = read this first. Everything else is reference for when you hit that problem.
+Background reading behind weft's design, grouped by the problem each one helps with. ★ marks the
+place to start; the rest is reference for when that problem comes up.
 
 ---
 

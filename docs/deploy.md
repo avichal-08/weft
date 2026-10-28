@@ -8,25 +8,23 @@ instance, prepare it, configure weft and start it.
 
 Throughout, replace `<domain>` with the hostname weft will serve (for example
 `weft.example.com`), `<ip>` with the instance's Elastic IP and `<instance-id>` with its id
-(`i-...`). The region is `ap-southeast-2` (Sydney), the only one the Free plan offered
-this account; if the console opens elsewhere, put the region in the URL
+(`i-...`). The commands use `ap-southeast-2`; any region works, as long as every EC2 resource
+(instance, Elastic IP, security group) is created in the same one. To open the console in a
+specific region, put it in the URL
 (`https://ap-southeast-2.console.aws.amazon.com/ec2/home?region=ap-southeast-2`).
 
 ## 1. Set up the account
 
-1. **Sign up** at aws.amazon.com and choose the **Free plan**: up to $200 in credits, no charges,
-   and the account closes after six months or when the credits run out.
-2. **Protect the root user:** account menu → Security credentials → assign an MFA device. Use the
+1. **Protect the root user:** account menu → Security credentials → assign an MFA device. Use the
    root user only for billing and account settings from here on.
-3. **Create your everyday login** with IAM Identity Center: enable it in `ap-southeast-2`, add a user
+2. **Create your everyday login** with IAM Identity Center: enable it in `ap-southeast-2`, add a user
    for yourself, create a permission set from the `AdministratorAccess` policy, and assign that
    user and permission set to the account. Sign in through the AWS access portal URL Identity
    Center shows, and set up MFA when asked.
-4. **Set a budget:** Billing and Cost Management → Budgets → Create budget → a monthly cost budget
-   of $70, with email alerts at 50%, 80% and 100% of actual cost. Under advanced options, untick
-   **Credits** so the budget tracks what you use before credits are applied; otherwise it reads
-   zero until they are gone. Creating a budget is also one of the Free plan's activities that
-   earns extra credits (see Billing → Credits for the rest).
+3. **Set a budget:** Billing and Cost Management → Budgets → Create budget → a monthly cost
+   budget with email alerts at 50%, 80% and 100% of actual cost. If the account has promotional
+   credits, untick **Credits** under the advanced options, so the budget tracks usage before
+   credits are applied instead of reading zero.
 
 ## 2. Launch the instance
 
@@ -40,7 +38,7 @@ Then EC2 → Instances → **Launch instances**:
 | ------------------------------- | ----------------------------------------------------------- |
 | Name                            | `weft`                                                      |
 | Image                           | Ubuntu Server 24.04 LTS (HVM), SSD, 64-bit (x86)            |
-| Instance type                   | `m7i-flex.large` (2 vCPU, 8 GiB, marked free tier eligible) |
+| Instance type                   | `m7i-flex.large` (2 vCPU, 8 GiB)                            |
 | Key pair                        | Create new key pair: `weft`, ED25519, `.pem`                |
 | Network                         | default VPC, a public subnet, auto-assign public IP enabled |
 | Firewall                        | create a security group `weft-web` (rules below)            |
@@ -57,7 +55,8 @@ Security group `weft-web`, inbound rules (outbound stays "all traffic"):
 | Custom | UDP      | 443  | `0.0.0.0/0` and `::/0` | HTTP/3                                 |
 | HTTP   | TCP      | 80   | `0.0.0.0/0` and `::/0` | Let's Encrypt challenges and redirects |
 
-SSH is open to your IP only ([ADR 0014](decisions/0014-ssh-access.md)); never to `0.0.0.0/0`.
+SSH is open to your IP only ([ADR 0013](decisions/0013-hosting-on-aws-ec2.md)); never to
+`0.0.0.0/0`.
 Never add 3000, 3001 or 6379: those services are reachable only
 inside Docker.
 
@@ -136,7 +135,8 @@ pnpm --filter @weft/web auth:hash    # prints WEFT_PASSWORD_HASH=scrypt:...
 openssl rand -base64 32              # SESSION_SECRET
 ```
 
-Use a different password from any local one, and keep it in your password manager.
+Choose a long, random password and keep it in a password manager; the hash is all the server
+stores.
 
 On the instance, as `ubuntu`:
 
@@ -210,10 +210,10 @@ docker compose logs -f worker              # each turn's steps and timings
 | Restart one service | `docker compose restart <service>`                                                                                                          |
 | Resource use        | `docker stats`, `free -h`, `docker system df`                                                                                               |
 | Stop, keep data     | `docker compose stop`                                                                                                                       |
-| Save credits        | `aws ec2 stop-instances --instance-ids <instance-id>`, later `aws ec2 start-instances --instance-ids <instance-id>` (or the console)        |
+| Pause to save cost  | `aws ec2 stop-instances --instance-ids <instance-id>`, later `aws ec2 start-instances --instance-ids <instance-id>` (or the console)        |
 | Sign out everywhere | change `SESSION_SECRET`, then `docker compose up -d web`                                                                                    |
 | Change the password | new `WEFT_PASSWORD_HASH`, then `docker compose up -d web`                                                                                   |
-| Remaining credits   | Billing and Cost Management → Credits                                                                                                       |
+| Costs so far        | Billing and Cost Management → Bills, or Cost Explorer                                                                                       |
 
 Wait for the commit's CI run to finish before deploying it: `latest` moves only once its images
 are published. `git pull` updates only `infra/deploy` (`compose.yml`, the `Caddyfile`); the images
@@ -242,5 +242,5 @@ costs only its volume and Elastic IP, and keeps the IP, so DNS stays valid.
   `getent group docker`.
 - **Publishing fails:** the GitHub App isn't installed on that repository, or the key file isn't
   readable by uid 1000 (`ls -ln github-app.pem` should show 1000; `sudo chown 1000:1000` if not).
-- **An instance type is greyed out at launch:** Free plan accounts can only launch types marked
-  free tier eligible; `m7i-flex.large` is one of them.
+- **The instance type isn't offered:** some accounts and regions restrict instance types; any x86
+  type with 2 vCPU and 8 GiB (`t3.large`, `m7i.large`) runs the same stack.

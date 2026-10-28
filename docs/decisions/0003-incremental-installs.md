@@ -11,7 +11,7 @@ exists for its exact dependency files: the first time weft sees a repo, or when 
 changes, upstream or because the agent added a dependency.
 
 That install was always a full one. On a repo with 494 packages, `npm ci` took about 275 s on a
-4-CPU WSL2 machine with a home connection. Measured separately (1 CPU, 2 GB, like the setup
+4-CPU development machine on a residential connection. Measured separately (1 CPU, 2 GB, like the setup
 sandbox):
 
 | Part of `npm ci`              | Time   | Notes                                                                           |

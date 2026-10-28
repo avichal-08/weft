@@ -5,9 +5,9 @@
 
 ## Context
 
-weft is being deployed on a public URL for one user. Without sign-in, anyone who finds it could
-start turns on the owner's LLM keys, run code in the worker's sandboxes and push to the
-owner's repositories through the GitHub App. The API has no authentication of its own; it is
+weft's reference deployment runs on a public URL for a single operator. Without sign-in, anyone
+who finds it could start turns on the operator's LLM keys, run code in the worker's sandboxes and
+push to the operator's repositories through the GitHub App. The API has no authentication of its own; it is
 reachable only from the web app's server, so the web app is the one place to guard.
 
 ## Decision
@@ -28,13 +28,13 @@ reachable only from the web app's server, so the web app is the one place to gua
 
 **An identity provider** (Entra ID or GitHub through the platform's built-in auth, or OAuth in
 the app). No password to manage and MFA for free, but it ties weft to a platform feature or adds
-an OAuth app and callback handling; for one user a strong password is enough for now.
+an OAuth app and callback handling; for a single operator a strong password is enough.
 
 **Encrypted sessions** (iron-session). The session carries no data worth hiding, so a signature is
 enough.
 
 **Sessions in the database.** Revocable one at a time, but adds a table and a query to every
-request; with one user, rotating `SESSION_SECRET` signs out everything.
+request; with a single operator, rotating `SESSION_SECRET` signs out everything.
 
 **Basic auth at the reverse proxy.** Simplest, but the browser's prompt can't sign out, gives no
 rate limiting and sends the password with every request.

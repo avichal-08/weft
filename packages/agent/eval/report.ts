@@ -201,7 +201,7 @@ re-scored with the current graders, so a grading fix never needs a new model run
 every check holds: the agent finished, it edited files only when it should, its reply mentions
 what it must, the original tests still pass after any test edits are undone, and the hidden tests
 the agent never saw pass. Cost is computed from recorded tokens at list price
-(${PRICES_SOURCE}); runs used the free tier.
+(${PRICES_SOURCE}), whatever tier the runs used.
 
 ${table.join('\n')}
 
