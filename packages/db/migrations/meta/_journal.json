@@ -50,6 +50,13 @@
       "when": 1793115939723,
       "tag": "0006_commits",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793167810938,
+      "tag": "0007_run_mode",
+      "breakpoints": true
     }
   ]
 }

@@ -232,6 +232,8 @@ describe('sessions', () => {
     expect(next).toMatchObject({ status: 201, body: { run: { turn: 2, task: 'Now fix it' } } });
     expect(queued).toEqual([run!.id, next.body.run!.id]);
 
+    expect(next.body.run).toMatchObject({ mode: 'code' });
+
     const full = await api(`/sessions/${session!.id}`);
     expect((full.body.session!.turns as ApiRun[]).map((t) => [t.turn, t.status])).toEqual([
       [1, 'succeeded'],
@@ -259,6 +261,9 @@ describe('sessions', () => {
     expect((await api(`/sessions/${unknown}`)).status).toBe(404);
     expect((await post(`/sessions/${unknown}/messages`, { message: 'hi' })).status).toBe(404);
     expect((await post(`/sessions/${unknown}/messages`, {})).status).toBe(400);
+    expect(
+      (await post(`/sessions/${unknown}/messages`, { message: 'hi', mode: 'plan' })).status,
+    ).toBe(400);
   });
 
   it('answers 503 but keeps the session when the queue is down', async () => {

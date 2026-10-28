@@ -1,4 +1,4 @@
-import type { PhaseTiming, PublishState } from './types.ts';
+import type { PhaseTiming, PublishState, RunMode } from './types.ts';
 import { sql } from 'drizzle-orm';
 import {
   bigserial,
@@ -58,6 +58,7 @@ export const runs = pgTable(
     repoUrl: text('repo_url').notNull(),
     baseRef: text('base_ref'),
     task: text('task').notNull(),
+    mode: text('mode').$type<RunMode>().notNull().default('code'),
     testCommand: text('test_command'),
     config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
 

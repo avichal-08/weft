@@ -1,5 +1,6 @@
 import {
   addTurn,
+  latestWork,
   cancelRun,
   createRun,
   createSession,
@@ -229,7 +230,7 @@ export function createApp(deps: AppDeps): Express {
       res.status(409).json({ error: 'nothing_to_commit', message: why });
       return;
     }
-    const turn = session.turns.at(-1)!.turn!;
+    const turn = latestWork(session.turns)!.turn!;
     const commit = await createCommit(deps.db, { sessionId: id, turn, message });
     if (session.prNumber) {
       await deps.enqueuePublish({ sessionId: id, turn, openPullRequest: false }).catch(() => {});
@@ -250,7 +251,7 @@ export function createApp(deps: AppDeps): Express {
       res.status(409).json(refusal);
       return;
     }
-    const turn = session.turns.at(-1)!.turn!;
+    const turn = latestWork(session.turns)!.turn!;
     try {
       await deps.enqueuePublish({ sessionId: id, turn, openPullRequest: true });
     } catch {
@@ -263,8 +264,8 @@ export function createApp(deps: AppDeps): Express {
 
   app.post('/sessions/:id/messages', async (req, res) => {
     const { id } = runIdParam.parse(req.params);
-    const { message } = sendMessageBody.parse(req.body);
-    const result = await addTurn(deps.db, id, message);
+    const { message, mode } = sendMessageBody.parse(req.body);
+    const result = await addTurn(deps.db, id, message, mode);
     if (!result.ok) {
       res
         .status(result.reason === 'busy' ? 409 : 404)

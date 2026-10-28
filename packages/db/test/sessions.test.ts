@@ -9,6 +9,7 @@ import {
   createSession,
   getSession,
   listSessions,
+  latestWork,
   publishRefusal,
   pullRequestRefusal,
   recordCommitSha,
@@ -83,6 +84,14 @@ describe('addTurn', () => {
       ok: true,
       run: { turn: 2, task: 'Now fix it', sessionId: session.id },
     });
+  });
+
+  it('stores the mode of each turn, code unless asked', async () => {
+    const { session, run } = await createSession(db, input);
+    expect(run.mode).toBe('code');
+    await finishTurn(run.id);
+    const next = await addTurn(db, session.id, 'What does this do?', 'ask');
+    expect(next).toMatchObject({ ok: true, run: { turn: 2, mode: 'ask' } });
   });
 
   it('allows a new message after a cancelled turn', async () => {
@@ -225,6 +234,18 @@ describe('publishRefusal', () => {
       'nothing in this chat has changed any files yet',
     );
   });
+
+  it('judges the latest Code turn, so a question after a change neither blocks nor hides it', () => {
+    const ask = (over: Partial<Run> = {}) => turn({ mode: 'ask', diff: 'd', ...over });
+    expect(publishRefusal([turn({ diff: 'd' }), ask({ status: 'error' })])).toBeNull();
+    expect(
+      publishRefusal([turn({ status: 'failed', failureKind: 'tests_failed', diff: 'd' }), ask()]),
+    ).toMatch(/tests fail/);
+    expect(publishRefusal([turn({ diff: 'd' }), ask({ status: 'running' })])).toMatch(
+      /still working/,
+    );
+    expect(publishRefusal([ask()])).toBe('nothing in this chat has changed any files yet');
+  });
 });
 
 describe('commits', () => {
@@ -264,6 +285,17 @@ describe('commits', () => {
     expect(commitRefusal((await getSession(db, id))!)).toBe(
       'nothing has changed since the last commit',
     );
+  });
+
+  it('commits the latest Code turn when a question came after it', async () => {
+    const id = await chat('diff --git a/a b/a\n');
+    const next = await addTurn(db, id, 'why?', 'ask');
+    if (!next.ok) throw new Error('refused');
+    const attempt = (await claimRun(db, next.run.id, 'w'))!;
+    await completeRun(db, next.run.id, attempt, { status: 'error', failureKind: 'llm_server' });
+    const session = (await getSession(db, id))!;
+    expect(commitRefusal(session)).toBeNull();
+    expect(latestWork(session.turns)?.turn).toBe(1);
   });
 
   it('applies the publish rules too', async () => {

@@ -1,4 +1,4 @@
-import { lastCommittedDiff, type SessionWithTurns } from '@weft/db';
+import { lastCommittedDiff, latestWork, type SessionWithTurns } from '@weft/db';
 import type { LLMProvider } from '@weft/llm';
 
 export type FileChange = { path: string; status: 'added' | 'changed' | 'reverted' };
@@ -72,13 +72,13 @@ export async function draftCommitMessage(
   llm: LLMProvider | null,
 ): Promise<string> {
   const previous = lastCommittedDiff(session);
-  const current = session.turns.at(-1)?.diff ?? '';
+  const current = latestWork(session.turns)?.diff ?? '';
   const changes = changesSince(previous, current);
   if (!llm) return fallbackMessage(changes);
 
   const since = session.commits.at(-1)?.turn ?? 0;
   const asked = session.turns
-    .filter((t) => t.turn! > since)
+    .filter((t) => t.turn! > since && t.mode !== 'ask')
     .map((t) => `- ${t.task}`)
     .join('\n');
   try {

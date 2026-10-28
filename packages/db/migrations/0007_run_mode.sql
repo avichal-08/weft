@@ -1,0 +1,1 @@
+ALTER TABLE "runs" ADD COLUMN "mode" text DEFAULT 'code' NOT NULL;

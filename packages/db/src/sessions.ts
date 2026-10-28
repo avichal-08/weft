@@ -7,6 +7,7 @@ import type {
   Db,
   PublishState,
   Run,
+  RunMode,
   Session,
   SessionSummary,
   SessionWithTurns,
@@ -26,7 +27,7 @@ function isUniqueViolation(err: unknown): boolean {
   return false;
 }
 
-const turnValues = (session: Session, message: string, turn: number) => ({
+const turnValues = (session: Session, message: string, turn: number, mode: RunMode) => ({
   sessionId: session.id,
   turn,
   repoUrl: session.repoUrl,
@@ -34,6 +35,7 @@ const turnValues = (session: Session, message: string, turn: number) => ({
   testCommand: session.testCommand,
   config: session.config,
   task: message,
+  mode,
 });
 
 export async function createSession(
@@ -53,13 +55,18 @@ export async function createSession(
       .returning();
     const [run] = await tx
       .insert(runs)
-      .values(turnValues(session!, input.message, 1))
+      .values(turnValues(session!, input.message, 1, input.mode ?? 'code'))
       .returning();
     return { session: session!, run: run! };
   });
 }
 
-export async function addTurn(db: Db, sessionId: string, message: string): Promise<AddTurnResult> {
+export async function addTurn(
+  db: Db,
+  sessionId: string,
+  message: string,
+  mode: RunMode = 'code',
+): Promise<AddTurnResult> {
   try {
     return await db.transaction(async (tx) => {
       const [session] = await tx.select().from(sessions).where(eq(sessions.id, sessionId));
@@ -74,7 +81,7 @@ export async function addTurn(db: Db, sessionId: string, message: string): Promi
 
       const [run] = await tx
         .insert(runs)
-        .values(turnValues(session, message, (last?.turn ?? 0) + 1))
+        .values(turnValues(session, message, (last?.turn ?? 0) + 1, mode))
         .returning();
       await tx
         .update(sessions)
@@ -112,6 +119,10 @@ export async function recordCommitSha(db: Db, id: string, sha: string): Promise<
   await db.update(commits).set({ sha }).where(eq(commits.id, id));
 }
 
+export function latestWork(turns: Run[]): Run | undefined {
+  return turns.filter((t) => t.mode !== 'ask').at(-1);
+}
+
 export function lastCommittedDiff(session: SessionWithTurns): string {
   const last = session.commits.at(-1);
   return last ? (session.turns.find((t) => t.turn === last.turn)?.diff ?? '') : '';
@@ -120,7 +131,7 @@ export function lastCommittedDiff(session: SessionWithTurns): string {
 export function commitRefusal(session: SessionWithTurns): string | null {
   const why = publishRefusal(session.turns);
   if (why) return why;
-  if (session.turns.at(-1)!.diff === lastCommittedDiff(session)) {
+  if (latestWork(session.turns)!.diff === lastCommittedDiff(session)) {
     return 'nothing has changed since the last commit';
   }
   return null;
@@ -192,10 +203,12 @@ export function publishRefusal(turns: Run[]): string | null {
   if (latest.status === 'queued' || latest.status === 'running') {
     return 'the agent is still working on the latest message';
   }
-  if (latest.status === 'failed' && latest.failureKind === 'tests_failed') {
+  const work = latestWork(turns);
+  if (!work) return 'nothing in this chat has changed any files yet';
+  if (work.status === 'failed' && work.failureKind === 'tests_failed') {
     return "the latest turn's tests fail, so there is nothing to publish yet";
   }
-  if (latest.status !== 'succeeded') return "the latest turn didn't finish";
+  if (work.status !== 'succeeded') return "the latest turn didn't finish";
   if (!turns.some((t) => t.status === 'succeeded' && t.diff)) {
     return 'nothing in this chat has changed any files yet';
   }
@@ -207,7 +220,10 @@ export type Refusal = { error: 'not_publishable' | 'uncommitted'; message: strin
 export function pullRequestRefusal(session: SessionWithTurns): Refusal | null {
   const why = publishRefusal(session.turns);
   if (why) return { error: 'not_publishable', message: why };
-  if (session.commits.length === 0 || session.turns.at(-1)!.diff !== lastCommittedDiff(session)) {
+  if (
+    session.commits.length === 0 ||
+    latestWork(session.turns)!.diff !== lastCommittedDiff(session)
+  ) {
     return { error: 'uncommitted', message: 'commit your changes before opening a pull request' };
   }
   return null;

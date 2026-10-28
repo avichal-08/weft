@@ -72,6 +72,12 @@ to GitHub it also holds `branch`, `pushed_turn` (the last turn pushed), `pushed_
 `pr_url`. `publishRefusal(turns)` is the one rule for whether a chat can be published, shared by
 the API and the worker.
 
+Each turn has a `mode`, `code` (default) or `ask` (read-only, see
+[ADR 0008](../../docs/decisions/0008-ask-mode.md)). An Ask turn records the same cumulative diff
+as the turn before it, and commits, pull requests and the publish rules judge `latestWork(turns)`,
+the latest Code turn, so a question asked after a change neither blocks nor hides it. Only a turn
+still running blocks publishing whatever its mode.
+
 Two indexes guard the conversation: `(session_id, turn)` is unique, and a partial unique index on
 `session_id` where `status in ('queued', 'running')` allows at most one active turn per session.
 The second one is what makes "don't accept a message while the agent is working" hold even for

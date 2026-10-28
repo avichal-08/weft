@@ -321,6 +321,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
         ctx,
         task: run.task,
         history: buildHistory(previous),
+        mode: run.mode,
         maxSteps: config.maxSteps ?? DEFAULT_MAX_STEPS,
         signal: abort.signal,
         onEvent,
@@ -335,8 +336,16 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
       throw new Error(`collecting the diff failed: ${diff.stderr.trim() || diff.exitCode}`);
     }
 
+    if (run.mode === 'ask' && diff.stdout !== (base ?? '')) {
+      return await finish({
+        status: 'error',
+        failureKind: 'ask_changed_files',
+        failureDetail: 'files changed during a read-only Ask turn; the changes were not recorded',
+      });
+    }
+
     let verify: ExecResult | null = null;
-    if (run.testCommand) {
+    if (run.testCommand && run.mode !== 'ask') {
       phase('verify');
       const clean = !plan ? deps.sandboxImage : await cleanImage(diff.stdout);
       let target = box;

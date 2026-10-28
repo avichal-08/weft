@@ -9,6 +9,7 @@ export {
   createSession,
   getSession,
   lastCommittedDiff,
+  latestWork,
   listSessions,
   publishRefusal,
   pullRequestRefusal,

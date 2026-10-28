@@ -15,6 +15,7 @@ const repoFields = {
 };
 
 const message = z.string().trim().min(1).max(20_000);
+const mode = z.enum(['code', 'ask']).optional();
 
 export const createRunBody = z.strictObject({
   ...repoFields,
@@ -25,10 +26,11 @@ export const createRunBody = z.strictObject({
 export const createSessionBody = z.strictObject({
   ...repoFields,
   message,
+  mode,
   testCommand: z.string().trim().min(1).max(1000).optional(),
 });
 
-export const sendMessageBody = z.strictObject({ message });
+export const sendMessageBody = z.strictObject({ message, mode });
 
 export const commitBody = z.strictObject({ message: z.string().trim().min(1).max(5000) });
 

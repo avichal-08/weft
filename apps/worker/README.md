@@ -61,7 +61,10 @@ pnpm --filter @weft/worker dev
 6. **Agent.** `runAgent` with the LLM from the run's `config` (`provider`, `model`), falling back
    to `.env`, and `maxSteps` (default 30). For later turns it also gets `history`: each earlier
    message with the agent's reply, or a note like "(this turn ended without a reply: cancelled)".
-   After every step the worker saves steps and tokens with `recordProgress`.
+   After every step the worker saves steps and tokens with `recordProgress`. An Ask turn
+   (`mode: 'ask'`) runs the agent read-only; if its diff still differs from the previous turn's,
+   the turn ends as `ask_changed_files` without recording the changes, and it skips verification, since
+   nothing changed.
 7. **Diff.** `git add -A && git diff --cached --binary`, so new files and binary changes are
    included and the patch can be applied by the next turn. `node_modules` is always left out,
    even when the repo doesn't ignore it: it is added to the sandbox's `.git/info/exclude` (local

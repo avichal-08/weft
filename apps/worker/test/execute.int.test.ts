@@ -398,6 +398,33 @@ describe('conversations', () => {
     expect(diff).toContain('+export const subtract = (a, b) => a - b;');
   });
 
+  it('keeps an Ask turn read-only and carries the earlier changes forward', async () => {
+    const { session: s, run: first } = await session('node --test');
+    await executeRun(deps(createMockProvider(fixScript)), first.id);
+    const fixed = (await getRun(db, first.id))!.diff;
+
+    const next = await addTurn(db, s.id, 'Why did add fail before?', 'ask');
+    if (!next.ok) throw new Error('turn 2 was refused');
+    const ask = createMockProvider([
+      call('str_replace_edit', { path: 'src/math.js', old_str: 'a + b', new_str: 'a - b' }),
+      call('view_file', { path: 'src/math.js' }),
+      call('finish', { summary: 'It subtracted instead of adding.' }),
+    ]);
+    const outcome = await executeRun(deps(ask), next.run.id);
+    expect(outcome).toMatchObject({ kind: 'completed', status: 'succeeded' });
+
+    expect(ask.calls[0]!.tools!.map((t) => t.name)).toEqual([
+      'grep',
+      'glob',
+      'view_file',
+      'finish',
+    ]);
+    const done = (await getRun(db, next.run.id))!;
+    expect(done).toMatchObject({ mode: 'ask', summary: 'It subtracted instead of adding.' });
+    expect(done.diff).toBe(fixed);
+    expect(done.timings?.map((t) => t.phase)).not.toContain('verify');
+  });
+
   it('stops a run that fills the disk and says why', async () => {
     const { run } = await createSession(db, { repoUrl, message: 'Make a big file.' });
     const llm = createMockProvider([

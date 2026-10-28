@@ -40,6 +40,8 @@ export type PhaseTiming = { phase: string; ms: number };
 
 export type PublishState = 'queued' | 'pushing' | 'pushed' | 'failed';
 
+export type RunMode = 'code' | 'ask';
+
 export type RunEvent = typeof runEvents.$inferSelect;
 export type RunEventType = RunEvent['type'];
 
@@ -64,6 +66,7 @@ export type CreateSessionInput = {
   baseRef?: string;
   testCommand?: string;
   config?: Record<string, unknown>;
+  mode?: RunMode;
 };
 
 export type SessionSummary = Session & {
