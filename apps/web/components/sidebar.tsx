@@ -45,13 +45,13 @@ export function Sidebar() {
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-surface md:flex">
       <div className="px-4 pt-4 pb-3">
-        <Link href="/">
+        <Link href="/chat">
           <Logo gap="var(--surface)" />
         </Link>
       </div>
       <div className="px-3 pb-4">
         <Link
-          href="/"
+          href="/chat"
           className="flex items-center gap-2 rounded-lg border border-line bg-bg px-3 py-2 text-[13px] font-medium shadow-card transition hover:border-line-strong"
         >
           <Plus className="size-4 text-accent" />

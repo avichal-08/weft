@@ -8,10 +8,10 @@ export default function AppLayout({ children }: LayoutProps<'/'>) {
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-line px-4 py-3 md:hidden">
-          <Link href="/">
+          <Link href="/chat">
             <Logo />
           </Link>
-          <Link href="/" className="text-sm text-muted">
+          <Link href="/chat" className="text-sm text-muted">
             New chat
           </Link>
         </header>

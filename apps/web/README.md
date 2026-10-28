@@ -9,12 +9,12 @@ pnpm --filter @weft/web dev     # http://localhost:3000 (needs the api on :3001 
 
 ## Screens
 
-| Route            | What it shows                                                                                  |
-| ---------------- | ---------------------------------------------------------------------------------------------- |
-| `/` signed out   | The landing page (`app/welcome`): what weft does, how a turn works, eval results, sign in      |
-| `/`              | New chat: repository, optional branch, test command, provider and model, and the first message |
-| `/sessions/[id]` | The conversation, a composer, and the chat's cumulative changes                                |
-| `/runs/[id]`     | One turn in detail (status, tokens, time per phase, timeline, diff), linked from each turn     |
+| Route            | What it shows                                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `/`              | The public landing page: what weft does, how it works, quality results, sign in; signed in, it redirects to `/chat` |
+| `/chat`          | New chat: repository, optional branch, test command, provider and model, and the first message                      |
+| `/sessions/[id]` | The conversation, a composer, and the chat's cumulative changes                                                     |
+| `/runs/[id]`     | One turn in detail (status, tokens, time per phase, timeline, diff), linked from each turn                          |
 
 The sidebar lists every chat, most recently active first, with a dot for the latest turn's state
 (blue and pulsing while the agent works).
@@ -148,8 +148,8 @@ pnpm --filter @weft/web auth:hash   # prompts twice, prints WEFT_PASSWORD_HASH=s
   session at once.
 - `/healthz` stays outside the gate for container health checks.
 - Without both variables nobody can sign in: the login form says sign-in isn't configured.
-- Signed-out visitors to `/` see the landing page: `proxy.ts` rewrites `/` to the public
-  `/welcome`, so the URL stays `/`. Its pixel field is a dot matrix drawn at the screen's resolution: 2.5 px
+- `/` is the public landing page and `/chat` the app's home: `proxy.ts` lets `/` through without a
+  session and redirects it to `/chat` with one; signing in also lands on `/chat`. Its pixel field is a dot matrix drawn at the screen's resolution: 2.5 px
   squares on an 8 px grid, mostly neutral with a slow twinkle, in the accent colour where the noise
   peaks and around the pointer. It runs at 30 fps, pauses off screen and stays still under
   `prefers-reduced-motion`. The logo is a woven mark: accent weft threads over and under neutral

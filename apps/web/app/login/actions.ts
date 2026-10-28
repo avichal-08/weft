@@ -34,7 +34,7 @@ export async function loginAction(
     path: '/',
     maxAge: SESSION_DAYS * 86_400,
   });
-  redirect('/');
+  redirect('/chat');
 }
 
 export async function logoutAction(): Promise<void> {

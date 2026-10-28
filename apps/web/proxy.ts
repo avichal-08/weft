@@ -6,10 +6,9 @@ export async function proxy(request: NextRequest) {
     request.cookies.get(SESSION_COOKIE)?.value,
     sessionKey(process.env.SESSION_SECRET),
   );
-  if (ok) return NextResponse.next();
-  if (request.nextUrl.pathname === '/') {
-    return NextResponse.rewrite(new URL('/welcome', request.url));
-  }
+  const home = request.nextUrl.pathname === '/';
+  if (ok) return home ? NextResponse.redirect(new URL('/chat', request.url)) : NextResponse.next();
+  if (home) return NextResponse.next();
   if (request.nextUrl.pathname.startsWith('/api/')) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
@@ -17,5 +16,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!(?:login|healthz|welcome)(?:/|$)|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!(?:login|healthz)(?:/|$)|_next/static|_next/image|favicon.ico).*)'],
 };
