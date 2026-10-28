@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { githubApp } from '@weft/github';
 import {
   createRedis,
+  createRunsQueue,
+  enqueueRun,
   PUBLISH_QUEUE,
   publishLive,
   RUNS_QUEUE,
@@ -14,6 +16,7 @@ import { reapSandboxes } from '@weft/sandbox';
 import { Worker } from 'bullmq';
 import { loadEnv } from './env.ts';
 import { executeRun, REPO_ROOT } from './execute.ts';
+import { reconcileRuns } from './reconcile.ts';
 import { dockerDepsImages, installCache } from './install-cache.ts';
 import { sessionSandboxes } from './session-sandboxes.ts';
 import { describeOutcome, shortId } from './log.ts';
@@ -130,11 +133,20 @@ console.log(
   `weft worker ${env.WORKER_ID} ready (concurrency ${env.WORKER_CONCURRENCY}, image ${env.SANDBOX_IMAGE}, github app ${github ? 'on' : 'off'})`,
 );
 
+const runsQueue = createRunsQueue(publisher);
+reconcileRuns(db, runsQueue, (id) => enqueueRun(runsQueue, id))
+  .then((ids) => {
+    if (ids.length)
+      console.log(`requeued ${ids.length} run(s) with no live job: ${ids.map(shortId).join(', ')}`);
+  })
+  .catch((err: unknown) => console.error('reconciling runs failed', err));
+
 async function shutdown(signal: string) {
   console.log(`${signal}: finishing active runs, then exiting`);
   clearInterval(janitorTimer);
   await worker.close();
   await publishWorker.close();
+  await runsQueue.close();
   await sessions.clear();
   await connection.quit();
   await publisher.quit();

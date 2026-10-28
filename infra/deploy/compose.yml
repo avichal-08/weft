@@ -1,0 +1,127 @@
+name: weft
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '3'
+
+x-llm: &llm
+  LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
+  LLM_MODEL: ${LLM_MODEL:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      WEFT_DOMAIN: ${WEFT_DOMAIN:?set WEFT_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    mem_limit: 128m
+    restart: unless-stopped
+    logging: *logging
+
+  web:
+    image: ${WEFT_IMAGE:-ghcr.io/avichal-08/weft}-web:${WEFT_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    environment:
+      API_URL: http://api:3001
+      WEFT_PASSWORD_HASH: ${WEFT_PASSWORD_HASH:?set WEFT_PASSWORD_HASH}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 512m
+    restart: unless-stopped
+    logging: *logging
+
+  api:
+    image: ${WEFT_IMAGE:-ghcr.io/avichal-08/weft}-api:${WEFT_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      <<: *llm
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    mem_limit: 256m
+    restart: unless-stopped
+    logging: *logging
+
+  worker:
+    image: ${WEFT_IMAGE:-ghcr.io/avichal-08/weft}-worker:${WEFT_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: apps/worker/Dockerfile
+    environment:
+      <<: *llm
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      REDIS_URL: redis://redis:6379
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-ghcr.io/avichal-08/weft-sandbox:latest}
+      WORKER_ID: ${WORKER_ID:-weft-vm}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      SESSION_SANDBOXES_MAX: ${SESSION_SANDBOXES_MAX:-2}
+      TOKEN_BUDGET: ${TOKEN_BUDGET:-500000}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_PRIVATE_KEY_PATH: ${GITHUB_APP_ID:+/run/secrets/github-app}
+    group_add:
+      - ${DOCKER_GID:?set DOCKER_GID to the host docker group id}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - installs:/var/lib/weft/installs
+    secrets:
+      - github-app
+    depends_on:
+      redis:
+        condition: service_healthy
+    mem_limit: 768m
+    stop_grace_period: 10m
+    restart: unless-stopped
+    logging: *logging
+
+  redis:
+    image: redis:7.4-alpine
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 2s
+      retries: 10
+    mem_limit: 256m
+    restart: unless-stopped
+    logging: *logging
+
+  sandbox:
+    image: ${SANDBOX_IMAGE:-ghcr.io/avichal-08/weft-sandbox:latest}
+    build: ../sandbox
+    profiles: [image]
+
+secrets:
+  github-app:
+    file: ${GITHUB_APP_PRIVATE_KEY_FILE:-./github-app.pem}
+
+volumes:
+  caddy-data:
+  caddy-config:
+  redis-data:
+  installs:

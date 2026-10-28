@@ -145,6 +145,7 @@ pnpm --filter @weft/web auth:hash   # prompts twice, prints WEFT_PASSWORD_HASH=s
   session again themselves, as Next's docs advise, so moving a route can't drop the check.
 - **Sign out** in the sidebar deletes the cookie. Rotating `SESSION_SECRET` signs out every
   session at once.
+- `/healthz` stays outside the gate for container health checks.
 - Without both variables nobody can sign in: the login form says sign-in isn't configured.
 - Pages live in the `(app)` route group, whose layout has the sidebar; `/login` sits outside it,
   so the sign-in page never lists chats.

@@ -78,7 +78,8 @@ docs/
   architecture.md one-page map of the system
   decisions/     architecture decision records: what was chosen, and why
 infra/
-  compose.yml    redis (queue + live streams)
+  compose.yml    redis for development (queue + live streams)
+  deploy/        production stack: caddy, web, api, worker, redis (docker compose)
   sandbox/       image every agent run executes in
 packages/
   agent/         the coding agent: tools, loop and eval suite

@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/coverage
+.git
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+packages/agent/eval/results
+infra/azure

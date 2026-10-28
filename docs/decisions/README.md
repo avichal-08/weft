@@ -21,6 +21,7 @@ it and the old one gets a `Superseded by` line.
 | [0009](0009-diff-checks.md)                              | Checking a chat's diff before it is committed or published   | Accepted                   |
 | [0010](0010-token-budget.md)                             | A token budget per turn                                      | Accepted                   |
 | [0011](0011-single-user-sign-in.md)                      | Single-user sign-in with a password and a signed cookie      | Accepted                   |
+| [0012](0012-single-vm-deployment.md)                     | Deploying on one VM with Docker Compose                      | Accepted                   |
 
 ## Template
 

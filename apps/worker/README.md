@@ -290,6 +290,11 @@ message would make it instant.
 
 Failed runs keep the diff and the tail of the test output in `failure_detail`.
 
+On boot the worker also **reconciles** (`reconcileRuns`): every run that is `queued` or `running`
+in Postgres but has no waiting, active or delayed job in Redis is requeued, after removing a
+finished job left under its id. A run is never stranded by a lost Redis or a crashed worker;
+`claimRun` then takes it over with a new attempt.
+
 The janitor (`reapSandboxes`) runs on boot and every `JANITOR_INTERVAL_MS`. On SIGINT/SIGTERM
 the worker stops taking jobs, lets active runs finish, then closes Redis and Postgres.
 
