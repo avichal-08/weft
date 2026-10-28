@@ -19,15 +19,28 @@ export type ApiError = {
   issues?: { path: string; message: string }[];
 };
 
+const UNREACHABLE: ApiError = {
+  error: 'api_unreachable',
+  message: "Can't reach the weft API. Is it running?",
+};
+
 async function call<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
-  const res = await fetch(API_URL + path, {
-    ...init,
-    headers: { 'content-type': 'application/json', ...init?.headers },
-  });
-  const body = (await res.json()) as unknown;
-  return res.ok
-    ? { ok: true, data: body as T }
-    : { ok: false, status: res.status, body: body as ApiError };
+  let res: Response;
+  try {
+    res = await fetch(API_URL + path, {
+      ...init,
+      headers: { 'content-type': 'application/json', ...init?.headers },
+    });
+  } catch {
+    return { ok: false, status: 503, body: UNREACHABLE };
+  }
+  const body = (await res.json().catch(() => null)) as unknown;
+  if (res.ok && body !== null) return { ok: true, data: body as T };
+  return {
+    ok: false,
+    status: res.ok ? 502 : res.status,
+    body: (body as ApiError | null) ?? { error: `http_${res.status}` },
+  };
 }
 
 export const getRun = (id: string) => call<{ run: Run }>(`/runs/${id}`);
