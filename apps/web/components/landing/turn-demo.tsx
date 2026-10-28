@@ -26,11 +26,11 @@ export function TurnDemo() {
             avichal-08/weft-playground · gemini-3.1-flash-lite
           </span>
         </div>
-        <div className="grid gap-4 p-5 text-left">
+        <div className="grid grid-cols-1 gap-4 p-5 text-left">
           <p className="landing-rise ml-auto max-w-[85%] rounded-2xl rounded-br-md border border-line bg-surface-2 px-3.5 py-2 text-sm">
             The LRU cache evicts the wrong key after a read. Fix it.
           </p>
-          <ul className="grid gap-1.5 font-mono text-[12.5px]">
+          <ul className="grid grid-cols-1 gap-1.5 font-mono text-[12.5px]">
             {STEPS.map(({ Icon, text, code, note, tone }, i) => (
               <li
                 key={text + code}

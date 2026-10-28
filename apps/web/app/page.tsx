@@ -123,8 +123,8 @@ export default function Welcome() {
       <section className="relative isolate overflow-hidden">
         <PixelField className="[mask-image:radial-gradient(ellipse_75%_65%_at_50%_35%,black_20%,transparent_75%)]" />
         <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[680px] bg-[radial-gradient(ellipse_50%_45%_at_50%_0%,var(--accent-soft),transparent)]" />
-        <div className="relative mx-auto grid max-w-6xl gap-16 px-6 pt-40 pb-28 text-center">
-          <div className="landing-rise mx-auto grid max-w-3xl justify-items-center gap-7">
+        <div className="relative mx-auto grid grid-cols-1 max-w-6xl gap-16 px-6 pt-40 pb-28 text-center">
+          <div className="landing-rise mx-auto grid grid-cols-1 max-w-3xl justify-items-center gap-7">
             <a
               href="#features"
               className="group flex items-center gap-2 rounded-full border border-line-strong bg-surface/70 py-1 pr-3 pl-1 text-xs text-muted backdrop-blur transition hover:text-fg"
@@ -173,8 +173,11 @@ export default function Welcome() {
         </div>
       </section>
 
-      <section id="features" className="mx-auto grid max-w-6xl scroll-mt-24 gap-14 px-6 py-28">
-        <div className="mx-auto grid max-w-2xl justify-items-center gap-4 text-center">
+      <section
+        id="features"
+        className="mx-auto grid grid-cols-1 max-w-6xl scroll-mt-24 gap-14 px-6 py-28"
+      >
+        <div className="mx-auto grid grid-cols-1 max-w-2xl justify-items-center gap-4 text-center">
           <Eyebrow>Features</Eyebrow>
           <h2 className="text-4xl font-semibold tracking-[-0.035em] text-balance sm:text-5xl">
             Fast enough to hand off. Careful enough to trust.
@@ -184,17 +187,17 @@ export default function Welcome() {
             outside of.
           </p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map(({ Icon, title, body }) => (
             <article
               key={title}
-              className="group relative grid content-start gap-4 overflow-hidden rounded-2xl border border-line bg-surface p-7 transition hover:border-line-strong"
+              className="group relative grid grid-cols-1 content-start gap-4 overflow-hidden rounded-2xl border border-line bg-surface p-7 transition hover:border-line-strong"
             >
               <div className="pointer-events-none absolute -top-24 -right-24 size-48 rounded-full bg-accent-soft opacity-0 blur-3xl transition group-hover:opacity-100" />
               <span className="grid size-10 place-items-center rounded-xl border border-line bg-surface-2 text-fg">
                 <Icon className="size-[18px]" />
               </span>
-              <div className="grid gap-2">
+              <div className="grid grid-cols-1 gap-2">
                 <h3 className="text-[17px] font-medium tracking-tight">{title}</h3>
                 <p className="text-sm leading-6 text-muted">{body}</p>
               </div>
@@ -204,16 +207,19 @@ export default function Welcome() {
       </section>
 
       <section id="how" className="scroll-mt-24 border-y border-line bg-surface">
-        <div className="mx-auto grid max-w-6xl gap-14 px-6 py-28">
-          <div className="grid max-w-2xl gap-4">
+        <div className="mx-auto grid grid-cols-1 max-w-6xl gap-14 px-6 py-28">
+          <div className="grid grid-cols-1 max-w-2xl gap-4">
             <Eyebrow>How it works</Eyebrow>
             <h2 className="text-4xl font-semibold tracking-[-0.035em] text-balance sm:text-5xl">
               From a sentence to a reviewed change.
             </h2>
           </div>
-          <ol className="grid gap-8 md:grid-cols-5 md:gap-6">
+          <ol className="grid grid-cols-1 gap-8 md:grid-cols-5 md:gap-6">
             {FLOW.map(([name, body], i) => (
-              <li key={name} className="grid content-start gap-3 border-t border-line-strong pt-5">
+              <li
+                key={name}
+                className="grid grid-cols-1 content-start gap-3 border-t border-line-strong pt-5"
+              >
                 <span className="font-mono text-xs text-accent tabular-nums">0{i + 1}</span>
                 <h3 className="text-[17px] font-medium tracking-tight">{name}</h3>
                 <p className="text-sm leading-6 text-muted">{body}</p>
@@ -225,9 +231,9 @@ export default function Welcome() {
 
       <section
         id="quality"
-        className="mx-auto grid max-w-6xl scroll-mt-24 items-center gap-14 px-6 py-28 lg:grid-cols-[1.1fr_1fr]"
+        className="mx-auto grid grid-cols-1 max-w-6xl scroll-mt-24 items-center gap-14 px-6 py-28 lg:grid-cols-[1.1fr_1fr]"
       >
-        <div className="grid gap-5">
+        <div className="grid grid-cols-1 gap-5">
           <Eyebrow>Quality</Eyebrow>
           <h2 className="text-4xl font-semibold tracking-[-0.035em] text-balance sm:text-5xl">
             Held to a bar you can measure.
@@ -247,7 +253,10 @@ export default function Welcome() {
         </div>
         <dl className="grid grid-cols-2 gap-4">
           {QUALITY.map(([label, value]) => (
-            <div key={label} className="grid gap-2 rounded-2xl border border-line bg-surface p-6">
+            <div
+              key={label}
+              className="grid grid-cols-1 gap-2 rounded-2xl border border-line bg-surface p-6"
+            >
               <dd className="text-4xl font-semibold tracking-[-0.04em] tabular-nums">{value}</dd>
               <dt className="text-sm leading-5 text-muted">{label}</dt>
             </div>
@@ -257,7 +266,7 @@ export default function Welcome() {
 
       <section className="relative isolate overflow-hidden border-t border-line">
         <PixelField className="[mask-image:radial-gradient(ellipse_60%_80%_at_50%_100%,black_10%,transparent_70%)]" />
-        <div className="relative mx-auto grid max-w-3xl justify-items-center gap-7 px-6 py-32 text-center">
+        <div className="relative mx-auto grid grid-cols-1 max-w-3xl justify-items-center gap-7 px-6 py-32 text-center">
           <LogoMark className="size-12" />
           <h2 className="text-4xl font-semibold tracking-[-0.04em] text-balance sm:text-6xl">
             What should we work on?

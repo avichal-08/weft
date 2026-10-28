@@ -158,7 +158,7 @@ export function NewChatForm() {
             <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-line bg-surface-2 text-muted transition group-hover:text-accent">
               <Icon className="size-4" />
             </span>
-            <span className="grid gap-0.5">
+            <span className="grid grid-cols-1 gap-0.5">
               <span className="flex items-center gap-2 text-[13px] font-medium">
                 {title}
                 {suggested === 'ask' && (
