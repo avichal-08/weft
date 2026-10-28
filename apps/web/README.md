@@ -38,6 +38,11 @@ mechanics stay out of the way until you want them.
   with its +/− counts and its diff; the panel shows the latest cumulative diff of the whole chat.
 - **The composer** stays at the bottom: Enter sends, Shift+Enter adds a line, the model in use is
   shown beside the button, and while a turn runs it turns into **Stop**, which cancels the turn.
+- **Code / Ask** in the composer and the new-chat form picks the message's mode. Ask is
+  read-only: weft answers from the code and can't change files
+  ([ADR 0008](../../docs/decisions/0008-ask-mode.md)). The placeholder and the hint under the
+  composer say which mode is on, the composer starts in the mode of the chat's last message, and
+  Ask messages are labelled "Ask · read-only" above the bubble.
 
 ### Publishing
 
@@ -46,7 +51,7 @@ The chat header has **Commit** and **Create PR**
 
 - **Commit** opens a dialog that drafts a message for what changed since the last commit
   ("Writing a commit message…"), lets you edit it, and saves it. It is enabled only when the latest
-  turn succeeded and changed something since the last commit.
+  Code turn succeeded and changed something since the last commit; Ask turns don't count.
 - **Create PR** with uncommitted changes opens the same dialog as **Commit & create PR**;
   with everything committed it publishes directly. If the API refuses, its reason shows under
   the buttons.

@@ -1,9 +1,10 @@
 'use client';
 
 import { ArrowUp, Square } from 'lucide-react';
-import { useActionState, useEffect, useRef } from 'react';
+import { useActionState, useEffect, useRef, useState } from 'react';
 import { cancelRunAction, sendMessageAction } from '@/app/actions';
-import type { FormState } from '@/lib/types';
+import { ModeToggle } from '@/components/mode-toggle';
+import type { FormState, RunMode } from '@/lib/types';
 
 export function grow(el: HTMLTextAreaElement | null) {
   if (!el) return;
@@ -15,11 +16,14 @@ export function Composer({
   sessionId,
   activeRunId,
   model,
+  defaultMode,
 }: {
   sessionId: string;
   activeRunId: string | null;
   model: string | null;
+  defaultMode: RunMode;
 }) {
+  const [mode, setMode] = useState(defaultMode);
   const [state, action, pending] = useActionState<FormState, FormData>(
     sendMessageAction.bind(null, sessionId),
     {},
@@ -47,7 +51,9 @@ export function Composer({
           className="block max-h-60 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-6 outline-none placeholder:text-faint disabled:opacity-60"
           name="message"
           rows={1}
-          placeholder={busy ? 'weft is working…' : 'Reply to weft…'}
+          placeholder={
+            busy ? 'weft is working…' : mode === 'ask' ? 'Ask about the code…' : 'Reply to weft…'
+          }
           defaultValue={state.error ? state.fields?.message : undefined}
           disabled={busy || pending}
           onInput={(e) => grow(e.currentTarget)}
@@ -59,7 +65,8 @@ export function Composer({
           }}
         />
         <div className="flex items-center justify-between gap-3 px-3 pb-2.5">
-          <span className="min-w-0 truncate text-xs">
+          <ModeToggle mode={mode} onChange={setMode} disabled={busy || pending} />
+          <span className="mr-auto min-w-0 truncate text-xs">
             {state.error ? (
               <span className="text-bad">{state.error}</span>
             ) : (
@@ -90,7 +97,10 @@ export function Composer({
         </div>
       </form>
       <p className="mt-2 text-center text-[11px] text-faint">
-        weft works in an isolated sandbox. Enter to send · Shift+Enter for a new line
+        {mode === 'ask'
+          ? "Ask mode is read-only: weft answers from the code and won't change files."
+          : 'weft works in an isolated sandbox.'}{' '}
+        Enter to send · Shift+Enter for a new line
       </p>
     </div>
   );

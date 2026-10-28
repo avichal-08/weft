@@ -3,8 +3,9 @@
 import { ArrowUp, FolderGit2, GitBranch, Settings2 } from 'lucide-react';
 import { useActionState, useRef, useState } from 'react';
 import { createSessionAction } from '@/app/actions';
-import type { FormState } from '@/lib/types';
+import type { FormState, RunMode } from '@/lib/types';
 import { grow } from './composer';
+import { ModeToggle } from './mode-toggle';
 
 const SUGGESTIONS = [
   'Explain how this codebase is structured',
@@ -16,9 +17,12 @@ const SUGGESTIONS = [
 const field =
   'w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none transition placeholder:text-faint focus:border-accent/50 focus:ring-4 focus:ring-accent-soft';
 
+const modeFrom = (mode: string | undefined): RunMode => (mode === 'ask' ? 'ask' : 'code');
+
 export function NewChatForm() {
   const [state, action, pending] = useActionState<FormState, FormData>(createSessionAction, {});
   const [options, setOptions] = useState(false);
+  const [mode, setMode] = useState<RunMode>(modeFrom(state.fields?.mode));
   const message = useRef<HTMLTextAreaElement>(null);
   const f = state.fields ?? {};
 
@@ -50,7 +54,9 @@ export function NewChatForm() {
           ref={message}
           name="message"
           rows={3}
-          placeholder="Ask about the code, or describe a change…"
+          placeholder={
+            mode === 'ask' ? 'Ask about the code…' : 'Ask about the code, or describe a change…'
+          }
           defaultValue={f.message}
           required
           onInput={(e) => grow(e.currentTarget)}
@@ -63,13 +69,16 @@ export function NewChatForm() {
           className="block max-h-60 w-full resize-none bg-transparent px-4 pt-3.5 text-[15px] leading-6 outline-none placeholder:text-faint"
         />
         <div className="flex items-center justify-between gap-3 px-3 pt-1 pb-3">
-          <button
-            type="button"
-            onClick={() => setOptions((o) => !o)}
-            className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition ${options ? 'bg-surface-2 text-fg' : 'text-muted hover:bg-surface-2 hover:text-fg'}`}
-          >
-            <Settings2 className="size-3.5" /> Options
-          </button>
+          <div className="flex items-center gap-2">
+            <ModeToggle mode={mode} onChange={setMode} disabled={pending} />
+            <button
+              type="button"
+              onClick={() => setOptions((o) => !o)}
+              className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition ${options ? 'bg-surface-2 text-fg' : 'text-muted hover:bg-surface-2 hover:text-fg'}`}
+            >
+              <Settings2 className="size-3.5" /> Options
+            </button>
+          </div>
           <div className="flex items-center gap-3">
             {state.error && <span className="text-xs text-bad">{state.error}</span>}
             <button

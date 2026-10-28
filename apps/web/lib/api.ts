@@ -1,5 +1,13 @@
 import 'server-only';
-import type { Commit, Run, RunEvent, Session, SessionSummary, SessionWithTurns } from './types';
+import type {
+  Commit,
+  Run,
+  RunEvent,
+  RunMode,
+  Session,
+  SessionSummary,
+  SessionWithTurns,
+} from './types';
 
 export const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 
@@ -43,8 +51,8 @@ export const createCommit = (id: string, message: string) =>
   });
 export const publishSession = (id: string) =>
   call<{ session: Session }>(`/sessions/${id}/publish`, { method: 'POST' });
-export const sendMessage = (id: string, message: string) =>
+export const sendMessage = (id: string, message: string, mode: RunMode) =>
   call<{ run: Run }>(`/sessions/${id}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, mode }),
   });

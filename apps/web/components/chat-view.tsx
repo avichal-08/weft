@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck, CircleSlash } from 'lucide-react';
+import { CircleAlert, CircleCheck, CircleSlash, MessageCircleQuestion } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getRunEvents, getSession } from '@/lib/api';
@@ -56,8 +56,15 @@ function Turn({ run, events, attempt }: { run: Run; events: RunEvent[]; attempt:
 
   return (
     <li className="grid grid-cols-1 gap-6">
-      <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md border border-line bg-surface-2 px-4 py-2.5 text-[15px] leading-7 whitespace-pre-wrap">
-        {run.task}
+      <div className="ml-auto grid max-w-[85%] justify-items-end gap-1">
+        {run.mode === 'ask' && (
+          <span className="flex items-center gap-1 text-[11px] text-faint">
+            <MessageCircleQuestion className="size-3" /> Ask · read-only
+          </span>
+        )}
+        <div className="rounded-2xl rounded-br-md border border-line bg-surface-2 px-4 py-2.5 text-[15px] leading-7 whitespace-pre-wrap">
+          {run.task}
+        </div>
       </div>
       <div className="group/turn flex gap-3.5">
         <LogoMark className="mt-0.5 size-6 shrink-0" />
@@ -128,7 +135,8 @@ export async function ChatView({ params }: { params: Promise<{ id: string }> }) 
   const committed = lastCommit
     ? (session.turns.find((t) => t.turn === lastCommit.turn)?.diff ?? '')
     : '';
-  const uncommitted = last?.status === 'succeeded' && !!last.diff && last.diff !== committed;
+  const work = session.turns.filter((t) => t.mode !== 'ask').at(-1);
+  const uncommitted = work?.status === 'succeeded' && !!work.diff && work.diff !== committed;
   const files = diff ? parseDiff(diff) : [];
 
   return (
@@ -168,6 +176,7 @@ export async function ChatView({ params }: { params: Promise<{ id: string }> }) 
           sessionId={session.id}
           activeRunId={activeRunId}
           model={session.config.model ?? null}
+          defaultMode={last?.mode ?? 'code'}
         />
       </div>
     </ChatShell>

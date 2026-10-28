@@ -1,3 +1,5 @@
+export type RunMode = 'code' | 'ask';
+
 export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'error' | 'cancelled';
 
 export type Run = {
@@ -10,6 +12,7 @@ export type Run = {
   repoUrl: string;
   baseRef: string | null;
   task: string;
+  mode: RunMode;
   testCommand: string | null;
   config: { provider?: string; model?: string; maxSteps?: number };
   createdAt: string;

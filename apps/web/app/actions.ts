@@ -11,9 +11,10 @@ import {
   sendMessage,
   type ApiError,
 } from '@/lib/api';
-import type { FormState } from '@/lib/types';
+import type { FormState, RunMode } from '@/lib/types';
 
 const text = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
+const modeOf = (form: FormData): RunMode => (form.get('mode') === 'ask' ? 'ask' : 'code');
 
 const describe = (status: number, body: ApiError) =>
   body.issues?.map((i) => `${i.path || 'request'}: ${i.message}`).join(' · ') ??
@@ -29,10 +30,12 @@ export async function createSessionAction(_prev: FormState, form: FormData): Pro
     provider: text(form, 'provider'),
     model: text(form, 'model'),
     message: text(form, 'message'),
+    mode: modeOf(form),
   };
   const res = await createSession({
     repoUrl: fields.repoUrl,
     message: fields.message,
+    mode: fields.mode,
     ...(fields.baseRef ? { baseRef: fields.baseRef } : {}),
     ...(fields.testCommand ? { testCommand: fields.testCommand } : {}),
     config: {
@@ -51,7 +54,7 @@ export async function sendMessageAction(
 ): Promise<FormState> {
   const message = text(form, 'message');
   if (!message) return {};
-  const res = await sendMessage(sessionId, message);
+  const res = await sendMessage(sessionId, message, modeOf(form));
   if (!res.ok) {
     const error =
       res.status === 409
