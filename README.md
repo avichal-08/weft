@@ -1,7 +1,7 @@
 # weft
 
-A cloud coding agent, in the spirit of Claude Code on the web: hand it work on a GitHub repo, or
-start from nothing, and watch it build in an isolated sandbox.
+A cloud coding agent, in the spirit of Claude Code on the web: hand it work on a GitHub repo and
+watch it build in an isolated sandbox.
 
 > Early and in active development. The first list is where it's headed; the second is what works
 > today.
@@ -13,8 +13,6 @@ start from nothing, and watch it build in an isolated sandbox.
 - **Steer it like a teammate.** One conversation per task: follow-ups, corrections and questions,
   with every step visible live.
 - **Ship the result.** Changes come back as a pull request, checked by the tests.
-- **Start from scratch.** No repo needed: describe an app, watch it get built, and use a live
-  preview of it.
 
 ## Where it is now
 
