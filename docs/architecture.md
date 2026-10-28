@@ -31,6 +31,7 @@ flowchart LR
 | `packages/llm`     | One interface over Anthropic, OpenAI-compatible APIs (OpenAI, Gemini, OpenRouter), a mock.  |
 | `packages/db`      | Schema and queries (Drizzle). Postgres is the source of truth.                              |
 | `packages/queue`   | The `runs` and `publish` queues and the per-run Redis live stream.                          |
+| `packages/checks`  | Checks on a diff before commit and publish: secrets, workflow files, rewritten tests.       |
 | `packages/github`  | GitHub App auth: app JWT, repo-scoped installation tokens, pull request calls.              |
 
 ## A turn, end to end

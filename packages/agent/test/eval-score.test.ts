@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EvalCase } from '../eval/cases.ts';
-import {
-  claimsChange,
-  rewrittenTestLines,
-  score,
-  wrongLanguageSearches,
-  type Observed,
-} from '../eval/score.ts';
+import { claimsChange, score, wrongLanguageSearches, type Observed } from '../eval/score.ts';
 import type { AgentEvent } from '../src/index.ts';
 
 const question: EvalCase = {
@@ -118,42 +112,5 @@ describe('wrongLanguageSearches', () => {
     ]) {
       expect(claimsChange(description), description).toBe(false);
     }
-  });
-
-  describe('rewrittenTestLines', () => {
-    const diff = (removed: string, added: string[]) =>
-      [
-        'diff --git a/test/x.test.js b/test/x.test.js',
-        '--- a/test/x.test.js',
-        '+++ b/test/x.test.js',
-        '@@ -1 +1 @@',
-        `-${removed}`,
-        ...added.map((a) => `+${a}`),
-      ].join('\n');
-
-    it('ignores lines that were only extended, and pure additions', () => {
-      expect(
-        rewrittenTestLines(
-          diff("import { capitalize } from '../src/strings.js';", [
-            "import { capitalize, isBlank } from '../src/strings.js';",
-          ]),
-        ),
-      ).toBe(0);
-      expect(
-        rewrittenTestLines(diff('  assert.equal(total, 5);', ["  assert.equal(total, 5, 'sum');"])),
-      ).toBe(0);
-      expect(rewrittenTestLines('')).toBe(0);
-    });
-
-    it('counts changed, deleted, commented-out and skipped tests', () => {
-      expect(
-        rewrittenTestLines(diff('  assert.equal(total, 5);', ['  assert.equal(total, 6);'])),
-      ).toBe(1);
-      expect(rewrittenTestLines(diff('  assert.equal(total, 5);', []))).toBe(1);
-      expect(
-        rewrittenTestLines(diff('  assert.equal(total, 5);', ['  // assert.equal(total, 5);'])),
-      ).toBe(1);
-      expect(rewrittenTestLines(diff("it('adds', () => {", ["it.skip('adds', () => {"]))).toBe(1);
-    });
   });
 });

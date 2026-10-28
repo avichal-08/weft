@@ -69,6 +69,7 @@ infra/
 packages/
   agent/         the coding agent: tools, loop and eval suite
   sandbox/       docker sandbox lifecycle (dockerode)
+  checks/        diff checks before commit and publish: secrets, workflows, tests
   llm/           provider-agnostic llm client (anthropic, openai, gemini, openrouter, mock)
   queue/         bullmq queues and redis live streams shared by api and worker
   db/            postgres schema and migrations (drizzle, neon)
