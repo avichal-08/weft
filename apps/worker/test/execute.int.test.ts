@@ -425,6 +425,20 @@ describe('conversations', () => {
     expect(done.timings?.map((t) => t.phase)).not.toContain('verify');
   });
 
+  it('stores the checks of the diff, without failing the turn', async () => {
+    const { run } = await session('node --test');
+    const llm = createMockProvider([
+      ...fixScript.slice(0, 2),
+      call('create_file', { path: '.env', content: 'DEBUG=1\n' }),
+      call('finish', { summary: 'fixed, and added .env' }),
+    ]);
+    const outcome = await executeRun(deps(llm), run.id);
+    expect(outcome).toMatchObject({ kind: 'completed', status: 'succeeded' });
+    expect((await getRun(db, run.id))?.checks).toMatchObject([
+      { kind: 'secret', severity: 'block', file: '.env' },
+    ]);
+  });
+
   it('stops a run that fills the disk and says why', async () => {
     const { run } = await createSession(db, { repoUrl, message: 'Make a big file.' });
     const llm = createMockProvider([

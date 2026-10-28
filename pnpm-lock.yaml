@@ -282,6 +282,9 @@ importers:
       '@weft/agent':
         specifier: workspace:*
         version: link:../../packages/agent
+      '@weft/checks':
+        specifier: workspace:*
+        version: link:../../packages/checks
       '@weft/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -395,6 +398,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@weft/checks':
+        specifier: workspace:*
+        version: link:../checks
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4(@electric-sql/pglite@0.5.10)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.1)

@@ -71,7 +71,10 @@ pnpm --filter @weft/worker dev
    to the clone, never part of a diff). An earlier version excluded it with a `':!node_modules'`
    pathspec instead, which makes `git add` fail when the repo already ignores `node_modules` and
    the folder exists; the failure went unchecked and turns on most real repos recorded an empty
-   diff. A failed diff now fails the turn.
+   diff. A failed diff now fails the turn. The diff is then checked with `@weft/checks` (secrets,
+   workflow files, rewritten tests, large files) and the findings are stored on the run as
+   `checks` and logged; they never fail the turn, but a blocking one stops commits and publishing
+   ([ADR 0009](../../docs/decisions/0009-diff-checks.md)).
 8. **Verify**, when the run has a `testCommand`: the worker reruns it itself instead of trusting
    the agent, and in a **fresh sandbox**: the dependency image (or the base image for a repo
    without dependencies), the clean checkout and the diff from step 7. Nothing the agent left

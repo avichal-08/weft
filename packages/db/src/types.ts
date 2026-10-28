@@ -1,3 +1,4 @@
+import type { Finding } from '@weft/checks';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import type { commits, runEvents, runs, schema, sessions } from './schema.ts';
 
@@ -34,6 +35,7 @@ export type CompleteRunInput = Partial<RunUsage> & {
   failureKind?: string;
   failureDetail?: string;
   timings?: PhaseTiming[];
+  checks?: Finding[];
 };
 
 export type PhaseTiming = { phase: string; ms: number };

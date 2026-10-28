@@ -78,6 +78,11 @@ as the turn before it, and commits, pull requests and the publish rules judge `l
 the latest Code turn, so a question asked after a change neither blocks nor hides it. Only a turn
 still running blocks publishing whatever its mode.
 
+`runs.checks` holds the findings of `@weft/checks` for the turn's diff. Because diffs are
+cumulative, the latest Code turn's findings cover the whole chat: `publishRefusal` refuses with
+their messages while any of them is blocking
+([ADR 0009](../../docs/decisions/0009-diff-checks.md)); warnings don't block.
+
 Two indexes guard the conversation: `(session_id, turn)` is unique, and a partial unique index on
 `session_id` where `status in ('queued', 'running')` allows at most one active turn per session.
 The second one is what makes "don't accept a message while the agent is working" hold even for

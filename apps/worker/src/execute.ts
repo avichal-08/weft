@@ -1,4 +1,5 @@
 import { createToolContext, runAgent, type AgentEvent } from '@weft/agent';
+import { checkDiff } from '@weft/checks';
 import {
   appendRunEvents,
   claimRun,
@@ -344,6 +345,10 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
       });
     }
 
+    const checks = checkDiff(diff.stdout);
+    for (const f of checks)
+      log(`check: ${f.severity} ${f.kind} ${f.file}${f.line ? `:${f.line}` : ''}`);
+
     let verify: ExecResult | null = null;
     if (run.testCommand && run.mode !== 'ask') {
       phase('verify');
@@ -383,13 +388,19 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
 
     if (result.status === 'finished' && passed) {
       return keepIfRecorded(
-        await finish({ status: 'succeeded', diff: diff.stdout, ...summaryOf(result.summary) }),
+        await finish({
+          status: 'succeeded',
+          diff: diff.stdout,
+          checks,
+          ...summaryOf(result.summary),
+        }),
       );
     }
     return keepIfRecorded(
       await finish({
         status: 'failed',
         diff: diff.stdout,
+        checks,
         failureKind: result.status === 'finished' ? 'tests_failed' : result.status,
         failureDetail: !passed
           ? tail(verify!.stdout + verify!.stderr)

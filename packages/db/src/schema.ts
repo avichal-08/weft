@@ -1,3 +1,4 @@
+import type { Finding } from '@weft/checks';
 import type { PhaseTiming, PublishState, RunMode } from './types.ts';
 import { sql } from 'drizzle-orm';
 import {
@@ -76,6 +77,7 @@ export const runs = pgTable(
     failureKind: text('failure_kind'),
     failureDetail: text('failure_detail'),
     timings: jsonb('timings').$type<PhaseTiming[]>(),
+    checks: jsonb('checks').$type<Finding[]>(),
   },
   (t) => [
     index('runs_status_created_idx').on(t.status, t.createdAt),

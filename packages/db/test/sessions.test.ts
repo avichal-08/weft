@@ -235,6 +235,32 @@ describe('publishRefusal', () => {
     );
   });
 
+  it('refuses while the latest Code turn has a blocking finding, but not for warnings', () => {
+    const finding = (severity: 'block' | 'warn', message: string) => ({
+      kind: 'secret' as const,
+      severity,
+      file: '.env',
+      message,
+    });
+    expect(
+      publishRefusal([
+        turn({
+          diff: 'd',
+          checks: [finding('block', '.env is an environment file'), finding('block', 'second')],
+        }),
+      ]),
+    ).toBe('.env is an environment file\nsecond');
+    expect(
+      publishRefusal([turn({ diff: 'd', checks: [finding('warn', 'tests rewritten')] })]),
+    ).toBeNull();
+    expect(
+      publishRefusal([
+        turn({ diff: 'd', checks: [finding('block', 'old')] }),
+        turn({ diff: 'd2', checks: [] }),
+      ]),
+    ).toBeNull();
+  });
+
   it('judges the latest Code turn, so a question after a change neither blocks nor hides it', () => {
     const ask = (over: Partial<Run> = {}) => turn({ mode: 'ask', diff: 'd', ...over });
     expect(publishRefusal([turn({ diff: 'd' }), ask({ status: 'error' })])).toBeNull();

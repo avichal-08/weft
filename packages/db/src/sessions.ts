@@ -1,3 +1,4 @@
+import { blocking } from '@weft/checks';
 import { asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { commits, runs, sessions } from './schema.ts';
 import type {
@@ -209,6 +210,8 @@ export function publishRefusal(turns: Run[]): string | null {
     return "the latest turn's tests fail, so there is nothing to publish yet";
   }
   if (work.status !== 'succeeded') return "the latest turn didn't finish";
+  const blocked = blocking(work.checks ?? []);
+  if (blocked.length > 0) return blocked.map((f) => f.message).join('\n');
   if (!turns.some((t) => t.status === 'succeeded' && t.diff)) {
     return 'nothing in this chat has changed any files yet';
   }
