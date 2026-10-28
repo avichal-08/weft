@@ -1,6 +1,6 @@
 # 0013. Hosting on AWS EC2, reached through Session Manager
 
-- Status: Accepted
+- Status: Accepted; shell access superseded by [0014](0014-ssh-access.md)
 - Date: 2026-10-28
 - Supersedes the choice of Azure in [0012](0012-single-vm-deployment.md); the single-VM topology stands
 
@@ -20,7 +20,10 @@ from the credits.
 
 ## Decision
 
-- **AWS, region `ap-south-1` (Mumbai)**, on the Free plan.
+- **AWS, region `ap-southeast-2` (Sydney)**, on the Free plan. Mumbai and Singapore would be closer
+  to the owner in India, but the Free plan offered this account only Sydney. Pages take about
+  150 ms more to reach than from a nearby region, which matters little next to agent turns that
+  take seconds.
 - **One `m7i-flex.large` instance** (2 vCPU, 8 GiB, x86), the only eligible type with the memory
   0012 sized for, running Ubuntu 24.04 with a 40 GB gp3 volume. x86 keeps the images CI already
   builds.

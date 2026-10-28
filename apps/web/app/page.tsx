@@ -94,7 +94,7 @@ function PrimaryLink({ href, children }: { href: string; children: React.ReactNo
 
 export default function Welcome() {
   return (
-    <div className="h-full w-full overflow-y-auto scroll-smooth">
+    <div className="h-full w-full overflow-x-hidden overflow-y-auto scroll-smooth">
       <header className="fixed inset-x-0 top-4 z-30 px-4">
         <nav className="mx-auto flex max-w-4xl items-center justify-between rounded-full border border-line-strong bg-surface/65 py-2 pr-2 pl-4 shadow-card backdrop-blur-xl">
           <Link href="/" aria-label="weft">
@@ -132,7 +132,8 @@ export default function Welcome() {
               <span className="rounded-full bg-accent-soft px-2 py-0.5 font-medium text-accent">
                 New
               </span>
-              Ask mode: answers without touching your code
+              <span className="sm:hidden">Ask mode is here</span>
+              <span className="hidden sm:inline">Ask mode: answers without touching your code</span>
               <ArrowRight className="size-3 transition group-hover:translate-x-0.5" />
             </a>
             <h1 className="text-[44px] leading-[1.02] font-semibold tracking-[-0.045em] text-balance sm:text-[76px]">

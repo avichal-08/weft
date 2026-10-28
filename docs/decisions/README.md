@@ -23,6 +23,7 @@ it and the old one gets a `Superseded by` line.
 | [0011](0011-single-user-sign-in.md)                      | Single-user sign-in with a password and a signed cookie      | Accepted                           |
 | [0012](0012-single-vm-deployment.md)                     | Deploying on one VM with Docker Compose                      | Accepted, cloud superseded by 0013 |
 | [0013](0013-hosting-on-aws-ec2.md)                       | Hosting on AWS EC2, reached through Session Manager          | Accepted                           |
+| [0014](0014-ssh-access.md)                               | SSH access with a key, restricted to the owner's IP          | Accepted                           |
 
 ## Template
 

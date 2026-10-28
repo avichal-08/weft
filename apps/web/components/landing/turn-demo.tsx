@@ -22,7 +22,7 @@ export function TurnDemo() {
           <span className="size-2.5 rounded-full bg-surface-3" />
           <span className="size-2.5 rounded-full bg-surface-3" />
           <span className="size-2.5 rounded-full bg-surface-3" />
-          <span className="ml-2 truncate font-mono text-[11px] text-faint">
+          <span className="ml-2 min-w-0 truncate font-mono text-[11px] text-faint">
             avichal-08/weft-playground · gemini-3.1-flash-lite
           </span>
         </div>

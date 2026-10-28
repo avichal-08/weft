@@ -8,8 +8,9 @@ instance, prepare it, configure weft and start it.
 
 Throughout, replace `<domain>` with the hostname weft will serve (for example
 `weft.example.com`), `<ip>` with the instance's Elastic IP and `<instance-id>` with its id
-(`i-...`). The region is `ap-south-1` (Mumbai); pick it in the console's region menu before each
-step.
+(`i-...`). The region is `ap-southeast-2` (Sydney), the only one the Free plan offered
+this account; if the console opens elsewhere, put the region in the URL
+(`https://ap-southeast-2.console.aws.amazon.com/ec2/home?region=ap-southeast-2`).
 
 ## 1. Set up the account
 
@@ -17,7 +18,7 @@ step.
    and the account closes after six months or when the credits run out.
 2. **Protect the root user:** account menu → Security credentials → assign an MFA device. Use the
    root user only for billing and account settings from here on.
-3. **Create your everyday login** with IAM Identity Center: enable it in `ap-south-1`, add a user
+3. **Create your everyday login** with IAM Identity Center: enable it in `ap-southeast-2`, add a user
    for yourself, create a permission set from the `AdministratorAccess` policy, and assign that
    user and permission set to the account. Sign in through the AWS access portal URL Identity
    Center shows, and set up MFA when asked.
@@ -40,23 +41,32 @@ Then EC2 → Instances → **Launch instances**:
 | Name                            | `weft`                                                      |
 | Image                           | Ubuntu Server 24.04 LTS (HVM), SSD, 64-bit (x86)            |
 | Instance type                   | `m7i-flex.large` (2 vCPU, 8 GiB, marked free tier eligible) |
-| Key pair                        | Proceed without a key pair                                  |
+| Key pair                        | Create new key pair: `weft`, ED25519, `.pem`                |
 | Network                         | default VPC, a public subnet, auto-assign public IP enabled |
 | Firewall                        | create a security group `weft-web` (rules below)            |
 | Storage                         | 40 GiB, gp3                                                 |
-| Advanced → IAM instance profile | `weft-ec2-ssm`                                              |
+| Advanced → IAM instance profile | `weft-ec2-ssm` (optional fallback, see step 4)              |
 | Advanced → Metadata version     | V2 only (token required), the default                       |
 
 Security group `weft-web`, inbound rules (outbound stays "all traffic"):
 
 | Type   | Protocol | Port | Source                 | Purpose                                |
 | ------ | -------- | ---- | ---------------------- | -------------------------------------- |
+| SSH    | TCP      | 22   | My IP (`x.x.x.x/32`)   | SSH for you only                       |
 | HTTPS  | TCP      | 443  | `0.0.0.0/0` and `::/0` | HTTPS                                  |
 | Custom | UDP      | 443  | `0.0.0.0/0` and `::/0` | HTTP/3                                 |
 | HTTP   | TCP      | 80   | `0.0.0.0/0` and `::/0` | Let's Encrypt challenges and redirects |
 
-There is no rule for port 22. Never add 3000, 3001 or 6379: those services are reachable only
+SSH is open to your IP only ([ADR 0014](decisions/0014-ssh-access.md)); never to `0.0.0.0/0`.
+Never add 3000, 3001 or 6379: those services are reachable only
 inside Docker.
+
+The browser downloads `weft.pem` once. Keep it on your machine, out of any repository, where SSH
+accepts it (in WSL, not on the Windows drive):
+
+```bash
+mkdir -p ~/.ssh && mv /mnt/c/Users/<you>/Downloads/weft.pem ~/.ssh/ && chmod 400 ~/.ssh/weft.pem
+```
 
 **Give it a fixed address:** EC2 → Elastic IPs → Allocate → then Actions → Associate with the
 `weft` instance. That address is `<ip>`; it stays the same when the instance is stopped and
@@ -74,16 +84,19 @@ dig +short <domain>    # should print <ip>
 
 ## 4. Connect and prepare the instance
 
-Connect with **Session Manager**: EC2 → the instance → Connect → Session Manager → Connect. (If it
-says the instance isn't connected, wait two minutes after launch, and check the IAM role is
-attached.) From your machine with the AWS CLI and its Session Manager plugin installed, the same
-is `aws ssm start-session --target <instance-id> --region ap-south-1`.
-
-Sessions start as `ssm-user`; switch to the image's `ubuntu` user (uid 1000, the same as the
-containers' `node` user) and fetch weft's deploy folder:
+Connect over SSH as `ubuntu` (uid 1000, the same as the containers' `node` user):
 
 ```bash
-sudo su - ubuntu
+ssh -i ~/.ssh/weft.pem ubuntu@<ip>
+```
+
+A timeout means the SSH rule doesn't match your current IP (home IPs change; set the rule to "My
+IP" again). If the instance has the `weft-ec2-ssm` role, EC2 → Connect → Session Manager works
+regardless: sessions start as `ssm-user`, so run `sudo su - ubuntu` first.
+
+Fetch weft's deploy folder:
+
+```bash
 sudo install -d -o ubuntu -g ubuntu /opt/weft
 git clone --filter=blob:none --no-checkout https://github.com/avichal-08/weft.git /opt/weft
 cd /opt/weft
@@ -103,9 +116,10 @@ Then prepare the machine:
 
 ```bash
 sudo bash /opt/weft/infra/deploy/bootstrap.sh
-exit                  # back to ssm-user
-sudo su - ubuntu      # log in again so the docker group applies
-docker ps             # works without sudo
+exit                                  # log out, then in again so the docker group applies
+ssh -i ~/.ssh/weft.pem ubuntu@<ip>
+docker ps                             # works without sudo
+sudo apt-get update && sudo apt-get upgrade -y && sudo reboot   # apply pending updates once
 ```
 
 `bootstrap.sh` installs Docker Engine and the Compose plugin from Docker's repository, sets log
@@ -144,13 +158,13 @@ nano .env
 | `GITHUB_APP_ID`                        | the GitHub App's id (empty disables publishing)       |
 | `GITHUB_APP_PRIVATE_KEY_FILE`          | `./github-app.pem`                                    |
 
-The GitHub App key goes next to it. With no SSH there is no `scp`; paste it into the session
-instead (print it locally with `cat ~/.config/weft/github-app.pem`):
+The GitHub App key goes next to it. From your machine:
 
 ```bash
-nano github-app.pem      # paste the whole key, including the BEGIN and END lines
-chmod 400 github-app.pem
+scp -i ~/.ssh/weft.pem ~/.config/weft/github-app.pem ubuntu@<ip>:/opt/weft/infra/deploy/github-app.pem
 ```
+
+Then on the instance, `chmod 400 github-app.pem`.
 
 Keep a copy of `.env` in your password manager: it is the only thing on the instance that can't
 be recreated from the repository. The database is on Neon, Redis only holds queues and live
@@ -189,7 +203,7 @@ docker compose logs -f worker              # each turn's steps and timings
 
 | Task                | Command                                                                                                                                     |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Connect             | EC2 console → Connect → Session Manager, or `aws ssm start-session --target <instance-id>`; then `sudo su - ubuntu`                         |
+| Connect             | `ssh -i ~/.ssh/weft.pem ubuntu@<ip>`; if the IP rule is stale, EC2 → Connect → Session Manager                                              |
 | Logs                | `docker compose logs -f --tail 100 <service>`                                                                                               |
 | Deploy the latest   | `cd /opt/weft && git pull && cd infra/deploy && docker compose --profile image pull sandbox && docker compose pull && docker compose up -d` |
 | Pin or roll back    | set `WEFT_TAG` (and the sandbox tag) to a commit sha, then `docker compose pull && docker compose up -d`                                    |
@@ -211,6 +225,8 @@ costs only its volume and Elastic IP, and keeps the IP, so DNS stays valid.
 
 ## Troubleshooting
 
+- **SSH times out:** your IP changed; EC2 → Security Groups → `weft-web` → edit the SSH rule's
+  source to My IP. A VPN changes your IP too.
 - **Session Manager can't connect:** the instance has no IAM role, or no route to the internet (it
   needs outbound HTTPS to reach the SSM service); check the role, the public IP and the subnet's
   route to an internet gateway.
