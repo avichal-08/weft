@@ -44,3 +44,51 @@ jobs:
       - run: docker compose -f infra/compose.yml up -d --wait
       - run: docker compose -f infra/compose.yml exec -T redis redis-cli config get maxmemory-policy | grep -q noeviction
       - run: pnpm --filter @weft/queue test:integration
+
+  images:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [check, infra]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: weft-web
+            context: .
+            file: apps/web/Dockerfile
+          - name: weft-api
+            context: .
+            file: apps/api/Dockerfile
+          - name: weft-worker
+            context: .
+            file: apps/worker/Dockerfile
+          - name: weft-sandbox
+            context: infra/sandbox
+            file: infra/sandbox/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long,prefix=
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

@@ -75,11 +75,13 @@ creates `/opt/weft`. It prints `DOCKER_GID=...` for the next step. It is safe to
 
 ## 5. Configure weft
 
-Copy the stack's files:
+The VM keeps a clone of the repository; the stack runs from `infra/deploy` inside it, where
+`.env` and the key file sit next to `compose.yml` (both are ignored by git). Log in again after
+`bootstrap.sh` so the `docker` group applies, then:
 
 ```bash
-scp infra/deploy/compose.yml infra/deploy/Caddyfile infra/deploy/.env.example azureuser@<vm-ip>:/opt/weft/
-scp ~/.config/weft/github-app.pem azureuser@<vm-ip>:/opt/weft/github-app.pem
+ssh azureuser@<vm-ip> 'git clone https://github.com/avichal-08/weft.git /opt/weft'
+scp ~/.config/weft/github-app.pem azureuser@<vm-ip>:/opt/weft/infra/deploy/github-app.pem
 ```
 
 Make the secrets on your own machine, not on the VM:
@@ -92,7 +94,7 @@ openssl rand -base64 32              # SESSION_SECRET
 Then on the VM:
 
 ```bash
-cd /opt/weft
+cd /opt/weft/infra/deploy
 cp .env.example .env && chmod 600 .env
 chmod 400 github-app.pem             # owned by azureuser, uid 1000, the containers' node user
 nano .env
@@ -108,7 +110,7 @@ nano .env
 | `DATABASE_URL`                         | Neon's pooled connection string                       |
 | `LLM_PROVIDER`, `LLM_MODEL`, a key     | the default model and its API key                     |
 | `GITHUB_APP_ID`                        | the GitHub App's id (empty disables publishing)       |
-| `GITHUB_APP_PRIVATE_KEY_FILE`          | `./github-app.pem`                                    |
+| `GITHUB_APP_PRIVATE_KEY_FILE`          | `./github-app.pem` (in `infra/deploy`)                |
 
 Keep a copy of `.env` in your password manager: it is the only thing on the VM that can't be
 recreated from the repository. The database is on Neon, Redis only holds queues and live
@@ -121,10 +123,17 @@ containers don't migrate on start.
 
 ## 6. Start it
 
-The images are published by CI (see the deploy workflow). On the VM:
+CI builds the images on every push to `main` once the checks pass, and publishes them to GitHub's
+container registry as `ghcr.io/avichal-08/weft-{web,api,worker,sandbox}`, tagged `latest` and with
+the full commit sha. The first time, make the four packages public (GitHub → your profile →
+Packages → each package → Package settings → Change visibility); they contain no secrets. To keep
+them private instead, log the VM in once with a token that has only `read:packages`:
+`docker login ghcr.io -u avichal-08`.
+
+On the VM:
 
 ```bash
-cd /opt/weft
+cd /opt/weft/infra/deploy
 docker compose --profile image pull sandbox
 docker compose pull
 docker compose up -d
@@ -142,16 +151,21 @@ docker compose logs -f worker              # each turn's steps and timings
 
 ## Operating
 
-| Task                  | Command                                                                             |
-| --------------------- | ----------------------------------------------------------------------------------- |
-| Logs                  | `docker compose logs -f --tail 100 <service>`                                       |
-| Update to a new image | set `WEFT_TAG`, then `docker compose pull && docker compose up -d`                  |
-| Restart one service   | `docker compose restart <service>`                                                  |
-| Resource use          | `docker stats`, `free -h`, `docker system df`                                       |
-| Stop, keep data       | `docker compose stop`                                                               |
-| Save credits          | `az vm deallocate -g weft-rg -n weft-vm`, later `az vm start -g weft-rg -n weft-vm` |
-| Sign out everywhere   | change `SESSION_SECRET`, then `docker compose up -d web`                            |
-| Change the password   | new `WEFT_PASSWORD_HASH`, then `docker compose up -d web`                           |
+| Task                | Command                                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Logs                | `docker compose logs -f --tail 100 <service>`                                                                                               |
+| Deploy the latest   | `cd /opt/weft && git pull && cd infra/deploy && docker compose --profile image pull sandbox && docker compose pull && docker compose up -d` |
+| Pin or roll back    | set `WEFT_TAG` (and the sandbox tag) to a commit sha, then `docker compose pull && docker compose up -d`                                    |
+| Restart one service | `docker compose restart <service>`                                                                                                          |
+| Resource use        | `docker stats`, `free -h`, `docker system df`                                                                                               |
+| Stop, keep data     | `docker compose stop`                                                                                                                       |
+| Save credits        | `az vm deallocate -g weft-rg -n weft-vm`, later `az vm start -g weft-rg -n weft-vm`                                                         |
+| Sign out everywhere | change `SESSION_SECRET`, then `docker compose up -d web`                                                                                    |
+| Change the password | new `WEFT_PASSWORD_HASH`, then `docker compose up -d web`                                                                                   |
+
+Wait for the commit's CI run to finish before deploying it: `latest` moves only once its images
+are published. `git pull` brings changes to `compose.yml` and the `Caddyfile`; the images bring
+everything else. Run `docker image prune -f` now and then to drop old image layers.
 
 A redeploy waits up to 10 minutes for active turns to finish (`stop_grace_period`). A deallocated
 VM keeps its static IP, so DNS stays valid.

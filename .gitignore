@@ -10,3 +10,6 @@ coverage/
 results/**/raw/
 
 packages/agent/eval/results/
+
+# keys
+*.pem
