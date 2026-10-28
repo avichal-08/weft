@@ -210,7 +210,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       groups.set(key, [...(groups.get(key) ?? []), r]);
     }
   }
-  const summaries = [...groups].map(([key, rows]) => summarize(key, rows));
+  const summaries = [...groups]
+    .map(([key, rows]) => summarize(key, rows))
+    .filter((s) => s.runs > 0);
   const out = values.out ?? fileURLToPath(new URL('./REPORT.md', import.meta.url));
   await writeFile(out, render(summaries, new Date().toISOString().slice(0, 10)));
   console.log(`wrote ${out} (${summaries.map((s) => s.key).join(', ') || 'no results'})`);
