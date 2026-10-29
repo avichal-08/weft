@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { RunDetail } from '@/components/run-detail';
+import { RunSkeleton } from '@/components/skeletons';
 
 export default function RunPage({ params }: PageProps<'/runs/[id]'>) {
   return (
@@ -9,7 +10,7 @@ export default function RunPage({ params }: PageProps<'/runs/[id]'>) {
         <Link href="/chat" className="w-fit text-sm text-muted transition hover:text-fg">
           ← Back
         </Link>
-        <Suspense fallback={<p className="text-sm text-muted">Loading run…</p>}>
+        <Suspense fallback={<RunSkeleton />}>
           <RunDetail params={params} />
         </Suspense>
       </div>

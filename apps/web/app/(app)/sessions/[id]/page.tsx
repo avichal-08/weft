@@ -1,9 +1,10 @@
 import { Suspense } from 'react';
 import { ChatView } from '@/components/chat-view';
+import { ChatSkeleton } from '@/components/skeletons';
 
 export default function SessionPage({ params }: PageProps<'/sessions/[id]'>) {
   return (
-    <Suspense fallback={<p className="p-8 text-sm text-zinc-500">Loading chat…</p>}>
+    <Suspense fallback={<ChatSkeleton />}>
       <ChatView params={params} />
     </Suspense>
   );
