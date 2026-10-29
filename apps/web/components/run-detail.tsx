@@ -11,9 +11,9 @@ import { Timings } from './timings';
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-zinc-200 px-4 py-3 dark:border-zinc-800">
-      <p className="text-xs text-zinc-500">{label}</p>
-      <p className="mt-0.5 font-mono text-lg">{value}</p>
+    <div className="rounded-lg border border-line bg-surface px-4 py-3">
+      <p className="text-xs text-muted">{label}</p>
+      <p className="mt-0.5 font-mono text-lg tabular-nums">{value}</p>
     </div>
   );
 }
@@ -23,7 +23,7 @@ export async function RunDetail({ params }: { params: Promise<{ id: string }> })
   const [res, trace] = await Promise.all([getRun(id), getRunEvents(id)]);
   if (!res.ok) {
     if (res.status === 404 || res.status === 400) notFound();
-    return <p className="text-sm text-red-600">Could not load the run ({res.status}).</p>;
+    return <p className="text-sm text-bad">Could not load the run ({res.status}).</p>;
   }
   const { run } = res.data;
   const active = ACTIVE.includes(run.status);
@@ -36,17 +36,19 @@ export async function RunDetail({ params }: { params: Promise<{ id: string }> })
         <div className="min-w-0">
           <div className="mb-2 flex items-center gap-3">
             <StatusBadge status={run.status} />
-            <span className="font-mono text-xs text-zinc-500">{run.id.slice(0, 8)}</span>
+            <span className="font-mono text-xs text-muted">{run.id.slice(0, 8)}</span>
           </div>
-          <h1 className="text-lg font-semibold">{run.task}</h1>
-          <p className="mt-1 font-mono text-sm text-zinc-500">
+          <h1 className="text-lg font-semibold tracking-tight [overflow-wrap:anywhere]">
+            {run.task}
+          </h1>
+          <p className="mt-1 font-mono text-xs break-all text-muted sm:text-sm">
             {repoName(run.repoUrl)} · {run.testCommand}
             {run.config.model ? ` · ${run.config.model}` : ''}
           </p>
         </div>
         {active && (
           <form action={cancelRunAction.bind(null, run.id)}>
-            <button className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900">
+            <button className="rounded-full border border-line-strong px-3 py-1.5 text-sm font-medium transition hover:bg-surface-2">
               Cancel
             </button>
           </form>
@@ -82,11 +84,10 @@ export async function RunDetail({ params }: { params: Promise<{ id: string }> })
       {run.failureKind && (
         <section>
           <h2 className="mb-2 text-sm font-semibold">
-            Failure:{' '}
-            <span className="font-mono text-amber-700 dark:text-amber-300">{run.failureKind}</span>
+            Failure: <span className="font-mono text-warn">{run.failureKind}</span>
           </h2>
           {run.failureDetail && (
-            <pre className="max-h-64 overflow-auto rounded-lg bg-zinc-50 p-3 font-mono text-xs whitespace-pre-wrap dark:bg-zinc-950">
+            <pre className="max-h-64 overflow-auto rounded-lg border border-line bg-code p-3 font-mono text-xs whitespace-pre-wrap">
               {run.failureDetail}
             </pre>
           )}
@@ -101,14 +102,14 @@ export async function RunDetail({ params }: { params: Promise<{ id: string }> })
       )}
 
       {active && (
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted">
           {run.status === 'queued'
             ? 'Waiting for a worker…'
             : 'The agent is working. This page updates live.'}
         </p>
       )}
 
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-muted">
         Created {time(run.createdAt)}
         {run.workerId ? ` · worker ${run.workerId} · attempt ${run.attempt}` : ''}
         {run.cacheReadTokens ? ` · ${tokens(run.cacheReadTokens)} cached tokens` : ''}

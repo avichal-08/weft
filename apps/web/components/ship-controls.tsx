@@ -29,16 +29,17 @@ export function ShipControls({
   const waiting = working ? 'Wait for weft to finish this turn' : blocked;
 
   return (
-    <div className="relative flex items-center gap-2">
+    <div className="relative flex shrink-0 items-center gap-1.5 sm:gap-2">
       <button
         type="button"
         onClick={() => setMode('commit')}
+        aria-label="Commit"
         disabled={!uncommitted || working || busy || !!blocked}
         title={waiting ?? (uncommitted ? undefined : 'Nothing new to commit')}
         className={button}
       >
         <GitCommitHorizontal className="size-4 text-muted" />
-        <span>Commit</span>
+        <span className="hidden sm:inline">Commit</span>
       </button>
 
       {session.prUrl ? (
@@ -60,17 +61,19 @@ export function ShipControls({
         <button
           type="button"
           onClick={() => setMode('commit-pr')}
+          aria-label="Create PR"
           disabled={working || busy || !!blocked}
           title={waiting}
           className={button}
         >
           <GitPullRequest className="size-4 text-muted" />
-          <span>Create PR</span>
+          <span className="hidden sm:inline">Create PR</span>
         </button>
       ) : (
         <form action={publish}>
           <button
             type="submit"
+            aria-label="Create PR"
             disabled={busy || working || !!blocked}
             title={waiting}
             className={button}
@@ -80,13 +83,13 @@ export function ShipControls({
             ) : (
               <GitPullRequest className="size-4 text-muted" />
             )}
-            <span>{busy ? 'Opening PR…' : 'Create PR'}</span>
+            <span className="hidden sm:inline">{busy ? 'Opening PR…' : 'Create PR'}</span>
           </button>
         </form>
       )}
 
       {problem && !busy && (
-        <p className="absolute top-full right-0 z-10 mt-1.5 w-72 rounded-lg border border-warn/25 bg-warn-soft px-3 py-2 text-xs text-warn shadow-sm">
+        <p className="absolute top-full right-0 z-10 mt-1.5 w-[min(18rem,calc(100vw-2rem))] rounded-lg border border-warn/25 bg-warn-soft px-3 py-2 text-xs text-warn shadow-sm">
           {problem}
         </p>
       )}

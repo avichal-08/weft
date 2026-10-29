@@ -75,7 +75,7 @@ function Turn({
             <MessageCircleQuestion className="size-3" /> Ask · read-only
           </span>
         )}
-        <div className="rounded-2xl rounded-br-md border border-line bg-surface-2 px-4 py-2.5 text-[15px] leading-7 whitespace-pre-wrap">
+        <div className="rounded-2xl rounded-br-md border border-line bg-surface-2 px-4 py-2.5 text-[15px] leading-7 [overflow-wrap:anywhere] whitespace-pre-wrap">
           {run.task}
         </div>
       </div>

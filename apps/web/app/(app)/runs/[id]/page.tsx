@@ -4,16 +4,15 @@ import { RunDetail } from '@/components/run-detail';
 
 export default function RunPage({ params }: PageProps<'/runs/[id]'>) {
   return (
-    <div className="mx-auto grid w-full max-w-4xl grid-cols-1 gap-6 overflow-y-auto px-6 py-8">
-      <Link
-        href="/chat"
-        className="text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-      >
-        ← Back to chats
-      </Link>
-      <Suspense fallback={<p className="text-sm text-zinc-500">Loading run…</p>}>
-        <RunDetail params={params} />
-      </Suspense>
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto grid w-full max-w-4xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 sm:py-8">
+        <Link href="/chat" className="w-fit text-sm text-muted transition hover:text-fg">
+          ← Back
+        </Link>
+        <Suspense fallback={<p className="text-sm text-muted">Loading run…</p>}>
+          <RunDetail params={params} />
+        </Suspense>
+      </div>
     </div>
   );
 }

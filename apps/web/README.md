@@ -21,7 +21,9 @@ days and Older. Each row shows the title, the repository and how long ago, an ic
 latest turn is working, failed or errored, and an accent bar on the open chat. It collapses to an
 icon rail (the button by the logo, or Ctrl/⌘+B), remembered per browser. On phones the sidebar becomes a
 drawer: a top bar with a menu button, the logo and a new-chat button opens it over a dimmed
-backdrop, and it closes on Escape, a tap outside, or opening a chat.
+backdrop, and it closes on Escape, a tap outside, or opening a chat. In a chat on a phone, the header's buttons
+shrink to icons and the Changes panel opens full screen; the run page stacks its stats and
+narrows its timeline.
 
 ## The conversation
 

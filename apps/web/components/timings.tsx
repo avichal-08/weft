@@ -21,13 +21,13 @@ export function Timings({ timings }: { timings: { phase: string; ms: number }[] 
   const total = timings.reduce((n, t) => n + t.ms, 0);
 
   return (
-    <div className="grid grid-cols-[10rem_1fr_4rem] items-center gap-x-3 gap-y-1.5 text-sm">
+    <div className="grid grid-cols-[6.5rem_1fr_3.5rem] sm:grid-cols-[10rem_1fr_4rem] items-center gap-x-3 gap-y-1.5 text-sm">
       {timings.map(({ phase, ms }) => (
         <div key={phase} className="contents">
-          <span className="text-zinc-500">{LABELS[phase] ?? phase}</span>
-          <div className="h-2 rounded-full bg-zinc-100 dark:bg-zinc-900">
+          <span className="text-muted">{LABELS[phase] ?? phase}</span>
+          <div className="h-2 rounded-full bg-surface-2">
             <div
-              className="h-2 rounded-full bg-zinc-400 dark:bg-zinc-600"
+              className="h-2 rounded-full bg-accent/70"
               style={{ width: `${(ms / longest) * 100}%` }}
             />
           </div>

@@ -40,7 +40,7 @@ export function ChatShell({
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b border-line bg-bg/80 px-5 py-3 backdrop-blur-xl">
+        <header className="flex items-center gap-2 border-b border-line bg-bg/80 px-4 py-3 backdrop-blur-xl sm:gap-3 sm:px-5">
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-[15px] font-semibold tracking-tight">{title}</h1>
             <div className="mt-0.5 flex items-center gap-2 text-xs text-muted">
@@ -54,19 +54,23 @@ export function ChatShell({
             </div>
           </div>
           {working && (
-            <span className="flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent">
+            <span
+              className="flex shrink-0 items-center gap-1.5 rounded-full bg-accent-soft px-2 py-1 text-xs font-medium text-accent sm:px-2.5"
+              title="Working"
+            >
               <span className="size-1.5 animate-pulse rounded-full bg-accent" />
-              Working
+              <span className="hidden sm:inline">Working</span>
             </span>
           )}
           {publish}
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] font-medium transition ${open ? 'border-line-strong bg-surface-2' : 'border-line hover:border-line-strong hover:bg-surface-2'}`}
+            aria-label="Changes"
+            className={`flex shrink-0 items-center gap-2 rounded-full border px-2.5 py-1.5 text-[13px] font-medium transition sm:px-3 ${open ? 'border-line-strong bg-surface-2' : 'border-line hover:border-line-strong hover:bg-surface-2'}`}
           >
             <FileDiff className="size-4 text-muted" />
-            <span>Changes</span>
+            <span className="hidden sm:inline">Changes</span>
             {stats.files > 0 && (
               <span className="font-mono text-xs">
                 <span className="text-ok">+{stats.additions}</span>{' '}
@@ -89,7 +93,7 @@ export function ChatShell({
         </div>
       </div>
       {open && (
-        <aside className="flex w-[min(36rem,50vw)] shrink-0 flex-col border-l border-line bg-bg">
+        <aside className="fixed inset-0 z-40 flex flex-col bg-bg md:static md:inset-auto md:z-auto md:w-[min(36rem,50vw)] md:shrink-0 md:border-l md:border-line">
           <div className="flex items-center justify-between border-b border-line px-5 py-3">
             <div>
               <h2 className="text-sm font-medium">Changes</h2>
