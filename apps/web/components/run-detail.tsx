@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { cancelRunAction } from '@/app/actions';
-import { getRun, getRunEvents } from '@/lib/api';
+import { getRun, runEventsFor } from '@/lib/api';
 import { duration, repoName, time, tokens } from '@/lib/format';
 import { ACTIVE } from '@/lib/types';
 import { AutoRefresh } from './auto-refresh';
@@ -20,12 +20,13 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 export async function RunDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [res, trace] = await Promise.all([getRun(id), getRunEvents(id)]);
+  const res = await getRun(id);
   if (!res.ok) {
     if (res.status === 404 || res.status === 400) notFound();
     return <p className="text-sm text-bad">Could not load the run ({res.status}).</p>;
   }
   const { run } = res.data;
+  const trace = await runEventsFor(run);
   const active = ACTIVE.includes(run.status);
 
   return (

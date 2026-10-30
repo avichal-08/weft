@@ -99,6 +99,12 @@ If the connection drops, `EventSource` reconnects and resumes from `Last-Event-I
 up, the component reconnects after 3 s. Nothing polls any more. SSE rather than WebSockets
 because the traffic is one way, it is plain HTTP, and resuming is built in.
 
+Finished turns never change, so their traces are cached on the web server (`runEventsFor` in
+`lib/api.ts`: `'use cache'` with `cacheLife('max')`, keyed by run id). A page load fetches the
+session and only the active turn's events; finished turns' events come from memory after their
+first load. Failed fetches aren't cached: the cached function throws and the caller fetches
+directly. The cache is per server process and starts empty after a deploy.
+
 ## Design system
 
 Colours are tokens in `app/globals.css` (`--bg`, `--surface`, `--surface-2/3`, `--line`,

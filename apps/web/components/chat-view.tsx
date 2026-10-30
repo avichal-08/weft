@@ -1,7 +1,7 @@
 import { CircleAlert, CircleCheck, CircleSlash, MessageCircleQuestion } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getRunEvents, getSession } from '@/lib/api';
+import { getSession, runEventsFor } from '@/lib/api';
 import { parseDiff } from '@/lib/diff';
 import { repoName, tokens } from '@/lib/format';
 import { ACTIVE, type Finding, type Run, type RunEvent } from '@/lib/types';
@@ -142,7 +142,7 @@ export async function ChatView({ params }: { params: Promise<{ id: string }> }) 
     return <p className="p-8 text-sm text-bad">Could not load this chat ({res.status}).</p>;
   }
   const session = res.data.session;
-  const traces = await Promise.all(session.turns.map((t) => getRunEvents(t.id)));
+  const traces = await Promise.all(session.turns.map(runEventsFor));
   const last = session.turns.at(-1);
   const activeRunId = last && ACTIVE.includes(last.status) ? last.id : null;
   const diff = latestDiff(session.turns);

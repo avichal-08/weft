@@ -1,12 +1,15 @@
 import 'server-only';
-import type {
-  Commit,
-  Run,
-  RunEvent,
-  RunMode,
-  Session,
-  SessionSummary,
-  SessionWithTurns,
+import { cacheLife } from 'next/cache';
+import {
+  ACTIVE,
+  type Commit,
+  type Run,
+  type RunEvent,
+  type RunMode,
+  type RunStatus,
+  type Session,
+  type SessionSummary,
+  type SessionWithTurns,
 } from './types';
 
 export const API_URL = process.env.API_URL ?? 'http://localhost:3001';
@@ -46,6 +49,29 @@ async function call<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> 
 export const getRun = (id: string) => call<{ run: Run }>(`/runs/${id}`);
 export const getRunEvents = (id: string) =>
   call<{ attempt: number; status: string; events: RunEvent[] }>(`/runs/${id}/events?limit=1000`);
+
+type RunEvents = { attempt: number; status: string; events: RunEvent[] };
+
+async function finishedRunEvents(id: string): Promise<RunEvents> {
+  'use cache';
+  cacheLife('max');
+  const res = await getRunEvents(id);
+  if (!res.ok) throw new Error(`run ${id} events: ${res.status}`);
+  return res.data;
+}
+
+export async function runEventsFor(run: {
+  id: string;
+  status: RunStatus;
+}): Promise<ApiResult<RunEvents>> {
+  if (ACTIVE.includes(run.status)) return getRunEvents(run.id);
+  try {
+    return { ok: true, data: await finishedRunEvents(run.id) };
+  } catch {
+    return getRunEvents(run.id);
+  }
+}
+
 export const cancelRun = (id: string) =>
   call<{ run: Run }>(`/runs/${id}/cancel`, { method: 'POST' });
 export const listSessions = () => call<{ sessions: SessionSummary[] }>('/sessions?limit=50');
