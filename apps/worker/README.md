@@ -248,6 +248,12 @@ and every agent event to Redis the moment it happens, then `end` once the result
 Publishing is fire-and-forget: a slow or failed Redis write is logged and never holds up the
 agent or fails the run. A worker that lost its run publishes nothing more. See `@weft/queue`.
 
+The model's text streams too: the worker passes `onText` to the agent (only when there is a
+live stream), and `textStream` batches each step's text into `text` messages at most every
+50 ms, each with the offset it starts at. A step's pending text is flushed before its `llm`
+event, so text always arrives before the event that completes it, and a retried model call
+clears the step with an empty message at offset 0.
+
 ### Logs
 
 Every line is tagged with the run's short id, so a slow or failed run can be read straight from

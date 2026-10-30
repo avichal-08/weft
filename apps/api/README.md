@@ -58,6 +58,9 @@ event: event
 id: 1.0
 data: {"seq":0,"type":"llm","step":1,"data":{...},"createdAt":"..."}
 
+event: text
+data: {"step":4,"offset":0,"text":"It adds two "}
+
 event: end
 data: {"status":"succeeded"}
 ```
@@ -66,6 +69,7 @@ data: {"status":"succeeded"}
 | --------- | ------------------------------------------------------------------------------------------------- |
 | `phase`   | The run moved on: `clone`, `sandbox`, `restore`, `setup`, `agent`, `verify`.                      |
 | `event`   | One model call or tool call, as in `GET /runs/:id/events`; `id` is `<attempt>.<seq>`.             |
+| `text`    | Streamed model text for a step: keep the first `offset` characters and append `text`. No `id`.    |
 | `attempt` | Another worker took the run over: drop the events you have, the new attempt follows.              |
 | `end`     | The run is over and its result is in Postgres. Close the `EventSource` (it reconnects otherwise). |
 

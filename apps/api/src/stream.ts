@@ -91,6 +91,8 @@ export async function streamRun(opts: StreamOptions): Promise<void> {
         send('phase', { phase: message.phase, detail: message.detail ?? null });
       } else if (message.kind === 'event') {
         event(message.event);
+      } else if (message.kind === 'text') {
+        send('text', { step: message.step, offset: message.offset, text: message.text });
       } else {
         return end(await sync());
       }

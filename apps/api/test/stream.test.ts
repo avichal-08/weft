@@ -143,6 +143,28 @@ describe('GET /runs/:id/stream', () => {
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
+  it('relays streamed text, with its step and offset, before the event that completes it', async () => {
+    const run = await newRun();
+    await claimRun(db, run.id, 'w');
+    const [messages] = await Promise.all([
+      sse(`/runs/${run.id}/stream`),
+      later(async () => {
+        live.publish(run.id, { kind: 'text', attempt: 1, step: 1, offset: 0, text: 'It ' });
+        live.publish(run.id, { kind: 'text', attempt: 1, step: 1, offset: 3, text: 'adds.' });
+        live.publish(run.id, event(1, 0));
+        await completeRun(db, run.id, 1, { status: 'succeeded' });
+        live.publish(run.id, { kind: 'end', attempt: 1 });
+      }),
+    ]);
+
+    expect(summary(messages)).toEqual(['text', 'text', '1.0', 'end']);
+    expect(messages.slice(0, 2).map((m) => m.data)).toEqual([
+      { step: 1, offset: 0, text: 'It ' },
+      { step: 1, offset: 3, text: 'adds.' },
+    ]);
+    expect(messages[0]?.id).toBeUndefined();
+  });
+
   it('picks up the first attempt of a queued run', async () => {
     const run = await newRun();
     const [messages] = await Promise.all([

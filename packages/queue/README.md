@@ -48,12 +48,17 @@ const entries = await readLive(reader, runId, '0', 5000); // blocks up to 5 s fo
 | ------- | ----------------------------------------------------------------------------------------------- |
 | `phase` | The run moves on: `clone`, `sandbox`, `restore`, `setup` (with the command), `agent`, `verify`. |
 | `event` | Every model call and tool call, the same shape as a `run_events` row plus `createdAt`.          |
+| `text`  | The model's text as it streams: `{ step, offset, text }`, batched every 50 ms by the worker.    |
 | `end`   | The result is in Postgres. Not sent by a worker that lost the run (cancelled, taken over).      |
 
 - **Streams, not pub/sub.** Pub/sub drops messages nobody is listening for, so a reader that
   connects mid-run would miss the start. A stream keeps the whole run, so a reader replays it
   from `0` and then blocks for more, and each entry id is a cursor for resuming.
-- **Ephemeral.** Capped at about 5000 entries; expires 24 h after the last write, or 1 h after
+- **`text` is idempotent by offset.** A reader sets a step's text to its first `offset`
+  characters plus `text`, so a replay or a reconnect overwrites instead of appending; `offset: 0`
+  with empty `text` clears a step (the model call was retried). Text is only in the stream: the
+  step's `llm` event, in Postgres too, carries the complete text.
+- **Ephemeral.** Capped at about 10,000 entries; expires 24 h after the last write, or 1 h after
   `end`. Postgres stays the source of truth: phases are only in the stream, events are in both.
 - **`attempt` on every message.** If another worker takes the run over, its messages carry the
   new attempt, so a reader can drop what the old attempt still sent.

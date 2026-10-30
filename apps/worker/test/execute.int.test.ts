@@ -159,11 +159,18 @@ describe('executeRun', () => {
       'clone',
       'sandbox',
       'agent',
-      ...Array<string>(7).fill('event'),
+      ...Array<string>(6).fill('event'),
+      'text',
+      'event',
       'verify',
       'end',
     ]);
     expect(published.every((m) => m.attempt === 1)).toBe(true);
+    expect(published.find((m) => m.kind === 'text')).toMatchObject({
+      step: 4,
+      offset: 0,
+      text: 'add subtracted',
+    });
     const streamed = published.flatMap((m) => (m.kind === 'event' ? [m.event] : []));
     expect(streamed.map(({ seq, type, step, data }) => ({ seq, type, step, data }))).toEqual(
       events.map(({ seq, type, step, data }) => ({ seq, type, step, data })),

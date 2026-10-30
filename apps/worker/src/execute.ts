@@ -24,6 +24,7 @@ import {
   type DepsOrigin,
 } from './install-cache.ts';
 import { diffHash, release, stillUsable, type KillHandler } from './session-sandboxes.ts';
+import { textStream } from './text-stream.ts';
 import {
   detectSetup,
   INCREMENTAL,
@@ -113,6 +114,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
       log(`live publish failed: ${err instanceof Error ? err.message : String(err)}`);
     });
   };
+  const text = textStream((chunk) => live({ kind: 'text', attempt, ...chunk }));
   const phase = (name: LivePhase, detail?: string) =>
     live({ kind: 'phase', attempt, phase: name, ...(detail ? { detail } : {}) });
 
@@ -132,6 +134,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
   };
 
   const finish = async (outcome: CompleteRunInput): Promise<RunOutcome> => {
+    text.close();
     flushEvents();
     await progress;
     if (fenced) return { kind: 'fenced' };
@@ -149,6 +152,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
   };
 
   const onEvent = (event: AgentEvent) => {
+    if (event.type === 'llm') text.flush(event.step);
     log(describeEvent(event));
     const row = toRunEvent(event, seq++);
     pending.push(row);
@@ -327,6 +331,7 @@ export async function executeRun(deps: WorkerDeps, runId: string): Promise<RunOu
         tokenBudget: config.tokenBudget ?? deps.tokenBudget ?? DEFAULT_TOKEN_BUDGET,
         signal: abort.signal,
         onEvent,
+        ...(deps.live ? { onText: text.push } : {}),
       }),
     );
     if (killed) return await finish(diskLimit(killed));

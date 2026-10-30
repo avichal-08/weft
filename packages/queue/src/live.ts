@@ -13,11 +13,12 @@ export type LivePhase = 'clone' | 'sandbox' | 'restore' | 'setup' | 'agent' | 'v
 export type LiveMessage =
   | { kind: 'phase'; attempt: number; phase: LivePhase; detail?: string }
   | { kind: 'event'; attempt: number; event: LiveEvent }
+  | { kind: 'text'; attempt: number; step: number; offset: number; text: string }
   | { kind: 'end'; attempt: number };
 
 export type LiveEntry = { id: string; message: LiveMessage };
 
-export const LIVE_MAXLEN = 5000;
+export const LIVE_MAXLEN = 10_000;
 export const LIVE_TTL_SECONDS = 24 * 3600;
 export const LIVE_ENDED_TTL_SECONDS = 3600;
 
