@@ -39,14 +39,29 @@ export function withRetry(inner: LLMProvider, options: RetryOptions = {}): LLMPr
     provider: inner.provider,
     model: inner.model,
     async complete(req: CompletionRequest): Promise<CompletionResponse> {
+      let streamed = false;
+      const onText = req.onText;
+      const attemptReq: CompletionRequest = onText
+        ? {
+            ...req,
+            onText: (event) => {
+              if (event.type === 'text') streamed = true;
+              onText(event);
+            },
+          }
+        : req;
       for (let attempt = 1; ; attempt++) {
         try {
-          return await inner.complete(req);
+          return await inner.complete(attemptReq);
         } catch (err) {
           if (!(err instanceof LLMError) || !err.retryable || attempt >= maxAttempts) throw err;
           if (err.retryAfterMs !== undefined && err.retryAfterMs > maxRetryAfterMs) throw err;
           const delayMs = backoffDelay(attempt, err, delays);
           options.onRetry?.({ attempt, delayMs, error: err });
+          if (streamed && onText) {
+            streamed = false;
+            onText({ type: 'reset' });
+          }
           await sleep(delayMs, req.signal);
         }
       }

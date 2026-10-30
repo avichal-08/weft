@@ -61,6 +61,16 @@ console.log(textOf(res.content), res.usage, res.stopReason);
   `RetryInfo.retryDelay` in the error body (falling back to "retry in 54s" in the message). A
   server delay is honoured exactly up to `maxRetryAfterMs` (default 2 min); a longer one, such as
   an exhausted daily quota, fails at once rather than parking a worker for hours.
+- **Streaming is opt-in and invisible to callers.** Pass `onText` in the request and the
+  provider uses its streaming API (Anthropic's `messages.stream`, OpenAI-compatible `stream: true`
+  with usage included), calls `onText({ type: 'text', text })` for each piece of text, and still
+  resolves with the same `CompletionResponse`. Without `onText`, nothing changes. The
+  OpenAI-compatible stream is reassembled by `assembleStream`: text is concatenated, tool calls
+  are joined by `index`, or by `id` when the server omits the index (Gemini sends each call whole
+  and without one), and any extra fields such as Gemini's thought signatures are kept.
+- **A retry after streamed text resets it.** If an attempt fails after some text was streamed,
+  `withRetry` sends `onText({ type: 'reset' })` before retrying, so a consumer drops the partial
+  reply instead of showing it twice. The mock provider streams its text in 8-character pieces.
 
 ## Testing
 

@@ -110,17 +110,24 @@ export function createAnthropicProvider(opts: AnthropicOptions): LLMProvider {
     async complete(req: CompletionRequest): Promise<CompletionResponse> {
       const started = performance.now();
       try {
-        const res = await client.messages.create(
-          {
-            model: opts.model,
-            max_tokens: req.maxTokens ?? 16_000,
-            system: req.system,
-            messages: toAnthropicMessages(req.messages),
-            ...(req.tools?.length ? { tools: toAnthropicTools(req.tools) } : {}),
-            ...(opts.effort ? { output_config: { effort: opts.effort } } : {}),
-          },
-          req.signal ? { signal: req.signal } : {},
-        );
+        const params = {
+          model: opts.model,
+          max_tokens: req.maxTokens ?? 16_000,
+          system: req.system,
+          messages: toAnthropicMessages(req.messages),
+          ...(req.tools?.length ? { tools: toAnthropicTools(req.tools) } : {}),
+          ...(opts.effort ? { output_config: { effort: opts.effort } } : {}),
+        };
+        const options = req.signal ? { signal: req.signal } : {};
+        let res: Anthropic.Message;
+        if (req.onText) {
+          const onText = req.onText;
+          const stream = client.messages.stream(params, options);
+          stream.on('text', (text) => onText({ type: 'text', text }));
+          res = await stream.finalMessage();
+        } else {
+          res = await client.messages.create(params, options);
+        }
         return {
           content: fromAnthropicContent(res.content),
           stopReason: fromAnthropicStop(res.stop_reason),

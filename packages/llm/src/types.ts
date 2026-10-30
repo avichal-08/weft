@@ -32,12 +32,15 @@ export type ToolSpec = {
   inputSchema: Record<string, unknown>;
 };
 
+export type TextEvent = { type: 'text'; text: string } | { type: 'reset' };
+
 export type CompletionRequest = {
   system: string;
   messages: Message[];
   tools?: ToolSpec[];
   maxTokens?: number;
   signal?: AbortSignal;
+  onText?: (event: TextEvent) => void;
 };
 
 export type StopReason = 'end' | 'tool_use' | 'max_tokens' | 'refusal' | 'other';

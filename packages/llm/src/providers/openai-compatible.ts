@@ -13,6 +13,79 @@ import type {
 
 type ChatMessage = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 type ChatToolCall = OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall;
+type Chunk = OpenAI.Chat.Completions.ChatCompletionChunk;
+
+export type Assembled = {
+  message: OpenAI.Chat.Completions.ChatCompletionMessage;
+  finishReason: string | null;
+  usage: OpenAI.CompletionUsage | undefined;
+  model: string;
+};
+
+export async function assembleStream(
+  chunks: AsyncIterable<Chunk>,
+  onText: (text: string) => void,
+): Promise<Assembled> {
+  let text = '';
+  let finishReason: string | null = null;
+  let usage: OpenAI.CompletionUsage | undefined;
+  let model = '';
+  const calls: (ChatToolCall & Record<string, unknown>)[] = [];
+
+  for await (const chunk of chunks) {
+    model ||= chunk.model;
+    if (chunk.usage) usage = chunk.usage;
+    const choice = chunk.choices[0];
+    if (!choice) continue;
+    finishReason = choice.finish_reason ?? finishReason;
+    const delta = choice.delta;
+    if (delta.content) {
+      text += delta.content;
+      onText(delta.content);
+    }
+    for (const part of delta.tool_calls ?? []) {
+      const {
+        index,
+        id,
+        type: _type,
+        function: fn,
+        ...extra
+      } = part as typeof part & {
+        index?: number;
+      };
+      const at =
+        index ??
+        (id
+          ? (() => {
+              const found = calls.findIndex((c) => c.id === id);
+              return found >= 0 ? found : calls.length;
+            })()
+          : Math.max(calls.length - 1, 0));
+      const call = (calls[at] ??= {
+        id: '',
+        type: 'function',
+        function: { name: '', arguments: '' },
+      });
+      if (id) call.id = id;
+      if (fn?.name) call.function.name = fn.name;
+      if (fn?.arguments) call.function.arguments += fn.arguments;
+      Object.assign(call, extra);
+    }
+  }
+
+  const toolCalls = calls.filter(Boolean);
+  return {
+    message: {
+      role: 'assistant',
+      content: text || null,
+      refusal: null,
+      ...(toolCalls.length ? { tool_calls: toolCalls } : {}),
+    },
+    finishReason,
+    usage,
+    model,
+  };
+}
 
 export function toChatMessages(system: string, messages: Message[]): ChatMessage[] {
   const out: ChatMessage[] = [{ role: 'system', content: system }];
@@ -150,34 +223,49 @@ export function createOpenAICompatibleProvider(opts: OpenAICompatibleOptions): L
     async complete(req: CompletionRequest): Promise<CompletionResponse> {
       const started = performance.now();
       try {
-        const res = await client.chat.completions.create(
-          {
-            model: opts.model,
-            max_completion_tokens: req.maxTokens ?? 16_000,
-            messages: toChatMessages(req.system, req.messages),
-            ...(req.tools?.length ? { tools: toChatTools(req.tools) } : {}),
-          },
-          req.signal ? { signal: req.signal } : {},
-        );
-        const choice = res.choices[0];
-        if (!choice) {
-          throw new LLMError({ provider: opts.provider, kind: 'server', message: 'no choices' });
+        const params = {
+          model: opts.model,
+          max_completion_tokens: req.maxTokens ?? 16_000,
+          messages: toChatMessages(req.system, req.messages),
+          ...(req.tools?.length ? { tools: toChatTools(req.tools) } : {}),
+        };
+        const options = req.signal ? { signal: req.signal } : {};
+        let result: Assembled;
+        if (req.onText) {
+          const onText = req.onText;
+          const chunks = await client.chat.completions.create(
+            { ...params, stream: true, stream_options: { include_usage: true } },
+            options,
+          );
+          result = await assembleStream(chunks, (text) => onText({ type: 'text', text }));
+        } else {
+          const res = await client.chat.completions.create(params, options);
+          const choice = res.choices[0];
+          if (!choice) {
+            throw new LLMError({ provider: opts.provider, kind: 'server', message: 'no choices' });
+          }
+          result = {
+            message: choice.message,
+            finishReason: choice.finish_reason,
+            usage: res.usage,
+            model: res.model,
+          };
         }
-        const content = fromChatMessage(choice.message);
-        const cached = res.usage?.prompt_tokens_details?.cached_tokens ?? 0;
+        const content = fromChatMessage(result.message);
+        const cached = result.usage?.prompt_tokens_details?.cached_tokens ?? 0;
         return {
           content,
           stopReason: fromFinishReason(
-            choice.finish_reason,
+            result.finishReason,
             content.some((b) => b.type === 'tool_call'),
           ),
           usage: {
-            inputTokens: (res.usage?.prompt_tokens ?? 0) - cached,
-            outputTokens: res.usage?.completion_tokens ?? 0,
+            inputTokens: (result.usage?.prompt_tokens ?? 0) - cached,
+            outputTokens: result.usage?.completion_tokens ?? 0,
             cacheReadTokens: cached,
             cacheWriteTokens: 0,
           },
-          model: res.model || opts.model,
+          model: result.model || opts.model,
           latencyMs: Math.round(performance.now() - started),
         };
       } catch (err) {
