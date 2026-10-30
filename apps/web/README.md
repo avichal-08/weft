@@ -168,8 +168,9 @@ pnpm --filter @weft/web auth:hash   # prompts twice, prints WEFT_PASSWORD_HASH=s
 - **Sign out** in the sidebar deletes the cookie. Rotating `SESSION_SECRET` signs out every
   session at once.
 - `/opengraph-image` (`app/opengraph-image.tsx`) also stays outside the gate, so link previews
-  work: a 1200×630 card rendered with `next/og` in the landing page's style (the woven mark, the
-  headline, a dot field and the site URL). `metadataBase` comes from `SITE_URL`, defaulting to
+  work: a 1200×630 card rendered with `next/og`, the landing hero adapted for a preview: the
+  woven mark, the headline and the site URL on the left, a compact work log (search, read, edit,
+  tests passed, pull request opened) on the right, over the dot field. `metadataBase` comes from `SITE_URL`, defaulting to
   `https://weft.avichal.me`, so `og:image` is an absolute URL; Twitter/X gets a large-image card.
 - `/healthz` stays outside the gate for container health checks.
 - Without both variables nobody can sign in: the login form says sign-in isn't configured.
