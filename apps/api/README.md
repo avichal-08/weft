@@ -117,4 +117,6 @@ pnpm --filter @weft/api test
 
 Requests go to the real Express app on a random port, with `@weft/db/testing` (PGlite) as the
 database and an in-memory fake queue. `test/stream.test.ts` reads the SSE endpoint like a
-browser would: replay, resume, live delivery, takeover, cancel, Postgres fallback and cleanup.
+browser would: replay, resume, live delivery, streamed text, takeover, cancel, Postgres fallback and cleanup. Test
+files run one at a time (`fileParallelism: false`): each starts its own in-process Postgres,
+and several at once can starve a small machine or CI runner into timeouts.

@@ -37,6 +37,9 @@ const reach = `node -e "fetch('https://registry.npmjs.org/').then(() => console.
 const call = (name: string, input: unknown): { content: ContentBlock[] } => ({
   content: [{ type: 'tool_call', id: name, name, input }],
 });
+const say = (text: string): { content: ContentBlock[] } => ({
+  content: [{ type: 'text', text }],
+});
 
 function run(
   repoUrl: string,
@@ -85,7 +88,7 @@ describe('setup phase', () => {
     const published: LiveMessage[] = [];
     const id = await run(
       await origin(),
-      [call('run_tests', {}), call('finish', { summary: 'tests pass' })],
+      [call('run_tests', {}), say('tests pass')],
       lines,
       published,
     );
@@ -121,7 +124,7 @@ describe('setup phase', () => {
       [
         call('run_tests', {}),
         call('run_command', { command: 'ls -A /workspace/.weft-cache' }),
-        call('finish', { summary: 'done' }),
+        say('done'),
       ],
       lines,
     );
@@ -136,7 +139,7 @@ describe('setup phase', () => {
   it('records edits in a repo that ignores its installed node_modules', async () => {
     const id = await run(await origin(), [
       call('run_command', { command: 'echo "// edited" >> test/ms.test.js', timeout_sec: 10 }),
-      call('finish', { summary: 'edited' }),
+      say('edited'),
     ]);
 
     const done = await getRun(db, id);
@@ -153,18 +156,14 @@ describe('setup phase', () => {
     const repoUrl = await origin();
 
     const first: string[] = [];
-    await run(repoUrl, [call('finish', { summary: 'one' })], first, [], { installCache });
+    await run(repoUrl, [say('one')], first, [], { installCache });
     expect(first.some((l) => /setup: cached \d+ MB/.test(l))).toBe(true);
     expect((await readdir(dir)).filter((n) => n.endsWith('.tar'))).toHaveLength(1);
 
     const second: string[] = [];
     const id = await run(
       repoUrl,
-      [
-        call('run_tests', {}),
-        call('run_command', { command: reach, timeout_sec: 20 }),
-        call('finish', { summary: 'two' }),
-      ],
+      [call('run_tests', {}), call('run_command', { command: reach, timeout_sec: 20 }), say('two')],
       second,
       [],
       { installCache },
@@ -184,7 +183,7 @@ describe('setup phase', () => {
     const installCache = createCache({ dir, maxBytes: 1e9, images });
     const repoUrl = await origin();
 
-    await run(repoUrl, [call('finish', { summary: 'one' })], [], [], { installCache });
+    await run(repoUrl, [say('one')], [], [], { installCache });
     await installCache.idle();
     const key = (await readdir(dir)).find((n) => n.endsWith('.used'))?.slice(0, -'.used'.length);
     try {
@@ -208,7 +207,7 @@ describe('setup phase', () => {
         [
           call('run_tests', {}),
           call('run_command', { command: reach, timeout_sec: 20 }),
-          call('finish', { summary: 'two' }),
+          say('two'),
         ],
         second,
         [],
@@ -256,16 +255,13 @@ describe('setup phase', () => {
     };
 
     const { session, run } = await createSession(db, { repoUrl: await origin(), message: 'edit' });
-    await turn(run.id, [
-      call('run_command', { command: edit, timeout_sec: 20 }),
-      call('finish', { summary: 'edited' }),
-    ]);
+    await turn(run.id, [call('run_command', { command: edit, timeout_sec: 20 }), say('edited')]);
     expect((await getRun(db, run.id))?.diff).toContain('"description": "edited"');
 
     const next = async () => {
       const added = await addTurn(db, session.id, 'again');
       if (!added.ok) throw new Error('turn refused');
-      return turn(added.run.id, [call('finish', { summary: 'ok' })]);
+      return turn(added.run.id, [say('ok')]);
     };
     const second = await next();
     expect(second.some((l) => l.includes('setup: npm ci'))).toBe(true);
@@ -310,17 +306,14 @@ describe('setup phase', () => {
 
     try {
       const { session, run } = await createSession(db, { repoUrl, message: 'edit' });
-      await turn(run.id, [
-        call('run_command', { command: edit, timeout_sec: 20 }),
-        call('finish', { summary: 'edited' }),
-      ]);
+      await turn(run.id, [call('run_command', { command: edit, timeout_sec: 20 }), say('edited')]);
       expect((await ours()).map((i) => i.depth)).toEqual([0]);
 
       const next = await addTurn(db, session.id, 'check');
       if (!next.ok) throw new Error('turn refused');
       const lines = await turn(next.run.id, [
         call('run_command', { command: 'node --test', timeout_sec: 60 }),
-        call('finish', { summary: 'ok' }),
+        say('ok'),
       ]);
 
       expect(
@@ -343,7 +336,7 @@ describe('setup phase', () => {
   it('runs the agent offline even though setup had network', async () => {
     const id = await run(await origin(), [
       call('run_command', { command: reach, timeout_sec: 20 }),
-      call('finish', { summary: 'checked' }),
+      say('checked'),
     ]);
     const [, probe] = await listRunEvents(db, id, { attempt: 1 });
     expect(probe?.data.output).toContain('offline');
@@ -358,7 +351,7 @@ describe('setup phase', () => {
         JSON.stringify({ name: 'broken', dependencies: { ms: '999.0.0' } }),
       );
     });
-    const id = await run(repoUrl, [call('finish', { summary: 'never reached' })]);
+    const id = await run(repoUrl, [say('never reached')]);
 
     const done = await getRun(db, id);
     expect(done).toMatchObject({ status: 'error', failureKind: 'setup_failed' });

@@ -35,6 +35,9 @@ async function origin() {
 const call = (name: string, input: unknown): { content: ContentBlock[] } => ({
   content: [{ type: 'tool_call', id: name, name, input }],
 });
+const say = (text: string): { content: ContentBlock[] } => ({
+  content: [{ type: 'text', text }],
+});
 
 const deps = (llm: LLMProvider, lines: string[] = []): WorkerDeps => ({
   db,
@@ -65,7 +68,7 @@ async function twoTurns(dir: string, first: { content: ContentBlock[] }[], betwe
     deps(
       createMockProvider([
         call('run_command', { command: probe, timeout_sec: 10 }),
-        call('finish', { summary: 'checked' }),
+        say('checked'),
       ]),
       lines,
     ),
@@ -77,7 +80,7 @@ async function twoTurns(dir: string, first: { content: ContentBlock[] }[], betwe
 
 const leaveMarker = [
   call('run_command', { command: 'touch /home/node/marker', timeout_sec: 10 }),
-  call('finish', { summary: 'done' }),
+  say('done'),
 ];
 
 beforeAll(async () => {
@@ -136,7 +139,7 @@ describe('session sandboxes', () => {
         command: 'touch /home/node/marker && echo "{}" > package.json',
         timeout_sec: 10,
       }),
-      call('finish', { summary: 'done' }),
+      say('done'),
     ]);
 
     expect(output).toContain('fresh');
@@ -153,7 +156,7 @@ describe('session sandboxes', () => {
       deps(
         createMockProvider([
           call('run_command', { command: 'echo "// edited" >> src/math.js', timeout_sec: 10 }),
-          call('finish', { summary: 'edited' }),
+          say('edited'),
         ]),
       ),
       run.id,
@@ -169,7 +172,7 @@ describe('session sandboxes', () => {
             command: 'git restore src/math.js && git status --short',
             timeout_sec: 10,
           }),
-          call('finish', { summary: 'restored' }),
+          say('restored'),
         ]),
       ),
       next.run.id,
