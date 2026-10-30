@@ -4,6 +4,7 @@ import { ArrowUp, Square } from 'lucide-react';
 import { useActionState, useEffect, useRef, useState } from 'react';
 import { cancelRunAction, sendMessageAction } from '@/app/actions';
 import { ModeToggle } from '@/components/mode-toggle';
+import { useShowPendingTurn } from '@/components/pending-turn';
 import type { FormState, RunMode } from '@/lib/types';
 
 export function grow(el: HTMLTextAreaElement | null) {
@@ -24,12 +25,20 @@ export function Composer({
   defaultMode: RunMode;
 }) {
   const [mode, setMode] = useState(defaultMode);
-  const [state, action, pending] = useActionState<FormState, FormData>(
-    sendMessageAction.bind(null, sessionId),
-    {},
-  );
+  const showPending = useShowPendingTurn();
   const form = useRef<HTMLFormElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const [state, action, pending] = useActionState<FormState, FormData>(async (prev, data) => {
+    const message = String(data.get('message') ?? '').trim();
+    if (message) {
+      showPending({ message, mode: data.get('mode') === 'ask' ? 'ask' : 'code' });
+      if (input.current) {
+        input.current.value = '';
+        grow(input.current);
+      }
+    }
+    return sendMessageAction(sessionId, prev, data);
+  }, {});
   const busy = activeRunId !== null;
 
   useEffect(() => {
@@ -38,6 +47,13 @@ export function Composer({
       grow(input.current);
     }
   }, [state.sent]);
+
+  useEffect(() => {
+    if (state.error && input.current && !input.current.value) {
+      input.current.value = state.fields?.message ?? '';
+      grow(input.current);
+    }
+  }, [state.error, state.fields]);
 
   return (
     <div className="sticky bottom-0 bg-gradient-to-t from-bg from-60% to-transparent pt-8 pb-5">

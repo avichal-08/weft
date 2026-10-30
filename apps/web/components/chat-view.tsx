@@ -13,6 +13,7 @@ import { Composer } from './composer';
 import { CopyButton } from './copy-button';
 import { LiveWorkLog } from './live-work-log';
 import { LogoMark } from './logo';
+import { PendingTurn, PendingTurnProvider } from './pending-turn';
 import { Prose } from './prose';
 import { ShipControls } from './ship-controls';
 import { WorkLog } from './work-log';
@@ -177,28 +178,31 @@ export async function ChatView({ params }: { params: Promise<{ id: string }> }) 
       <AutoRefresh
         active={session.publishState === 'queued' || session.publishState === 'pushing'}
       />
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6">
-        <ol className="grid flex-1 grid-cols-1 content-start gap-14 pt-10 pb-6">
-          {session.turns.map((run, i) => {
-            const trace = traces[i];
-            return (
-              <Turn
-                key={run.id}
-                run={run}
-                events={trace?.ok ? trace.data.events : []}
-                attempt={trace?.ok ? trace.data.attempt : run.attempt}
-                findings={run.id === work?.id ? (run.checks ?? []) : []}
-              />
-            );
-          })}
-        </ol>
-        <Composer
-          sessionId={session.id}
-          activeRunId={activeRunId}
-          model={session.config.model ?? null}
-          defaultMode={last?.mode ?? 'code'}
-        />
-      </div>
+      <PendingTurnProvider>
+        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6">
+          <ol className="grid flex-1 grid-cols-1 content-start gap-14 pt-10 pb-6">
+            {session.turns.map((run, i) => {
+              const trace = traces[i];
+              return (
+                <Turn
+                  key={run.id}
+                  run={run}
+                  events={trace?.ok ? trace.data.events : []}
+                  attempt={trace?.ok ? trace.data.attempt : run.attempt}
+                  findings={run.id === work?.id ? (run.checks ?? []) : []}
+                />
+              );
+            })}
+            <PendingTurn />
+          </ol>
+          <Composer
+            sessionId={session.id}
+            activeRunId={activeRunId}
+            model={session.config.model ?? null}
+            defaultMode={last?.mode ?? 'code'}
+          />
+        </div>
+      </PendingTurnProvider>
     </ChatShell>
   );
 }

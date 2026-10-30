@@ -86,8 +86,14 @@ A running turn is pushed to the browser as it happens, over server-sent events:
 3. That route handler proxies the API's `GET /runs/:id/stream` byte for byte, passing
    `Last-Event-ID` through, so the browser still never talks to the API directly.
 4. `phase` messages update the status line, `event` messages append steps, `attempt` resets the
-   list when another worker takes over, and `end` closes the stream and refreshes the page once,
-   which swaps in the final reply, diff and stats.
+   list when another worker takes over, and `end` closes the stream. The reply is shown at once
+   from the stream itself (the closing `finish` call or a plain-text answer, `lib/reply.ts`), and
+   the page refreshes in the background to swap in the highlighted reply, diff and stats.
+
+Sending is optimistic: the composer shows the message and a "Starting" work line immediately
+through `useOptimistic` (`PendingTurnProvider`), clears the box, and the real turn replaces the
+placeholder when the server action returns; on an error the placeholder goes and the text comes
+back with the reason.
 
 If the connection drops, `EventSource` reconnects and resumes from `Last-Event-ID`; if it gives
 up, the component reconnects after 3 s. Nothing polls any more. SSE rather than WebSockets
