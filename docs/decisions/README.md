@@ -23,6 +23,7 @@ it and the old one gets a `Superseded by` line.
 | [0011](0011-single-user-sign-in.md)                      | Single-user sign-in with a password and a signed cookie      | Accepted                   |
 | [0012](0012-single-vm-deployment.md)                     | Deploying on one VM with Docker Compose                      | Accepted                   |
 | [0013](0013-hosting-on-aws-ec2.md)                       | Hosting on AWS EC2                                           | Accepted                   |
+| [0014](0014-streaming-replies.md)                        | Streaming the reply, and ending turns with plain text        | Accepted                   |
 
 ## Template
 

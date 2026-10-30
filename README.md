@@ -23,8 +23,8 @@ ship the result as a pull request.
 - **Fast follow-ups.** Installed dependencies become copy-on-write image layers and a chat keeps
   its sandbox between messages, so on a repository with 639 MB of `node_modules` a follow-up
   starts in about 1 s instead of 55 s.
-- **Live and replayable.** Every model call and tool call streams to the browser as it happens
-  and is stored as a trace.
+- **Live and replayable.** The reply streams as the model writes it, every model call and tool
+  call appears as it happens, and each turn is stored as a trace.
 
 ## How it works
 

@@ -12,3 +12,20 @@ export function replyFrom(events: RunEvent[]): string | null {
     return last.data.text?.trim() || null;
   return null;
 }
+
+export type StepTexts = Record<number, string>;
+export type TextChunk = { step: number; offset: number; text: string };
+
+export function applyText(texts: StepTexts, chunk: TextChunk): StepTexts {
+  const current = texts[chunk.step] ?? '';
+  return { ...texts, [chunk.step]: current.slice(0, chunk.offset) + chunk.text };
+}
+
+export function streamingReply(events: RunEvent[], texts: StepTexts): string | null {
+  const step = Math.max(-1, ...Object.keys(texts).map(Number));
+  const text = texts[step]?.trim();
+  if (!text) return null;
+  const done = events.find((e) => e.type === 'llm' && e.step === step);
+  if (done?.type === 'llm' && done.data.stopReason === 'tool_use') return null;
+  return text;
+}

@@ -3,11 +3,11 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { LivePhase, RunEvent } from '@/lib/types';
-import { replyFrom } from '@/lib/reply';
+import { applyText, replyFrom, streamingReply, type StepTexts, type TextChunk } from '@/lib/reply';
 import { MarkdownText } from './markdown';
 import { WorkLog } from './work-log';
 
-type Live = { attempt: number; events: RunEvent[]; phase: LivePhase | null };
+type Live = { attempt: number; events: RunEvent[]; phase: LivePhase | null; texts: StepTexts };
 type Done = { reply: string | null; finishedAt: string };
 
 export function LiveWorkLog({
@@ -22,11 +22,12 @@ export function LiveWorkLog({
   startedAt: string | null;
 }) {
   const router = useRouter();
-  const [live, setLive] = useState<Live>({ attempt, events, phase: null });
+  const [live, setLive] = useState<Live>({ attempt, events, phase: null, texts: {} });
   const [since, setSince] = useState(startedAt);
   const [retry, setRetry] = useState(0);
   const [done, setDone] = useState<Done | null>(null);
   const latest = useRef(events);
+  const latestTexts = useRef<StepTexts>({});
   const cursor = useRef({ attempt, after: events.at(-1)?.seq ?? -1 });
 
   useEffect(() => {
@@ -38,7 +39,8 @@ export function LiveWorkLog({
       const { attempt } = JSON.parse(e.data) as { attempt: number };
       cursor.current = { attempt, after: -1 };
       latest.current = [];
-      setLive({ attempt, events: [], phase: null });
+      latestTexts.current = {};
+      setLive({ attempt, events: [], phase: null, texts: {} });
     });
     source.addEventListener('phase', (e) => {
       const phase = JSON.parse(e.data) as LivePhase;
@@ -54,9 +56,19 @@ export function LiveWorkLog({
         return { ...l, events: latest.current };
       });
     });
+    source.addEventListener('text', (e) => {
+      const chunk = JSON.parse(e.data) as TextChunk;
+      setLive((l) => {
+        latestTexts.current = applyText(l.texts, chunk);
+        return { ...l, texts: latestTexts.current };
+      });
+    });
     source.addEventListener('end', () => {
       source.close();
-      setDone({ reply: replyFrom(latest.current), finishedAt: new Date().toISOString() });
+      setDone({
+        reply: replyFrom(latest.current) ?? streamingReply(latest.current, latestTexts.current),
+        finishedAt: new Date().toISOString(),
+      });
       router.refresh();
     });
     source.onerror = () => {
@@ -85,14 +97,18 @@ export function LiveWorkLog({
     );
   }
 
+  const reply = streamingReply(live.events, live.texts);
   return (
-    <WorkLog
-      events={live.events}
-      active
-      phase={live.phase}
-      startedAt={since}
-      finishedAt={null}
-      reply={null}
-    />
+    <>
+      <WorkLog
+        events={live.events}
+        active
+        phase={live.phase}
+        startedAt={since}
+        finishedAt={null}
+        reply={reply}
+      />
+      {reply && <MarkdownText>{reply}</MarkdownText>}
+    </>
   );
 }

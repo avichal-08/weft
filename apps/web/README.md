@@ -86,7 +86,10 @@ A running turn is pushed to the browser as it happens, over server-sent events:
 3. That route handler proxies the API's `GET /runs/:id/stream` byte for byte, passing
    `Last-Event-ID` through, so the browser still never talks to the API directly.
 4. `phase` messages update the status line, `event` messages append steps, `attempt` resets the
-   list when another worker takes over, and `end` closes the stream. The reply is shown at once
+   list when another worker takes over, `text` messages grow the reply as the model writes it
+   ([ADR 0014](../../docs/decisions/0014-streaming-replies.md): each is applied at its offset, so
+   a replay never duplicates text, and a step's text moves into the work log once that step
+   turns out to call tools), and `end` closes the stream. The reply is shown at once
    from the stream itself (the closing `finish` call or a plain-text answer, `lib/reply.ts`), and
    the page refreshes in the background to swap in the highlighted reply, diff and stats.
 
