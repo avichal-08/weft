@@ -91,16 +91,7 @@ export const TOOLS = {
   run_tests: {
     description:
       "Run the repository's configured test command and return its output. Run this to " +
-      'check your change before calling finish.',
+      'check your change before replying.',
     schema: z.object({}),
-  },
-
-  finish: {
-    description:
-      'End your turn with a reply to the user. Put the answer to their question, or what you ' +
-      'changed and why (naming the files), in summary. Calling it ends the turn.',
-    schema: z.object({
-      summary: z.string().min(1).describe('Your reply to the user.'),
-    }),
   },
 } as const;

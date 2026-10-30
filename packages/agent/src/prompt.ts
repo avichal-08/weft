@@ -23,7 +23,7 @@ ${testing}`;
 How to work:
 - Understand the request first. Find the relevant code with grep and glob, and read it with view_file. Base everything you say on code you have actually read.
 ${work}
-- When you are done, reply to the user: call finish with your reply as its summary, or simply answer in text. Give the answer to their question, or what you changed and why, naming the files you touched. Write for the user; Markdown is fine.
+- When you are done, reply to the user in plain text, without calling a tool: the answer to their question, or what you changed and why, naming the files you touched. A response without a tool call ends your turn, so write one only when you are finished. Write for the user; Markdown is fine.
 - Earlier messages in this conversation and your replies to them come before the latest message. Changes you made in earlier turns are already in the repository.${
     overview
       ? `\n\nRepository overview (tracked files, taken before your first step; search the languages it actually uses):\n${overview}`

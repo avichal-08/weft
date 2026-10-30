@@ -1,4 +1,4 @@
-import type { LLMProvider, Message, StopReason, Usage } from '@weft/llm';
+import type { LLMProvider, Message, StopReason, TextEvent, Usage } from '@weft/llm';
 import type { Sandbox } from '@weft/sandbox';
 import type { z } from 'zod';
 import type { TOOLS } from './tools/definitions.ts';
@@ -79,6 +79,7 @@ export type AgentOptions = {
   tokenBudget?: number;
   signal?: AbortSignal;
   onEvent?: (event: AgentEvent) => void;
+  onText?: (step: number, event: TextEvent) => void;
   execute?: ToolExecutor;
 };
 

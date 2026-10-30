@@ -33,7 +33,7 @@ describe('toolSpecs', () => {
   });
 
   it('can expose a subset of tools', () => {
-    expect(toolSpecs(['view_file', 'finish']).map((s) => s.name)).toEqual(['view_file', 'finish']);
+    expect(toolSpecs(['view_file', 'grep']).map((s) => s.name)).toEqual(['view_file', 'grep']);
   });
 });
 

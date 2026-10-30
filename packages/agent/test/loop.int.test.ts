@@ -13,6 +13,9 @@ let sandbox: Sandbox;
 const call = (name: string, input: unknown): { content: ContentBlock[] } => ({
   content: [{ type: 'tool_call', id: name, name, input }],
 });
+const say = (text: string): { content: ContentBlock[] } => ({
+  content: [{ type: 'text', text }],
+});
 
 beforeAll(async () => {
   sandbox = await createSandbox({ image });
@@ -31,13 +34,17 @@ describe('runAgent against a real sandbox', () => {
       call('view_file', { path: 'src/math.js' }),
       call('str_replace_edit', { path: 'src/math.js', old_str: 'a - b', new_str: 'a + b' }),
       call('run_tests', {}),
-      call('finish', { summary: 'add subtracted instead of adding' }),
+      say('add subtracted instead of adding'),
     ]);
     const ctx = createToolContext({ sandbox, root, testCommand: 'node --test' });
 
     const res = await runAgent({ llm, ctx, task: 'Make the failing tests pass.' });
 
-    expect(res).toMatchObject({ status: 'finished', steps: 6 });
+    expect(res).toMatchObject({
+      status: 'finished',
+      steps: 6,
+      summary: 'add subtracted instead of adding',
+    });
     const tools = res.events.flatMap((e) => (e.type === 'tool' ? [[e.name, e.isError]] : []));
     expect(tools).toEqual([
       ['run_tests', true],
@@ -45,7 +52,6 @@ describe('runAgent against a real sandbox', () => {
       ['view_file', false],
       ['str_replace_edit', false],
       ['run_tests', false],
-      ['finish', false],
     ]);
     expect(await sandbox.readFile(`${root}/src/math.js`)).toContain('return a + b;');
   });

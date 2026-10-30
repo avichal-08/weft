@@ -1,6 +1,6 @@
 import type { ParsedToolCall, ToolContext, ToolContextOptions, ToolOutput } from '../types.ts';
 import { glob, grep, viewFile } from './read.ts';
-import { finish, runCommand, runTests } from './run.ts';
+import { runCommand, runTests } from './run.ts';
 import { createFile, strReplaceEdit } from './write.ts';
 
 export const DEFAULT_TEST_TIMEOUT_MS = 300_000;
@@ -31,7 +31,5 @@ export async function executeTool(ctx: ToolContext, call: ParsedToolCall): Promi
       return runCommand(ctx, call.args);
     case 'run_tests':
       return runTests(ctx);
-    case 'finish':
-      return finish(ctx, call.args);
   }
 }

@@ -1,4 +1,11 @@
-import { emptyUsage, textOf, toolCalls, type Message, type ToolResultBlock } from '@weft/llm';
+import {
+  emptyUsage,
+  textOf,
+  toolCalls,
+  type Message,
+  type TextEvent,
+  type ToolResultBlock,
+} from '@weft/llm';
 import { repoOverview } from './overview.ts';
 import { systemPrompt } from './prompt.ts';
 import { executeTool } from './tools/execute.ts';
@@ -25,6 +32,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
   const execute = opts.execute ?? executeTool;
   const maxSteps = opts.maxSteps ?? DEFAULT_MAX_STEPS;
   const budget = opts.tokenBudget ?? DEFAULT_TOKEN_BUDGET;
+  const onText = opts.onText;
   const overview =
     opts.system || opts.overview === false ? null : await repoOverview(opts.ctx).catch(() => null);
   const mode = opts.mode ?? 'code';
@@ -70,6 +78,7 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
       tools,
       ...(opts.maxTokens ? { maxTokens: opts.maxTokens } : {}),
       ...(opts.signal ? { signal: opts.signal } : {}),
+      ...(onText ? { onText: (event: TextEvent) => onText(step, event) } : {}),
     });
     usage.inputTokens += res.usage.inputTokens;
     usage.outputTokens += res.usage.outputTokens;
@@ -98,7 +107,6 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
     }
 
     const results: ToolResultBlock[] = [];
-    let summary: string | undefined;
 
     for (const call of calls) {
       const started = performance.now();
@@ -125,7 +133,6 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
         durationMs: Math.round(performance.now() - started),
         output: out.content.slice(0, EVENT_OUTPUT_CHARS),
       });
-      if (parsed.ok && parsed.name === 'finish') summary = parsed.args.summary;
     }
 
     const warn: boolean = !warned && spent() >= budget * BUDGET_WARNING_AT;
@@ -134,7 +141,6 @@ export async function runAgent(opts: AgentOptions): Promise<AgentResult> {
       role: 'user',
       content: warn ? [...results, { type: 'text', text: BUDGET_WARNING }] : results,
     });
-    if (summary !== undefined) return done('finished', summary);
   }
 
   return done('max_steps');

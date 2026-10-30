@@ -57,12 +57,15 @@ beforeEach(async () => {
 const call = (name: string, input: unknown): { content: ContentBlock[] } => ({
   content: [{ type: 'tool_call', id: name, name, input }],
 });
+const say = (text: string): { content: ContentBlock[] } => ({
+  content: [{ type: 'text', text }],
+});
 
 const fixScript = [
   call('view_file', { path: 'src/math.js' }),
   call('str_replace_edit', { path: 'src/math.js', old_str: 'a - b', new_str: 'a + b' }),
   call('run_tests', {}),
-  call('finish', { summary: 'add subtracted' }),
+  say('add subtracted'),
 ];
 
 function deps(llm: LLMProvider, extra: Partial<WorkerDeps> = {}): WorkerDeps {
@@ -132,12 +135,11 @@ describe('executeRun', () => {
       '#3 llm T in=0 out=0',
       '   ✓ run_tests T',
       '#4 llm T in=0 out=0',
-      '   ✓ finish T',
       'timings: clone T, sandbox T, copy T, agent T, diff T, verifySandbox T, verify T',
     ]);
 
     const events = await listRunEvents(db, run.id, { attempt: 1 });
-    expect(events.map((e) => e.seq)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(events.map((e) => e.seq)).toEqual([0, 1, 2, 3, 4, 5, 6]);
     expect(events.map((e) => (e.type === 'tool' ? e.data.name : e.type))).toEqual([
       'llm',
       'view_file',
@@ -146,7 +148,6 @@ describe('executeRun', () => {
       'llm',
       'run_tests',
       'llm',
-      'finish',
     ]);
     expect(events[3]?.data).toMatchObject({
       isError: false,
@@ -158,7 +159,7 @@ describe('executeRun', () => {
       'clone',
       'sandbox',
       'agent',
-      ...Array<string>(8).fill('event'),
+      ...Array<string>(7).fill('event'),
       'verify',
       'end',
     ]);
@@ -213,7 +214,7 @@ describe('executeRun', () => {
 
   it('fails when the agent finishes but the tests still fail', async () => {
     const run = await newRun();
-    await executeRun(deps(createMockProvider([call('finish', { summary: 'done?' })])), run.id);
+    await executeRun(deps(createMockProvider([say('done?')])), run.id);
     const done = await getRun(db, run.id);
     expect(done).toMatchObject({ status: 'failed', failureKind: 'tests_failed', diff: '' });
     expect(done?.failureDetail).toMatch(/not ok/);
@@ -376,7 +377,7 @@ describe('conversations', () => {
         path: 'src/subtract.js',
         content: 'export const subtract = (a, b) => a - b;\n',
       }),
-      call('finish', { summary: 'Added src/subtract.js.' }),
+      say('Added src/subtract.js.'),
     ]);
     const outcome = await executeRun(deps(turn2), next.run.id);
     expect(outcome).toMatchObject({ kind: 'completed', status: 'succeeded' });
@@ -408,17 +409,12 @@ describe('conversations', () => {
     const ask = createMockProvider([
       call('str_replace_edit', { path: 'src/math.js', old_str: 'a + b', new_str: 'a - b' }),
       call('view_file', { path: 'src/math.js' }),
-      call('finish', { summary: 'It subtracted instead of adding.' }),
+      say('It subtracted instead of adding.'),
     ]);
     const outcome = await executeRun(deps(ask), next.run.id);
     expect(outcome).toMatchObject({ kind: 'completed', status: 'succeeded' });
 
-    expect(ask.calls[0]!.tools!.map((t) => t.name)).toEqual([
-      'grep',
-      'glob',
-      'view_file',
-      'finish',
-    ]);
+    expect(ask.calls[0]!.tools!.map((t) => t.name)).toEqual(['grep', 'glob', 'view_file']);
     const done = (await getRun(db, next.run.id))!;
     expect(done).toMatchObject({ mode: 'ask', summary: 'It subtracted instead of adding.' });
     expect(done.diff).toBe(fixed);
@@ -430,7 +426,7 @@ describe('conversations', () => {
     const llm = createMockProvider([
       ...fixScript.slice(0, 2),
       call('create_file', { path: '.env', content: 'DEBUG=1\n' }),
-      call('finish', { summary: 'fixed, and added .env' }),
+      say('fixed, and added .env'),
     ]);
     const outcome = await executeRun(deps(llm), run.id);
     expect(outcome).toMatchObject({ kind: 'completed', status: 'succeeded' });
@@ -446,7 +442,7 @@ describe('conversations', () => {
         command: 'head -c 20000000 /dev/urandom > big.bin && sleep 30',
         timeout_sec: 60,
       }),
-      call('finish', { summary: 'never reached' }),
+      say('never reached'),
     ]);
     const lines: string[] = [];
 
@@ -467,7 +463,7 @@ describe('conversations', () => {
     const { run } = await createSession(db, { repoUrl, message: 'What does multiply do?' });
     const llm = createMockProvider([
       call('view_file', { path: 'src/math.js' }),
-      call('finish', { summary: 'It multiplies its two arguments.' }),
+      say('It multiplies its two arguments.'),
     ]);
 
     expect(await executeRun(deps(llm), run.id)).toMatchObject({ status: 'succeeded' });
@@ -510,7 +506,7 @@ describe('conversations', () => {
     const next = await addTurn(db, s.id, 'try again');
     if (!next.ok) throw new Error('turn 2 was refused');
 
-    const llm = createMockProvider([call('finish', { summary: 'ok' })]);
+    const llm = createMockProvider([say('ok')]);
     await executeRun(deps(llm), next.run.id);
     expect(llm.calls[0]!.messages[1]).toEqual({
       role: 'assistant',

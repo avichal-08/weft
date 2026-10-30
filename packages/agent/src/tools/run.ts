@@ -36,7 +36,3 @@ export async function runTests(ctx: ToolContext): Promise<ToolOutput> {
   const text = `${verdict}\n${describe(res, ctx.testTimeoutMs)}`;
   return res.exitCode === 0 ? ok(text) : fail(text);
 }
-
-export function finish(_ctx: ToolContext, args: ToolArgs['finish']): ToolOutput {
-  return ok(`Finished: ${args.summary}`);
-}

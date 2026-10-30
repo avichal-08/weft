@@ -25,10 +25,10 @@ const echo: ToolExecutor = (_ctx, call) =>
   Promise.resolve({ content: `ran ${call.name}`, isError: false });
 
 describe('runAgent', () => {
-  it('runs tools until finish and returns the summary', async () => {
+  it('runs tools until a text reply and returns it', async () => {
     const llm = createMockProvider([
       turn(text('looking'), tool('grep', { pattern: 'add' })),
-      turn(tool('finish', { summary: 'fixed add' })),
+      turn(text('fixed add')),
     ]);
     const res = await runAgent({ llm, ctx, task: 'fix it', execute: echo });
 
@@ -38,12 +38,11 @@ describe('runAgent', () => {
       'llm:1',
       'tool:grep',
       'llm:2',
-      'tool:finish',
     ]);
   });
 
   it('sends the task, system prompt and every tool to the model', async () => {
-    const llm = createMockProvider([turn(tool('finish', { summary: 's' }))]);
+    const llm = createMockProvider([turn(text('s'))]);
     await runAgent({ llm, ctx, task: 'the task', execute: echo });
 
     const req = llm.calls[0]!;
@@ -55,7 +54,7 @@ describe('runAgent', () => {
   it('answers every call of a turn in one message, including invalid ones', async () => {
     const llm = createMockProvider([
       turn(tool('view_file', { path: 'a.ts' }, 'c1'), tool('nope', {}, 'c2')),
-      turn(tool('finish', { summary: 's' })),
+      turn(text('s')),
     ]);
     await runAgent({ llm, ctx, task: 't', execute: echo });
 
@@ -85,12 +84,28 @@ describe('runAgent', () => {
   });
 
   it('still finishes when the last step replies past the budget', async () => {
-    const llm = createMockProvider([
-      turn(tool('glob', { pattern: '*' })),
-      turn(tool('finish', { summary: 'done' })),
-    ]);
+    const llm = createMockProvider([turn(tool('glob', { pattern: '*' })), turn(text('done'))]);
     const res = await runAgent({ llm, ctx, task: 't', tokenBudget: 150, execute: echo });
     expect(res).toMatchObject({ status: 'finished', summary: 'done' });
+  });
+
+  it('streams text to onText, tagged with its step', async () => {
+    const llm = createMockProvider([
+      turn(text('Looking.'), tool('grep', { pattern: 'add' })),
+      turn(text('It adds two numbers.')),
+    ]);
+    const streamed: Record<number, string> = {};
+    const res = await runAgent({
+      llm,
+      ctx,
+      task: 't',
+      execute: echo,
+      onText: (step, e) => {
+        if (e.type === 'text') streamed[step] = (streamed[step] ?? '') + e.text;
+      },
+    });
+    expect(streamed).toEqual({ 1: 'Looking.', 2: 'It adds two numbers.' });
+    expect(res.summary).toBe('It adds two numbers.');
   });
 
   it('treats a plain-text answer as the reply', async () => {
@@ -100,7 +115,7 @@ describe('runAgent', () => {
   });
 
   it('nudges once when the model returns nothing', async () => {
-    const llm = createMockProvider([turn(text('  ')), turn(tool('finish', { summary: 's' }))]);
+    const llm = createMockProvider([turn(text('  ')), turn(text('s'))]);
     const res = await runAgent({ llm, ctx, task: 't', execute: echo });
 
     expect(res.status).toBe('finished');
@@ -143,7 +158,7 @@ describe('runAgent', () => {
   });
 
   it('puts earlier turns before the new message', async () => {
-    const llm = createMockProvider([turn(tool('finish', { summary: 's' }))]);
+    const llm = createMockProvider([turn(text('s'))]);
     const history = [
       { role: 'user' as const, content: [text('What does add do?')] },
       { role: 'assistant' as const, content: [text('It adds two numbers.')] },
@@ -158,7 +173,7 @@ describe('runAgent', () => {
 
   it('only offers run_tests when a test command is configured', async () => {
     const without = createToolContext({ sandbox: {} as Sandbox, root: '/w' });
-    const llm = createMockProvider([turn(tool('finish', { summary: 's' }))]);
+    const llm = createMockProvider([turn(text('s'))]);
     await runAgent({ llm, ctx: without, task: 't', execute: echo });
     const names = llm.calls[0]!.tools!.map((t) => t.name);
     expect(names).not.toContain('run_tests');
@@ -168,10 +183,7 @@ describe('runAgent', () => {
 
   it('refuses a tool it did not offer', async () => {
     const without = createToolContext({ sandbox: {} as Sandbox, root: '/w' });
-    const llm = createMockProvider([
-      turn(tool('run_tests', {})),
-      turn(tool('finish', { summary: 's' })),
-    ]);
+    const llm = createMockProvider([turn(tool('run_tests', {})), turn(text('s'))]);
     const res = await runAgent({ llm, ctx: without, task: 't', execute: echo });
     expect(res.events.find((e) => e.type === 'tool' && e.name === 'run_tests')).toMatchObject({
       isError: true,
@@ -181,14 +193,9 @@ describe('runAgent', () => {
 
   describe('in Ask mode', () => {
     it('offers only the read-only tools and says so in the prompt', async () => {
-      const llm = createMockProvider([turn(tool('finish', { summary: 's' }))]);
+      const llm = createMockProvider([turn(text('s'))]);
       await runAgent({ llm, ctx, task: 't', mode: 'ask', execute: echo });
-      expect(llm.calls[0]!.tools!.map((t) => t.name)).toEqual([
-        'grep',
-        'glob',
-        'view_file',
-        'finish',
-      ]);
+      expect(llm.calls[0]!.tools!.map((t) => t.name)).toEqual(['grep', 'glob', 'view_file']);
       expect(llm.calls[0]!.system).toContain('Ask mode');
       expect(llm.calls[0]!.system).not.toContain('str_replace_edit');
     });
@@ -206,10 +213,10 @@ describe('runAgent', () => {
           tool('run_command', { command: 'rm -rf src' }, 'r'),
           tool('view_file', { path: 'a.js' }, 'v'),
         ),
-        turn(tool('finish', { summary: 'answered' })),
+        turn(text('answered')),
       ]);
       const res = await runAgent({ llm, ctx, task: 't', mode: 'ask', execute: record });
-      expect(executed).toEqual(['view_file', 'finish']);
+      expect(executed).toEqual(['view_file']);
       expect(res.status).toBe('finished');
       const refused = res.events.filter((e) => e.type === 'tool' && e.isError);
       expect(refused).toHaveLength(3);
@@ -224,10 +231,9 @@ describe('systemPrompt', () => {
     expect(systemPrompt(null)).not.toContain('The test command is');
   });
 
-  it('frames finish as the reply to the user', () => {
-    expect(systemPrompt(null)).toMatch(
-      /call finish with your reply as its summary, or simply answer in text/,
-    );
+  it('asks for the reply as plain text, which ends the turn', () => {
+    expect(systemPrompt(null)).toMatch(/reply to the user in plain text, without calling a tool/);
+    expect(systemPrompt(null)).not.toMatch(/\bfinish\b/);
   });
 });
 

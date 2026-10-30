@@ -31,7 +31,6 @@ for (const call of toolCalls(res.content).map(parseToolCall)) {
 | `create_file`      | Write a new file; refuses to overwrite                                      |
 | `run_command`      | Run a shell command (no network)                                            |
 | `run_tests`        | Run the repo's configured test command (only offered when there is one)     |
-| `finish`           | End the turn; `summary` is the reply to the user                            |
 
 ## The loop
 
@@ -43,6 +42,7 @@ const res = await runAgent({
   task: 'Now make the toggle remember the choice',
   history, // earlier turns: the user's messages and the agent's replies
   onEvent: console.log,
+  onText: (step, e) => e.type === 'text' && process.stdout.write(e.text), // optional streaming
 });
 // res.summary is the reply to the user; also res.status, steps, usage, events, messages
 ```
@@ -50,11 +50,18 @@ const res = await runAgent({
 The agent is a chat agent, not only a test fixer: a message can be a question, a change, a
 review or a follow-up. The system prompt (`src/prompt.ts`) has it read the relevant code first,
 answer questions without editing, make focused edits for change requests, and end every turn
-with `finish`, whose `summary` is the reply shown to the user. `history` goes before the new
-message, so follow-ups have context.
+with a reply in plain text: a response without a tool call ends the turn, and its text is
+`res.summary`, the reply shown to the user. A reply is ordinary model text, so it streams like
+any other (see below). `history` goes before the new message, so follow-ups have context.
 
-**Ask mode** (`mode: 'ask'`) makes a turn read-only: the model is offered only `grep`, `glob`,
-`view_file` and `finish`, and the prompt tells it to answer from the code and, when asked for a
+**Streaming** (`onText(step, event)`): when set, every model call streams, and each piece of
+text arrives as `{ type: 'text', text }` tagged with its step, plus `{ type: 'reset' }` if a
+retried call throws away text it already sent. The text of a step that ends in tool calls is the
+model's note before acting; the text of the last step is the reply. Events and the trace are
+unchanged: the complete text still arrives in the step's `llm` event.
+
+**Ask mode** (`mode: 'ask'`) makes a turn read-only: the model is offered only `grep`, `glob` and
+`view_file`, and the prompt tells it to answer from the code and, when asked for a
 change, to say what it would change and suggest Code mode. The loop refuses any tool it didn't
 offer, whatever the mode, so a model that calls `str_replace_edit` or `run_command` anyway gets an
 error back and nothing runs. Why: [ADR 0008](../../docs/decisions/0008-ask-mode.md).
@@ -184,6 +191,12 @@ committed; the raw results are not. Columns follow the order of `--label`.
   repeats.
 - **`ask`** (Ask mode, the 8 no-edit cases): 16/16, including `f-follow-up-question`, where Code mode passed
   14/16 (`baseline`) and 12/16 (`overview`) on the same cases, at 6.1k tokens per task against 12.9k. Making the turn read-only fixed what the prompt rule and the overview did not.
+- **`text-reply`** (the reply as plain text instead of a `finish` tool call, the rest as in
+  `overview`): 34/34 on `gemini-3.1-flash-lite`, every case passing both repeats, against 30/34
+  with `finish`. `f-follow-up-question`, `f-own-change` and `q-review` all went to 2/2. Without a
+  final tool call the agent answers in the same step, so turns averaged 6.4 steps instead of 7.2
+  and 15.7k tokens instead of 19.4k. Wall time rose (65 s median) only because rate-limit retries
+  of up to a minute landed in this run.
 
 ## Running tools
 

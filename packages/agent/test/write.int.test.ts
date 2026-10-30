@@ -143,12 +143,3 @@ describe('run_command', () => {
     expect(out.content.endsWith('THE_END')).toBe(true);
   });
 });
-
-describe('finish', () => {
-  it('echoes the summary', async () => {
-    expect(await call('finish', { summary: 'fixed add' })).toEqual({
-      isError: false,
-      content: 'Finished: fixed add',
-    });
-  });
-});
