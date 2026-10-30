@@ -109,7 +109,11 @@ Each app and package has its own README with the details.
 
 ## Development
 
-Requires Node 22 (`.nvmrc`), pnpm (via corepack) and Docker Engine.
+Requires Node 22 (`.nvmrc`), pnpm (via corepack) and Docker Engine, on Linux, macOS or WSL.
+
+It runs locally at no cost with a free [Neon](https://neon.tech) database and a free Gemini API
+key from [Google AI Studio](https://aistudio.google.com/apikey). In `.env`, set the two Neon urls,
+`LLM_PROVIDER=gemini`, `LLM_MODEL=gemini-3.1-flash-lite` and `GEMINI_API_KEY`.
 
 ```bash
 pnpm install
