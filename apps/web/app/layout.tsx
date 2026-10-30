@@ -5,9 +5,15 @@ import './globals.css';
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
 
+const SITE_URL = process.env.SITE_URL ?? 'https://weft.avichal.me';
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: 'weft',
-  description: 'A cloud coding agent you chat with: point it at a repo, ask, and watch it work.',
+  description:
+    'Describe a fix or a feature. weft makes the change in an isolated sandbox, proves it against your tests, and opens the pull request.',
+  openGraph: { type: 'website', siteName: 'weft', url: '/' },
+  twitter: { card: 'summary_large_image' },
 };
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
