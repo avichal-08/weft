@@ -1,6 +1,6 @@
 # weft
 
-A cloud coding agent, in the spirit of Claude Code on the web. Point it at a GitHub repository,
+A cloud coding agent on the web. Point it at a GitHub repository,
 ask for a fix, a feature, a review or an explanation, watch it work in an isolated sandbox, and
 ship the result as a pull request.
 
