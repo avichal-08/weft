@@ -6,6 +6,10 @@ ship the result as a pull request.
 
 **Live at [weft.avichal.me](https://weft.avichal.me)** (the app itself is behind a sign-in).
 
+[![weft demo: describe the change, review the pull request](docs/brand/weft-og.png)](docs/media/weft-demo.mp4)
+
+[Watch the demo](docs/media/weft-demo.mp4) (8 MB).
+
 ## What it does
 
 - **Chat with a repository.** Each message is a turn that continues from the previous one's
@@ -89,6 +93,7 @@ docs/
   architecture.md one-page map of the system
   deploy.md      runbook: launch the instance, configure and run weft
   decisions/     architecture decision records: what was chosen, and why
+  media/         demo video
 infra/
   compose.yml    redis for development (queue + live streams)
   deploy/        production stack: caddy, web, api, worker, redis (docker compose)
