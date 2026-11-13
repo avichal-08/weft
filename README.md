@@ -93,7 +93,7 @@ docs/
   architecture.md one-page map of the system
   deploy.md      runbook: launch the instance, configure and run weft
   decisions/     architecture decision records: what was chosen, and why
-  media/         demo video, architecture diagram
+  media/         architecture diagram
 infra/
   compose.yml    redis for development (queue + live streams)
   deploy/        production stack: caddy, web, api, worker, redis (docker compose)
