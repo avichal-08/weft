@@ -47,8 +47,9 @@ flowchart LR
    cumulative diff.
 4. **Agent.** The loop sends the conversation and a short repository overview to the model and
    runs its tool calls in the sandbox (`grep`, `glob`, `view_file`, exact-string edits,
-   commands, tests) until it calls `finish`. It searches the code itself; there is no embedding
-   index. Every step is saved as a trace and streamed live.
+   commands, tests) until it replies without calling a tool. It searches the code itself; there
+   is no embedding index. Every step is saved as a trace and streamed live, the reply as it is
+   written.
 5. **Diff and verify.** The worker collects the change as a binary-safe git diff against the
    base branch, then reruns the test command itself in a fresh sandbox with only that diff
    applied, so nothing the agent left outside the diff affects the verdict.
