@@ -6,9 +6,9 @@ ship the result as a pull request.
 
 **Live at [weft.avichal.me](https://weft.avichal.me)** (the app itself is behind a sign-in).
 
-[Watch the demo](docs/media/weft-demo.mp4) (8 MB).
-
 ![weft architecture: web, api, Redis, worker, Docker sandbox, Postgres, LLM provider and GitHub](docs/media/architecture.png)
+
+[Watch the demo](https://github.com/user-attachments/assets/1ce289b2-3432-4f2a-acec-8c7e9acf2009).
 
 ## What it does
 
